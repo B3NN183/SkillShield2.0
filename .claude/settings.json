@@ -1,0 +1,61 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Edit(**/.env)",
+      "Edit(**/.env.*)",
+
+      "Read(**/secrets)",
+      "Read(**/secrets/**)",
+      "Edit(**/secrets)",
+      "Edit(**/secrets/**)",
+      "Read(**/.secrets)",
+      "Read(**/.secrets/**)",
+      "Edit(**/.secrets)",
+      "Edit(**/.secrets/**)",
+      "Read(**/credentials)",
+      "Read(**/credentials/**)",
+      "Edit(**/credentials)",
+      "Edit(**/credentials/**)",
+
+      "Read(**/*.pem)",
+      "Edit(**/*.pem)",
+      "Read(**/*.key)",
+      "Edit(**/*.key)",
+      "Read(**/*.p12)",
+      "Edit(**/*.p12)",
+      "Read(**/*.pfx)",
+      "Edit(**/*.pfx)",
+      "Read(**/*.jks)",
+      "Edit(**/*.jks)",
+
+      "Bash(rm -rf *)",
+      "Bash(rm -fr *)",
+      "Bash(rm -r -f *)",
+      "Bash(rm -f -r *)",
+      "Bash(rm * -rf*)",
+      "Bash(rm * -fr*)",
+      "Bash(rm --recursive *)",
+      "Bash(git push --force*)",
+      "Bash(git push * --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * -f*)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+
+      "PowerShell(Remove-Item -Recurse*)",
+      "PowerShell(Remove-Item * -Recurse*)",
+      "PowerShell(git push --force*)",
+      "PowerShell(git push * --force*)",
+      "PowerShell(git push -f*)",
+      "PowerShell(git push * -f*)",
+      "PowerShell(curl *)",
+      "PowerShell(curl.exe *)",
+      "PowerShell(wget *)",
+      "PowerShell(Invoke-WebRequest *)",
+      "PowerShell(Invoke-RestMethod *)",
+      "PowerShell(Invoke-Expression *)"
+    ]
+  }
+}
