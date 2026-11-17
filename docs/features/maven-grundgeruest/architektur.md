@@ -101,7 +101,7 @@ Vorhandene Ordner werden weder umbenannt noch verschoben noch gelöscht (AK-13).
   - `requireMavenVersion` `version=[3.9.0,)` (E-3), `message`: „SkillShield benötigt Maven 3.9 oder neuer, siehe README.md.“
 - `plugins` → `dependency-check-maven` **ohne** `executions` (keine Bindung an `verify`, E-7), nur `configuration`
   (siehe 3.4). Durch die Deklaration im Parent gelten Version und Konfiguration auch beim Direktaufruf
-  `mvn org.owasp:dependency-check-maven:check` (AK-9).
+  `mvn clean compile org.owasp:dependency-check-maven:check` (AK-9).
 
 ### 3.3 Modul-POMs und Abhängigkeitsrichtung (AK-6, AK-7, AK-8)
 
@@ -174,7 +174,7 @@ Erlaubt/verboten je Modul entsprechend Tabelle 3.3. `junit-jupiter` enthält `ju
 
 Kein vorhandener Code. Wiederverwendet wird nur die vorhandene Ordnerstruktur `skillshield-<m>/…/de/skillshield/<m>`
 sowie die Build-Konventionen aus `CLAUDE.md` (`mvn verify`) und `.claude/agents/security.md`
-(`mvn -q org.owasp:dependency-check-maven:check`).
+(`mvn -q clean compile org.owasp:dependency-check-maven:check`).
 
 ---
 
@@ -287,7 +287,7 @@ Nach jedem Task ist `mvn verify` grün.
 - **AK**: AK-9, AK-10, AK-12.
 - **Tests/Nachweis**:
   - `mvn verify` bleibt grün und führt den Check nicht aus (kein NVD-Zugriff bei `verify`).
-  - Mit gesetztem `NVD_API_KEY` und befüllter Datenbank (V-6): `mvn org.owasp:dependency-check-maven:check` →
+  - Mit gesetztem `NVD_API_KEY` und befüllter Datenbank (V-6): `mvn clean compile org.owasp:dependency-check-maven:check` →
     Exit 0, Berichte `target/dependency-check-report.html` und `.json` im Wurzelverzeichnis und in jedem Modul (AK-9).
   - Fehlerfall ohne Netz / mit ungültigem Endpunkt und erzwungenem Update (genaue Parameter, z. B. `nvdValidForHours=0`
     und ein ungültiger NVD-Endpunkt, vor Umsetzung in der Plugin-Doku prüfen): Exit ≠ 0 mit Fehlermeldung (AK-10).
@@ -298,7 +298,7 @@ Nach jedem Task ist `mvn verify` grün.
 - **Dateien**: `README.md` (Wurzel, neu).
 - **Inhalt**: Voraussetzungen V-1 bis V-7 (JDK 21, Maven ≥ 3.9, `JAVA_HOME`, NVD-Key als Umgebungsvariable,
   Erstbefüllung der Datenbank, Proxy/Spiegel in `~/.m2/settings.xml`); Aufrufe `mvn verify`, `mvn clean verify`,
-  `mvn org.owasp:dependency-check-maven:check`; Ablageort der Berichte; typische Fehlermeldungen
+  `mvn clean compile org.owasp:dependency-check-maven:check`; Ablageort der Berichte; typische Fehlermeldungen
   (falsches JDK, Modulrichtung, fehlender Key/kein Netz) mit Abhilfe; Hinweis, dass der Key nie auf der
   Kommandozeile oder im Repository stehen darf.
 - **AK**: AK-15, AK-16.

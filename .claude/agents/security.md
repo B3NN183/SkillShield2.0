@@ -30,7 +30,7 @@ Die Liste der geänderten Dateien, der Task (T-n) und der Pfad zum Architektur-P
 4. **Unsichere Authentifizierung/Autorisierung** (hier der Tresor): Argon2id mit angemessenen Parametern,
    AES-256-GCM mit einmaligem Nonce je Verschlüsselung, zufälliges Salt aus `SecureRandom`, Passwörter als
    `char[]` und nach Gebrauch überschrieben, Auto-Lock, kein Schlüsselmaterial auf Platte oder im Log.
-5. **Unsichere Abhängigkeiten**: führe `mvn -q org.owasp:dependency-check-maven:check` aus, sobald eine
+5. **Unsichere Abhängigkeiten**: führe `mvn -q clean compile org.owasp:dependency-check-maven:check` aus (die Phase davor ist nötig, weil der Check sonst die Module untereinander nicht auflösen kann; `clean` entfernt alte Berichte), sobald eine
    `pom.xml` existiert. Prüfe neue Abhängigkeiten gegen den Architektur-Plan. Ist die Prüfung nicht ausführbar
    (keine `pom.xml`, kein Maven, kein Netz für die Schwachstellendatenbank), melde „nicht ausführbar: <Grund>“.
    Das ist kein PASS für diesen Punkt.

@@ -14,14 +14,14 @@ Als Entwicklungsteam (inklusive der Agenten qa und security) möchte ich ein bau
 - AK-6: Die Modul-Abhängigkeiten entsprechen der Richtung aus Plan.md Kap. 5: core ohne Abhängigkeit auf andere Module; io und vault hängen nur von core ab; ui hängt von core, io und vault ab; app hängt von allen anderen ab. (Ja/Nein)
 - AK-7: Eine Abhängigkeit entgegen dieser Richtung (z. B. core auf io) lässt den Build fehlschlagen oder wird anderweitig automatisch erkannt. (Ja/Nein; Umsetzungsweg Sache des architect)
 - AK-8: Es gibt keine Modul-Zyklen; der Maven-Reactor ermittelt eine gültige Build-Reihenfolge. (Ja/Nein)
-- AK-9: Der OWASP-Dependency-Check ist im Projekt so eingebunden, dass `mvn org.owasp:dependency-check-maven:check` im Wurzelverzeichnis ausführbar ist und einen Bericht erzeugt. (Ja/Nein)
+- AK-9: Der OWASP-Dependency-Check ist im Projekt so eingebunden, dass `mvn clean compile org.owasp:dependency-check-maven:check` im Wurzelverzeichnis ausführbar ist und einen Bericht erzeugt. (Ja/Nein) *(Wortlaut am 17.11.2026 vom Nutzer korrigiert: Der Aufruf ohne vorgeschaltete Phase scheitert im Multi-Modul-Projekt, weil die Module untereinander nicht aufgelöst werden können.)*
 - AK-10: Ist die Schwachstellendatenbank nicht erreichbar (kein Netz) oder fehlt ein erforderlicher API-Key, endet der Check mit einer verständlichen Fehlermeldung und nicht mit einem scheinbar grünen Ergebnis. (Ja/Nein)
 - AK-11: Das Grundgerüst enthält keine Fachlogik (keine Erkenner, Pseudonymisierung, Tresor, UI) und keinen Netzwerkzugriffs-Code im Produkt. (Ja/Nein)
 - AK-12: Das Grundgerüst enthält keine KI-Abhängigkeit und keine Abhängigkeiten, die zur Laufzeit Netzwerkzugriff erfordern (Plan.md Kap. 2). (Ja/Nein)
 - AK-13: Die Paketstruktur `de.skillshield.<modul>` bleibt erhalten; die vorhandene Ordnerstruktur wird nicht verändert. (Ja/Nein)
 - AK-14: Ein Aufruf von `mvn verify` auf einem frisch bereinigten Stand (`mvn clean verify`) liefert dasselbe grüne Ergebnis. (Ja/Nein)
 - AK-15: Ist Maven oder JDK 21 nicht installiert, ist dies in der Projektdokumentation als Voraussetzung benannt (Ort und Form legt der architect fest). (Ja/Nein)
-- AK-16: Nach der Umsetzung sind Aufrufe von `mvn verify` (qa) und `mvn org.owasp:dependency-check-maven:check` (security) für die Agenten dokumentiert nutzbar. (Ja/Nein)
+- AK-16: Nach der Umsetzung sind Aufrufe von `mvn verify` (qa) und `mvn clean compile org.owasp:dependency-check-maven:check` (security) für die Agenten dokumentiert nutzbar. (Ja/Nein)
 
 ## Abgrenzung
 Nicht Teil dieses Features:
