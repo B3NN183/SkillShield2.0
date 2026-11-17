@@ -33,4 +33,33 @@
       <version>${project.version}</version>
     </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>modulrichtung</id>
+            <phase>validate</phase>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <bannedDependencies>
+                  <excludes>
+                    <exclude>de.skillshield:skillshield-app</exclude>
+                  </excludes>
+                  <searchTransitive>true</searchTransitive>
+                  <message>Modulrichtung verletzt (Plan.md Kap. 5): skillshield-ui darf nur von skillshield-core, skillshield-io und skillshield-vault abhängen, nicht von skillshield-app.</message>
+                </bannedDependencies>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>

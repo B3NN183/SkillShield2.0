@@ -15,4 +15,33 @@
   <packaging>jar</packaging>
 
   <name>SkillShield Core</name>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>modulrichtung</id>
+            <phase>validate</phase>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <bannedDependencies>
+                  <excludes>
+                    <exclude>de.skillshield:*</exclude>
+                  </excludes>
+                  <searchTransitive>true</searchTransitive>
+                  <message>Modulrichtung verletzt (Plan.md Kap. 5): skillshield-core darf von keinem anderen SkillShield-Modul abhängen.</message>
+                </bannedDependencies>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>
