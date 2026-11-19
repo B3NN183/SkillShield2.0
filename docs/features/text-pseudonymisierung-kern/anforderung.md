@@ -25,7 +25,7 @@ Pfade (wichtigster Erkenner, D-1), E-Mail, IPv4, URL. Platzhalter-Typnamen in de
 ## Annahmen, zur Freigabe
 Diese Punkte stammen aus den Empfehlungen des architect; der Nutzer hat sie nicht beanstandet. Sie gelten bis zur Freigabe als Annahme und sind in den AK umgesetzt.
 - A-1: Kein IPv6. Nur IPv4 (Blueprint sagt nur "IP-Adressen").
-- A-2: URL nur mit Schema `http` und `https`.
+- A-2: URL nur mit Schema `http` und `https`. *(Am 19.11.2026 vom Nutzer geändert nach security-Hinweis zu T-5: Jede Adresse der Form `<schema>://…` ist ein URL-Fund, z. B. `ftp`, `sftp`, `smb`, `ldap`, `jdbc:postgresql://…`. Ausgenommen bleibt `file:` – das regelt OF-8/AK-24e als PFAD. Grund: Bei anderen Schemata blieben Benutzername, Pfad und Passwörter im Klartext.)*
 - A-3: Namen (Person, Arzt, Patient, Praxis) werden nur über manuell erzeugte Funde abgedeckt, nicht über einen Erkenner.
 - A-4: Die Nummerierung `n` zählt global über alle Typen, ab 1, in Reihenfolge des ersten Auftretens im Text. Ein zusammengelegter Fund (D-8) zählt als ein Fund und erhält einen Platzhalter.
 - A-5: Platzhalterähnlicher Originaltext (`[[...]]`) wird geschützt und kommt nach dem Roundtrip unverändert zurück. Die Form des Schutzes legt der architect fest.

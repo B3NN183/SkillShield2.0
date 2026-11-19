@@ -47,6 +47,95 @@ class TextScannerTest {
         assertTrue(TextScanner.standard().scan("Version 300.1.1.1 und 192.0.2").isEmpty());
     }
 
+    private static void assertFunde(String text, List<Finding> funde, FindingType... typen) {
+        assertEquals(typen.length, funde.size(), "Text: " + text);
+        int vorigesEnde = 0;
+        for (int i = 0; i < typen.length; i++) {
+            Finding f = funde.get(i);
+            assertEquals(typen[i], f.type());
+            assertEquals(text.substring(f.start(), f.end()), f.originalValue());
+            assertTrue(f.start() >= vorigesEnde);
+            vorigesEnde = f.end();
+        }
+    }
+
+    @Test
+    void standardScannerFindetUrlAk5() {
+        String text = "Siehe https://example.invalid/pfad?x=1 für Details";
+        List<Finding> r = TextScanner.standard().scan(text);
+        assertFunde(text, r, FindingType.URL);
+        assertEquals("https://example.invalid/pfad?x=1", r.get(0).originalValue());
+        assertEquals("url", r.get(0).source());
+        assertEquals(0.95, r.get(0).confidence());
+    }
+
+    @Test
+    void urlMitIpHostLiefertNurDieUrl() {
+        String text = "Status: http://192.0.2.10/status ok";
+        List<Finding> r = TextScanner.standard().scan(text);
+        assertFunde(text, r, FindingType.URL);
+        assertEquals("http://192.0.2.10/status", r.get(0).originalValue());
+        String mitPort = "Aufruf http://198.51.100.7:8080/x.";
+        List<Finding> r2 = TextScanner.standard().scan(mitPort);
+        assertFunde(mitPort, r2, FindingType.URL);
+        assertEquals("http://198.51.100.7:8080/x", r2.get(0).originalValue());
+    }
+
+    @Test
+    void urlMitEmailImQueryLiefertNurDieUrl() {
+        String text = "Link https://example.invalid/?m=erika.beispiel@example.invalid. Ende";
+        List<Finding> r = TextScanner.standard().scan(text);
+        assertFunde(text, r, FindingType.URL);
+        assertEquals("https://example.invalid/?m=erika.beispiel@example.invalid", r.get(0).originalValue());
+        String userinfo = "https://erika.beispiel@example.invalid/x";
+        assertFunde(userinfo, TextScanner.standard().scan(userinfo), FindingType.URL);
+    }
+
+    @Test
+    void urlMitZugangsdatenIstVollstaendigImFund() {
+        String text = "Aufruf https://nutzer:geheim@192.0.2.10:8443/a?b=c#d jetzt";
+        List<Finding> r = TextScanner.standard().scan(text);
+        assertFunde(text, r, FindingType.URL);
+        assertEquals("https://nutzer:geheim@192.0.2.10:8443/a?b=c#d", r.get(0).originalValue());
+    }
+
+    @Test
+    void fileUriLiefertKeinenUrlFund() {
+        for (String text : List.of("file:///C:/Akte/x.pdf", "Datei file:///srv/beispiel/x.pdf offen",
+                "FILE://srv.example/x", "x:file://srv.example/x")) {
+            assertTrue(TextScanner.standard().scan(text).stream().noneMatch(f -> f.type() == FindingType.URL),
+                    text);
+        }
+    }
+
+    @Test
+    void ftpUrlMitZugangsdatenIstGenauEinUrlFundOhneEmail() {
+        String text = "ftp://nutzer:geheim@host.example/p";
+        List<Finding> r = TextScanner.standard().scan(text);
+        assertFunde(text, r, FindingType.URL);
+        assertEquals(text, r.get(0).originalValue());
+        String mitJdbc = "Verbindung jdbc:postgresql://db.example:5432/kv?user=nutzer&password=geheim bereit";
+        List<Finding> r2 = TextScanner.standard().scan(mitJdbc);
+        assertFunde(mitJdbc, r2, FindingType.URL);
+        assertEquals("jdbc:postgresql://db.example:5432/kv?user=nutzer&password=geheim", r2.get(0).originalValue());
+    }
+
+    @Test
+    void emailIpUndUrlNebeneinander() {
+        String text = "Mail erika.beispiel@example.invalid, Server 192.0.2.10, Seite https://example.invalid/x.";
+        List<Finding> r = TextScanner.standard().scan(text);
+        assertFunde(text, r, FindingType.EMAIL, FindingType.IP, FindingType.URL);
+        assertEquals("https://example.invalid/x", r.get(2).originalValue());
+    }
+
+    @Test
+    void urlOhneLeerzeichenLaufzeit() {
+        long t0 = System.nanoTime();
+        assertTrue(TextScanner.standard().scan("a".repeat(100_000)).isEmpty());
+        assertEquals(1, TextScanner.standard().scan("https://" + "a".repeat(100_000)).size());
+        assertTrue(System.nanoTime() - t0 < 4_000_000_000L);
+    }
+
     @Test
     void stubFundHatPositionGleichTeilstring() {
         String text = "ab " + MARKER + " cd " + MARKER;

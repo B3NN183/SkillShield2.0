@@ -712,6 +712,25 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
 - **Tests**: AK-5-Beispiel als ein Fund; Satzzeichen am Ende entfernt; `(https://example.invalid/x)` ohne `)`,
   `https://example.invalid/a_(b)` mit `)`; Schema-Schreibung; Scanner: `http://192.0.2.10/status` → nur URL, URL mit
   E-Mail im Query → nur URL; `file:///…` → kein URL-Fund; 100 000 Zeichen ohne Leerzeichen mit/ohne `https://` < 2 s.
+- *(Nachtrag 19.11.2026 zu T-5 – ersetzt die Zeile `URL` der Tabelle in Kap. 2.3 und TE-13 (e), soweit sie
+  widersprechen:*
+  1. *Umsetzung als am `://` verankerter linearer Durchlauf statt Regex, ohne Lookbehind: Text direkt vor dem Schema
+     verhindert den Fund nicht; der Fund beginnt am Schema (vom reviewer als planverträglich bewertet).*
+  2. *Rumpf endet bei Leerraum (`\s`, `\p{Z}`), Steuerzeichen (Cc), einzelnem Surrogat, `<`, `>`, `"`.
+     Formatzeichen (Cf), nicht zugewiesene (Cn) und Private-Use-Zeichen (Co) beenden ihn NICHT (größerer Fund statt
+     Klartext-Rest). Endzeichen `. , ; : ! ? ' "` und überzählige `)`/`]` werden gekürzt; `}`, Backtick und
+     typografische Anführungszeichen bleiben im Fund. Zwei URLs ohne Leerraum ergeben einen Fund.*
+  3. *Nutzerentscheidung (A-2 geändert): Jedes Schema ist ein URL-Fund. Schema = `[A-Za-z][A-Za-z0-9+.-]*` direkt vor
+     `://`, so lang wie möglich nach links gelesen (höchstens 32 Zeichen; ist der Lauf länger, zählen die letzten
+     32). Ein vorangestelltes Präfix aus `[A-Za-z][A-Za-z0-9+.-]*:` gehört dazu (`jdbc:postgresql://…`,
+     `jdbc:mysql://…`), auch mehrfach. Beispiele: `ftp://nutzer:geheim@host.example/p`, `sftp://…`, `smb://…`,
+     `ldap://…`, `mongodb+srv://…`, `wss://…?token=…` → je ein Fund über die ganze Adresse.*
+  4. *Ausnahme: Schema `file` (Groß/klein egal) ergibt KEINEN URL-Fund; das regelt T-16 (PFAD, OF-8/AK-24e).*
+  5. *Bekannte Grenzen, vom Nutzer am 19.11.2026 NICHT zur Behebung gewählt (Hinweis im späteren Prüfdialog):
+     (a) unsichtbares Zeichen im Schema oder im `://` → kein Fund; (b) `"`, `<`, `>` in Zugangsdaten oder Query
+     beenden den Fund, der Rest bleibt Klartext; (c) über einen Zeilenumbruch umbrochene URL: der Teil in der
+     Folgezeile bleibt Klartext; (d) Adressen ohne `://` (`www.…`, `mailto:`) sind keine URL-Funde.*
+  6. *Testdaten: Hosts nur `*.invalid`, `*.example`, `example.com/.org/.net`; IPv6 nur aus `2001:db8::/32`.*
 
 ### T-6: Pseudonymisierung (Grundablauf)
 - **Dateien**: `pseudonymize/PlaceholderSyntax.java` (nur `format`), `PlaceholderMapping.java`,
