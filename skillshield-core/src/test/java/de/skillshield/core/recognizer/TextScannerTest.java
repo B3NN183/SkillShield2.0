@@ -37,6 +37,17 @@ class TextScannerTest {
     }
 
     @Test
+    void standardScannerFindetIpv4() {
+        String text = "Server 192.0.2.10 antwortet nicht";
+        List<Finding> r = TextScanner.standard().scan(text);
+        assertEquals(1, r.size());
+        assertEquals(FindingType.IP, r.get(0).type());
+        assertEquals("192.0.2.10", r.get(0).originalValue());
+        assertEquals(text.substring(r.get(0).start(), r.get(0).end()), r.get(0).originalValue());
+        assertTrue(TextScanner.standard().scan("Version 300.1.1.1 und 192.0.2").isEmpty());
+    }
+
+    @Test
     void stubFundHatPositionGleichTeilstring() {
         String text = "ab " + MARKER + " cd " + MARKER;
         List<Finding> r = new TextScanner(List.of(stub(FindingType.TEXT, MARKER, 0.9, "stub"))).scan(text);

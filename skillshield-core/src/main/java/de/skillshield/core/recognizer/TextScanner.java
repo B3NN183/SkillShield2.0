@@ -3,6 +3,7 @@ package de.skillshield.core.recognizer;
 import de.skillshield.core.conflict.ConflictResolver;
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.recognizer.general.EmailRecognizer;
+import de.skillshield.core.recognizer.general.Ipv4Recognizer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -30,9 +31,9 @@ public final class TextScanner {
         this.recognizers = List.copyOf(recognizers);
     }
 
-    /** Scanner mit den Standard-Erkennern (wächst mit den folgenden Tasks; bisher: E-Mail). */
+    /** Scanner mit den Standard-Erkennern (wächst mit den folgenden Tasks; bisher: E-Mail, IPv4). */
     public static TextScanner standard() {
-        return new TextScanner(List.of(new EmailRecognizer()));
+        return new TextScanner(List.of(new EmailRecognizer(), new Ipv4Recognizer()));
     }
 
     /**

@@ -683,6 +683,28 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
 - **AK**: AK-1, AK-4, AK-6, AK-49 (`1.`, lange Ziffernreihen).
 - **Tests**: `Server 192.0.2.10 antwortet nicht` → ein Fund; `300.1.1.1`, `192.0.2`, `192.0.2.10.5`, `192.0.2.010` →
   keiner; IP vor Satzpunkt; alle drei Dokumentationsbereiche; 100 000 × `1.` und 100 000 Ziffern je < 2 s.
+- *(Nachtrag 19.11.2026, Nutzerentscheidung nach security-Hinweisen zu T-4 – ersetzt die Zeile „Tests“ und die
+  Zeile `IP` der Tabelle in Kap. 2.3, soweit sie widersprechen:*
+  1. *Umsetzung als linearer Durchlauf über Zahlenketten (Ziffernblöcke `[0-9]`, getrennt durch je genau einen Punkt,
+     dem eine Ziffer folgt) statt Regex; vom reviewer als planverträglich bewertet.*
+  2. *Führende Nullen sind erlaubt: Ein Block ist ein gültiges Oktett, wenn er 1 bis 3 Ziffern hat und sein Wert
+     höchstens 255 ist. `192.0.2.010` und `192.000.002.010` → ein Fund.*
+  3. *Ketten mit mehr als vier Blöcken: Sind die ersten vier oder die letzten vier Blöcke gültige Oktette, ist die
+     GANZE Kette ein Fund (Typ IP, zu großer Fund statt kein Fund). `192.0.2.10.5` und `192.0.2.10.52344` (Adresse
+     mit angehängtem Port) → je ein Fund über die ganze Kette. Sonst kein Fund. Bekannte Folge: Versionsnummern wie
+     `1.2.3.4.5` werden ebenfalls ersetzt.*
+  4. *Unverändert kein Fund: `300.1.1.1`, `192.0.2`, `1.2.3.4567` (genau vier Blöcke, einer ungültig; weniger als
+     vier Blöcke).*
+  3a. *(Erweiterung von Punkt 3 nach security-Befund T-4, Durchlauf 2, Schwere mittel: „erste oder letzte vier“ ließ
+     Adressen in der Mitte einer Kette ohne Fund, z. B. `19.11.2026.192.0.2.10.52344`.) Es gilt stattdessen:
+     Enthält eine Kette IRGENDWO mindestens vier aufeinanderfolgende gültige Blöcke, ist die ganze Kette ein Fund.
+     `999.192.0.2.10.999`, `300.192.0.2.10.300` → je ein Fund über die ganze Kette. Kein Fund nur, wenn es keine
+     vier aufeinanderfolgenden gültigen Blöcke gibt (`192.0.2.300.1.2.300`, `300.300.1.300.300`).*
+  4a. *Laufzeitprobe AK-49: `1.` × 100 000 bleibt Pflicht; nach Punkt 3 ist das Ergebnis EIN Fund über die Kette
+     (ohne Schlusspunkt), unter 2 s. Ausnahme von Punkt 5 (Nutzerentscheidung nach qa-Befund T-4): Rein künstliche
+     Laufzeit-Eingaben aus wiederholten Einzelzeichen (`1.` × n) dürfen von den Dokumentationsbereichen abweichen;
+     der `TestdatenSynthetischTest` (T-20) muss diese Ausnahme kennen.*
+  5. *Testdaten: gültige Adressen nur aus 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24 (Kap. 5 Nr. 5, T-20).*
 
 ### T-5: URL-Erkenner
 - **Dateien**: `recognizer/general/UrlRecognizer.java`, `standard()`; Tests `UrlRecognizerTest`, `TextScannerTest`.
