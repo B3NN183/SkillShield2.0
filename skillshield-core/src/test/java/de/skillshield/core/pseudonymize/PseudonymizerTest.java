@@ -10,18 +10,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.model.FindingType;
+import de.skillshield.core.reidentify.ReidentificationResult;
+import de.skillshield.core.reidentify.Reidentifier;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
 class PseudonymizerTest {
 
     private static final String MARKER = "GEHEIM-mustermann-4711";
-    private static final Pattern PLATZHALTER = Pattern.compile("\\[\\[[A-Z0-9]+_[1-9][0-9]*]]");
     private static final FindingType PERSON = new FindingType("PERSON");
 
     private final Pseudonymizer p = new Pseudonymizer();
@@ -40,18 +39,11 @@ class PseudonymizerTest {
         return fund(type, text, wert, 0);
     }
 
-    /** Testhilfe (keine Re-Identifizierung des Produkts): ersetzt Platzhalter einpassig über die Zuordnung. */
+    /** Rückweg über die Produkt-API; jede Meldung der Rückübersetzung wäre hier ein Fehler. */
     static String zurueck(PseudonymizationResult r) {
-        Matcher m = PLATZHALTER.matcher(r.text());
-        StringBuilder sb = new StringBuilder();
-        int pos = 0;
-        while (m.find()) {
-            sb.append(r.text(), pos, m.start());
-            sb.append(r.mapping().resolve(m.group()).orElseThrow());
-            pos = m.end();
-        }
-        sb.append(r.text(), pos, r.text().length());
-        return sb.toString();
+        ReidentificationResult rr = new Reidentifier().restore(r.text(), r.mapping());
+        assertTrue(rr.unresolved().isEmpty(), "Roundtrip ohne Fremdbearbeitung meldet nichts");
+        return rr.text();
     }
 
     @Test

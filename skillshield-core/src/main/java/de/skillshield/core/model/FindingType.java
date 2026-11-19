@@ -24,29 +24,35 @@ public record FindingType(String name) {
 
     public FindingType {
         Objects.requireNonNull(name, "name");
-        if (!isValid(name)) {
+        if (!isValidName(name)) {
             throw new IllegalArgumentException(
                     "Ungültiger Typname: erlaubt sind 1 bis " + MAX_LENGTH
                             + " Zeichen im Format [A-Z][A-Z0-9]*");
         }
     }
 
-    private static boolean isValid(String s) {
+    /** Erstes Zeichen eines Typnamens: {@code A-Z} (ASCII). Einzige Definition, auch für den Platzhalter-Tokenizer. */
+    public static boolean isNameStart(char c) {
+        return c >= 'A' && c <= 'Z';
+    }
+
+    /** Folgezeichen eines Typnamens: {@code A-Z} oder {@code 0-9} (ASCII). Einzige Definition. */
+    public static boolean isNameChar(char c) {
+        return isNameStart(c) || (c >= '0' && c <= '9');
+    }
+
+    /** Prüft {@code [A-Z][A-Z0-9]{0,31}}; {@code s} nicht {@code null}. */
+    public static boolean isValidName(String s) {
         int len = s.length();
-        if (len == 0 || len > MAX_LENGTH) {
-            return false;
-        }
-        char first = s.charAt(0);
-        if (first < 'A' || first > 'Z') {
+        if (len == 0 || len > MAX_LENGTH || !isNameStart(s.charAt(0))) {
             return false;
         }
         for (int i = 1; i < len; i++) {
-            char c = s.charAt(i);
-            boolean ok = (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
-            if (!ok) {
+            if (!isNameChar(s.charAt(i))) {
                 return false;
             }
         }
         return true;
     }
+
 }

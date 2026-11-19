@@ -765,6 +765,15 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
   je ein Test `[[pfad_1]]`, `[[ PFAD_1]]`, `[[PFAD_1 ]]`, `[[ PFAD_1 ]]`; Zuordnungswerte mit `$`, `$1`, `\1`,
   `${HOME}`, `%APPDATA%`, `\\` werden zeichengleich eingesetzt; manueller Wert `[[IP_1]]` nicht erneut aufgelöst;
   `""`, Text ohne Platzhalter mit leerer Zuordnung unverändert; `null` → NPE; Meldungen/`toString` ohne Marker.
+- *(Nachtrag 19.11.2026 zu T-8, Abweichung von Kap. 2.2, vom reviewer als vertretbar bewertet: `FindingType` hat
+  zusätzlich die öffentlichen Methoden `isNameStart(char)`, `isNameChar(char)`, `isValidName(String)`. Sie sind die
+  einzige Definition der Typnamen-Regel; `PlaceholderSyntax` (parseCanonical, tokenize) und der Konstruktor nutzen
+  sie. T und D sind als handgeschriebener Scanner umgesetzt, nicht als Regex. Bekannte Grenzen (security, niedrig):
+  (a) Die Ausgabe der Rückübersetzung hat keine Obergrenze (TE-4) – eine kleine KI-Antwort mit vielen Platzhaltern
+  und sehr langen Originalwerten kann den Speicher erschöpfen; die Grenze gehört an die UI-/IO-Schnittstelle, und
+  die App darf keinen Heap-Dump bei Speichermangel schreiben. (b) Platzhalter-ähnliche Formen, die weder T noch D
+  sind (Vollbreite-Klammern, unsichtbare Zeichen, mehr als 8 Leerzeichen), bleiben ohne Meldung stehen; die UI
+  sollte auf verbleibende `[[`/`]]` hinweisen.)*
 
 ### T-9: Literalschutz (Escaping)
 - **Dateien**: `Pseudonymizer.java` (Schritt 3 aus 2.6); Test `EscapingRoundtripTest`.

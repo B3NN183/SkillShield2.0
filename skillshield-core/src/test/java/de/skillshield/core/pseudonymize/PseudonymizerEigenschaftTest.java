@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.model.FindingType;
+import de.skillshield.core.reidentify.ReidentificationResult;
+import de.skillshield.core.reidentify.Reidentifier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -94,8 +96,10 @@ class PseudonymizerEigenschaftTest {
             // (c) deterministisch
             assertEquals(r, p.pseudonymize(fall.text(), fall.funde()));
 
-            // (d) Rueckersetzen ergibt den Originaltext
-            assertEquals(fall.text(), PseudonymizerTest.zurueck(r), "Lauf " + lauf);
+            // (d) Rueckweg ueber die Produkt-API ergibt den Originaltext, ohne Meldung
+            ReidentificationResult rr = new Reidentifier().restore(r.text(), r.mapping());
+            assertEquals(fall.text(), rr.text(), "Lauf " + lauf);
+            assertTrue(rr.unresolved().isEmpty(), "Lauf " + lauf);
         }
     }
 }
