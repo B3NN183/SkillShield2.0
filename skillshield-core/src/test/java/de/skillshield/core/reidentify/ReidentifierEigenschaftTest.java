@@ -21,9 +21,10 @@ class ReidentifierEigenschaftTest {
     private static final String[] WERTE = {"erika.beispiel@example.invalid", "192.0.2.10", "198.51.100.7",
         "203.0.113.5", "https://intranet.example/a/b", "C:\\Tools\\a.exe", "$1", "\\1", "${HOME}", "%APPDATA%",
         "[[", "]]", "x", "GEHEIM-mustermann-4711"};
-    // Luecken ohne vollstaendigen Platzhalter; Bruchstuecke mit unbekanntem Typ oder ohne Typ sind erlaubt
+    // Luecken mit und ohne Platzhalter-Zeichenfolgen (ab T-9 durch den Literalschutz abgedeckt)
     private static final String[] LUECKEN = {"", " ", "Start", "mit \uD83D\uDE00 Emoji", "e\u0301", "\t", "\r\n",
-        "$1", "\\1", "a.b", "Zeile\nzwei", "arr[idx_0]", "[", "[[", "]]", "]", "[x]", "\uFF3B\uFF3B", "\u200B"};
+        "$1", "\\1", "a.b", "Zeile\nzwei", "arr[idx_0]", "[", "[[", "]]", "]", "[x]", "\uFF3B\uFF3B", "\u200B",
+        "[[EMAIL_1]]", "[[ pfad_2 ]]", "[PFAD_1]", "[[EMAIL_", "[[PERSON_1]", "[[TEXT_1]]"};
     private static final FindingType[] TYPEN = {FindingType.EMAIL, FindingType.IP, FindingType.URL,
         FindingType.PFAD, new FindingType("PERSON")};
 

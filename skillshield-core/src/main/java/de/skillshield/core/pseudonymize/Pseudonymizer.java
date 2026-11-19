@@ -1,16 +1,19 @@
 package de.skillshield.core.pseudonymize;
 
 import de.skillshield.core.model.Finding;
+import de.skillshield.core.model.FindingType;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
- * Ersetzt genau die übergebenen Funde durch Platzhalter {@code [[TYP_n]]} (Architektur-Plan Kap. 2.6).
+ * Ersetzt genau die übergebenen Funde durch Platzhalter {@code [[TYP_n]]} (Architektur-Plan Kap. 2.6, 2.7).
  *
  * <p>Zustandslos: der Zähler gilt je Aufruf. Die Nummer {@code n} zählt über alle Typen fortlaufend ab 1 in
  * Textreihenfolge; gleiche Originalwerte desselben Typs (zeichengleich) erhalten denselben Platzhalter.
@@ -20,7 +23,18 @@ import java.util.Objects;
  * kopiert, jeder Fundbereich wird nur durch den Platzhalter ersetzt. Der Fundbereich selbst wird nie kopiert.
  *
  * <p>Die Eingabe wird vollständig geprüft, bevor etwas erzeugt wird (T-7); ungültige Funde führen zu einer
- * {@link InvalidFindingException}. Stand T-7: Der Literalschutz ({@code [[TEXT_n]]}, T-9) fehlt noch.
+ * {@link InvalidFindingException}.
+ *
+ * <p><b>Literalschutz (T-9):</b> Die Lücken zwischen den Funden werden mit {@link PlaceholderSyntax#tokenize}
+ * durchsucht. Die Typnamen der übergebenen Funde gelten als bekannt; findet sich in den Lücken mindestens ein Token
+ * (vollständiger Platzhalter oder beschädigte Form eines bekannten Typs), kommt {@code TEXT} hinzu und es wird mit
+ * dieser Menge erneut tokenisiert. Jedes Token wird wie ein Fund vom Typ {@code TEXT} behandelt: Es erhält
+ * {@code [[TEXT_n]]} (gleiche Nummerierung und Konsistenzregel wie die übrigen Funde) und kommt bei der
+ * Rückübersetzung unverändert zurück. Funde werden dadurch nie verdrängt oder verkleinert: Nur die Lücken werden
+ * geschützt, ein Fund, der eine Platzhalterform ganz oder teilweise überdeckt, bleibt ersetzt, die in den Lücken
+ * verbleibenden Reste werden nach denselben Regeln geschützt oder bleiben Text. Weil kein Token einer Lücke über
+ * deren Ende hinausreichen kann (ein erzeugter Platzhalter beginnt mit {@code [}, das kein Token fortsetzt), liefert
+ * {@code tokenize} auf dem Ergebnis mit den Typnamen der Zuordnung genau die erzeugten Platzhalter.
  */
 public final class Pseudonymizer {
 
@@ -42,28 +56,77 @@ public final class Pseudonymizer {
         Objects.requireNonNull(findings, "findings");
 
         List<Entry> sorted = validatedAndSorted(text, findings);
+        Set<String> known = literalTypes(text, sorted);
 
         StringBuilder out = new StringBuilder(text.length());
         Map<String, Map<String, Integer>> numbers = new HashMap<>();
         Map<String, String> mapping = new LinkedHashMap<>();
-        int counter = 0;
+        int[] counter = {0};
         int pos = 0;
         for (Entry entry : sorted) {
             Finding f = entry.finding();
-            out.append(text, pos, f.start());
-            Map<String, Integer> perType = numbers.computeIfAbsent(f.type().name(), k -> new HashMap<>());
-            Integer n = perType.get(f.originalValue());
-            if (n == null) {
-                counter++;
-                n = counter;
-                perType.put(f.originalValue(), n);
-                mapping.put(PlaceholderSyntax.format(f.type(), n), f.originalValue());
-            }
-            out.append(PlaceholderSyntax.format(f.type(), n));
+            pos = appendGap(text, pos, f.start(), known, out, numbers, mapping, counter);
+            appendPlaceholder(f.type(), f.originalValue(), out, numbers, mapping, counter);
             pos = f.end();
         }
-        out.append(text, pos, text.length());
+        appendGap(text, pos, text.length(), known, out, numbers, mapping, counter);
         return new PseudonymizationResult(out.toString(), PlaceholderMapping.of(mapping));
+    }
+
+    /**
+     * Typnamen, mit denen die Lücken tokenisiert werden: die der Funde, dazu {@code TEXT}, sobald die Lücken ein
+     * Token enthalten. {@code null} bedeutet: kein Literalschutz nötig.
+     */
+    private static Set<String> literalTypes(String text, List<Entry> sorted) {
+        Set<String> known = new HashSet<>();
+        for (Entry e : sorted) {
+            known.add(e.finding().type().name());
+        }
+        int pos = 0;
+        boolean found = false;
+        for (Entry e : sorted) {
+            if (!PlaceholderSyntax.tokenize(text, pos, e.finding().start(), known).isEmpty()) {
+                found = true;
+                break;
+            }
+            pos = e.finding().end();
+        }
+        if (!found && PlaceholderSyntax.tokenize(text, pos, text.length(), known).isEmpty()) {
+            return null;
+        }
+        known.add(FindingType.TEXT.name());
+        return known;
+    }
+
+    /** Hängt die Lücke {@code [from, to)} an, jedes Token als {@code TEXT}-Platzhalter. Liefert {@code to}. */
+    private static int appendGap(String text, int from, int to, Set<String> known, StringBuilder out,
+            Map<String, Map<String, Integer>> numbers, Map<String, String> mapping, int[] counter) {
+        if (known == null) {
+            out.append(text, from, to);
+            return to;
+        }
+        int pos = from;
+        for (PlaceholderSyntax.Token token : PlaceholderSyntax.tokenize(text, from, to, known)) {
+            out.append(text, pos, token.start());
+            appendPlaceholder(FindingType.TEXT, text.substring(token.start(), token.end()), out, numbers, mapping,
+                    counter);
+            pos = token.end();
+        }
+        out.append(text, pos, to);
+        return to;
+    }
+
+    private static void appendPlaceholder(FindingType type, String value, StringBuilder out,
+            Map<String, Map<String, Integer>> numbers, Map<String, String> mapping, int[] counter) {
+        Map<String, Integer> perType = numbers.computeIfAbsent(type.name(), k -> new HashMap<>());
+        Integer n = perType.get(value);
+        if (n == null) {
+            counter[0]++;
+            n = counter[0];
+            perType.put(value, n);
+            mapping.put(PlaceholderSyntax.format(type, n), value);
+        }
+        out.append(PlaceholderSyntax.format(type, n));
     }
 
     /** Fund mit seinem Index in der übergebenen Liste. */
