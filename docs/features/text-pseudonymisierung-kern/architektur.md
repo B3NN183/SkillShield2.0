@@ -796,6 +796,25 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
   `Datei konfig.yml` → leer; Umlaute/ß/`e`+U+0301/Emoji im Pfad bis zum Leerzeichen, Fundgrenzen nicht in Paar oder
   Kombinationsfolge; `/log=`-Fall dokumentiert (vor T-13 noch Laufwerksfund `C:\Logs\a.log`, Test in T-13 angepasst);
   Grenzlast je < 2 s, zusätzlich `(`×100 000 + `C:\a` + `)`×100 000.
+- *(Nachtrag 19.11.2026 zu T-10 – Anwendung des Grundsatzes aus Kap. 2.3 („zu großer oder Teilfund besser als kein
+  Fund", vom Nutzer nach den Befunden zu T-3 bis T-5 bestätigt); ersetzt in Zeile `LAUFWERK` (2.4.2) das
+  Negativbeispiel `xC:\a`:*
+  1. *Für Laufwerkspfade gilt KEINE Startgrenze. Der Laufwerksbuchstabe ist der ASCII-Buchstabe direkt vor `:` plus
+     Trenner; der Fund beginnt dort. Text direkt davor verhindert den Fund nicht und gehört nicht dazu:
+     `xC:\a` → `C:\a`; `Pfad:C:\Tools\a.exe`, `x=C:\…`, `abcC:\…` → Fund ab `C`.*
+  2. *Bekannte Folge (zu große Funde, kein Leck): Ein Wort, das auf einen Buchstaben endet, gefolgt von `:\` oder
+     `:/` und mindestens einem Segment, ergibt einen Fund ab dem letzten Buchstaben (`Verzeichnis:\Tools\a.exe` →
+     `s:\Tools\a.exe`). In URLs liegt ein solcher Kandidat (`s://…`) ganz im URL-Fund und wird verdrängt.*
+  3. *Unsichtbare Formatzeichen (Cf) beenden den Pfad nicht; Leerraum einschließlich NBSP, Steuerzeichen und
+     `"`, Backtick, `<`, `>`, `|` beenden ihn.*
+  3a. *Bekannte Grenzen (security T-10, niedrig, als sehr selten eingeschätzt; dem Nutzer am 19.11.2026 berichtet,
+     Hinweis im späteren Prüfdialog): (a) unsichtbares Formatzeichen im Kopf (zwischen Laufwerksbuchstabe, `:` und
+     Trenner) → kein Fund; (b) Ersatzzeichen statt `:` oder Trenner (Vollbreite U+FF1A/U+FF3C/U+FF23, Yen U+00A5,
+     Won U+20A9, Division-Slash U+2215) → kein Fund; (c) NBSP, U+202F, U+3000 beenden den Pfad wie ein Leerzeichen
+     (D-5), der Rest bleibt Klartext; (d) `<`, `>`, `|`, `"` beenden den Pfad (in Windows-Namen ungültig).*
+  4. *Offen für T-11 bis T-13: Ob die Startgrenze auch für UNC-, Unix- und relative Pfade entfällt, wird dort nach
+     demselben Grundsatz entschieden (bei `/`-Pfaden ist das Risiko von Fehltreffern in normalem Text höher; die
+     Entscheidung ist je Form zu begründen und zu testen). `file:///C:/…` lässt bis T-16 `fil` sichtbar.*
 
 ### T-11: Pfad-Erkenner – Anführungszeichen; Zusammenlegung mit echten Erkennern
 - **Dateien**: `PathRecognizer.java` (Regel 2.4.3 inkl. Rückfall); Tests `PathRecognizerAnfuehrungTest`,
