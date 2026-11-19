@@ -839,6 +839,35 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
     Bestandteile `intranet.invalid`, `Akte`, `2025`, `erika.beispiel@example.invalid`, `x.pdf`; Roundtrip gleich.
   - AK-7 (e) mit echten Erkennern: `https://intranet.invalid/?f="C:/Akte 2025/x.pdf"` → zwei Funde (URL, PFAD), keine
     Zusammenlegung, `"` zwischen den Platzhaltern bleibt.
+- *(Nachtrag 19.11.2026 zu T-11 – Anwendung des Grundsatzes aus Kap. 2.3; ergänzt Kap. 2.4.3/2.4.5:*
+  1. *Obermengen-Garantie: Das Ergebnis mit Anführungszeichenregel ist die Vereinigung aus dem Ergebnis ohne sie
+     (T-10) und den Zitat-Funden; kein Fund wird durch die Regel kleiner. Differenz-Eigenschaftstest gegen
+     `detectWithoutQuotes` (paketprivat).*
+  2. *Der Pfadkopf muss nicht direkt nach dem öffnenden Zeichen stehen: Der Fund reicht vom ersten Pfadkopf im Zitat
+     bis zum schließenden Zeichen (`"Siehe C:\Mein Ordner\a.txt"` → `C:\Mein Ordner\a.txt`). Mehrere Pfade in einem
+     Zitat ergeben einen Fund.*
+  3. *Als Anführungszeichen gelten zusätzlich die typografischen Zeichen U+201E, U+201C, U+201D, U+00AB, U+00BB,
+     U+2018, U+2019, U+201A, U+2039, U+203A; innerhalb der doppelten bzw. der einfachen Familie schließen sie
+     einander auch gemischt. Backtick schließt nur mit Backtick.*
+  4. *Die Suche nach dem schließenden Zeichen endet an Steuerzeichen (Zeilenende, Tab), U+2028, U+2029, `<`, `>`,
+     `|`; fehlt es, gilt das Ergebnis ohne Regel (Ende am ersten Leerzeichen, D-5).*
+  5. *Bekannte Folgen (zu große Funde, kein Leck): Zwei Apostrophe auf einer Zeile bilden ein Paar
+     (`Peter's … C:\a.txt … Pauls'`); ein typografisches Schlusszeichen direkt am Pfadende ohne Leerzeichen bleibt
+     im Fund (`„C:\a“` → `C:\a“`); bei Verschachtelung gewinnt das äußere Paar. Bekannte Grenze: Apostroph im Pfad
+     innerhalb einfacher Anführungszeichen schließt das Paar vorzeitig.*
+  5a. *Paarregel (nach reviewer-/security-Befund T-11, Durchlauf 1, Schwere mittel – ersetzt in Kap. 2.4.4 „Paar
+     verbrauchen"): Jedes Anführungszeichen wird als öffnendes probiert und mit dem nächsten schließenden Zeichen
+     seiner Familie gepaart. KEIN Paar wird verbraucht (Korrektur nach security-Befund Durchlauf 2: auch das
+     Verbrauchen nur bei Fund ließ ein unpaariges Zeichen einem späteren Zitat das öffnende Zeichen wegnehmen,
+     wenn dazwischen ein weiterer Pfad stand, z. B. `Peter's C:\Temp und 'D:\Mein Ordner\a.txt'`). Alle
+     Zitat-Funde werden gesammelt, nach Start sortiert und mit dem Ergebnis ohne Regel vereinigt; überlappende
+     Funde verschmelzen, angrenzende bleiben getrennt. Ein einzelnes Zeichen davor (Zoll-Angabe `24"`, Apostroph in `can't`, maskiertes
+     `\"` in JSON) verschiebt die Paare damit nicht. Bekannte Folge: `"x" C:\a b "y"` → Fund `C:\a b ` (zu groß).
+     Bekannte Grenzen mit dokumentierenden Tests: Zeilenumbruch oder Tab im Zitat, gemischte ASCII-Paare
+     (`"…'`) → Schutz nur bis zum ersten Leerzeichen. Die Vereinigung der Fundlisten führt nur Grenzen mit und
+     bildet den Teilstring einmal je Fund (lineare Laufzeit auch bei Überlappungsketten).*
+  6. *Prämissen zu AK-7 (g) seit dem T-10-Nachtrag: Der Pfad-Kandidat beginnt bei `s://…` aus `https://`, der
+     E-Mail-Kandidat schließt `2025/` ein; das Scanner-Ergebnis ist wie geplant ein zusammengelegter Fund.*
 
 ### T-12: Pfad-Erkenner – UNC
 - **Dateien**: `PathForm.java` (`UNC`); Test `PathRecognizerUncTest`.

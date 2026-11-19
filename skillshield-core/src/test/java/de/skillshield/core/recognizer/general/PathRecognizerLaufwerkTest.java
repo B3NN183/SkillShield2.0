@@ -735,6 +735,31 @@ class PathRecognizerLaufwerkTest {
         assertEquals(erwartet, (int) assertTimeoutPreemptively(LIMIT, () -> zaehle(text)));
     }
 
+    // ------------------------------------------------------------------ dokumentierte Ist-Zustände (Review T-10)
+
+    @Test
+    void fileUriVorT16BeginntDerFundAmLaufwerksbuchstabenAehnlichenKopfUndLaesstFilSichtbar() {
+        // Ist-Zustand vor T-16 (wird in T-16 angepasst, dort liefert die Form FILE_URI den ganzen Ausdruck): Der
+        // Laufwerkskopf braucht keine Startgrenze, daher beginnt der Fund am 'e' von "file" (e, ':', '/') und
+        // reicht bis zum Ende; "fil" bleibt im Klartext sichtbar. Das ist ein Teilfund, kein Totalverlust.
+        String text = "file:///C:/Tools/a.exe";
+        List<Finding> funde = funde(text);
+        assertEquals(1, funde.size());
+        assertEquals(3, funde.get(0).start());
+        assertEquals(text.length(), funde.get(0).end());
+        assertEquals("e:///C:/Tools/a.exe", funde.get(0).originalValue());
+        assertEquals("fil", text.substring(0, funde.get(0).start()));
+    }
+
+    @Test
+    void laufwerkWurzelMitNurEinemUnsichtbarenFormatzeichenIstIstZustandEinFund() {
+        // Ist-Zustand (festgeschrieben, bekannte Grenze OF-7): Ein unsichtbares Formatzeichen (U+200B) beendet den
+        // Pfad nicht und zählt als Segment hinter dem Kopf; "C:\" + U+200B ist daher ein Fund, obwohl "C:\" allein
+        // keiner ist. Zu groß ist kein Leck.
+        String text = bs("C:¦") + "\u200B";
+        assertEinFund(text, text);
+    }
+
     @Test
     void ak49StandardScannerMitVielenLaufwerkspfaden() {
         String text = bs("C:¦a ").repeat(100_000);

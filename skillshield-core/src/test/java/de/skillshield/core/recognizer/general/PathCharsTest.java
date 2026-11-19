@@ -83,15 +83,6 @@ class PathCharsTest {
     }
 
     @Test
-    void anfuehrungszeichen() {
-        assertTrue(PathChars.isQuote('"'));
-        assertTrue(PathChars.isQuote('\''));
-        assertTrue(PathChars.isQuote('`'));
-        assertFalse(PathChars.isQuote('<'));
-        assertFalse(PathChars.isQuote('a'));
-    }
-
-    @Test
     void kuerzungszeichenAmEnde() {
         for (char c : ".,;:!?'".toCharArray()) {
             assertTrue(PathChars.isTrailingPunctuation(c), "Zeichen " + c);
@@ -137,5 +128,82 @@ class PathCharsTest {
         assertEquals(0.95, f.confidence(1));
         assertEquals(0.95, f.confidence(3));
         assertFalse(f.requiresStartBoundary());
+    }
+
+    // ------------------------------------------------------------------ Anführungszeichen (T-11)
+
+    private static final String ALLE_ANFUEHRUNGSZEICHEN = "\"\u201C\u201D\u201E\u00AB\u00BB'\u2018\u2019\u201A\u2039\u203A`";
+
+    @Test
+    void jedesAnfuehrungszeichenHatEineArtUndWirdVonSichSelbstGeschlossen() {
+        assertEquals(PathChars.QUOTE_KINDS, ALLE_ANFUEHRUNGSZEICHEN.length());
+        for (int i = 0; i < ALLE_ANFUEHRUNGSZEICHEN.length(); i++) {
+            char c = ALLE_ANFUEHRUNGSZEICHEN.charAt(i);
+            assertEquals(i, PathChars.quoteKind(c), "Zeichen " + (int) c);
+            assertTrue(PathChars.closesQuote(i, c), "schliesst sich selbst: " + (int) c);
+        }
+        for (char c : "a:\\/ \t<>|*(".toCharArray()) {
+            assertEquals(-1, PathChars.quoteKind(c), "Zeichen " + (int) c);
+        }
+    }
+
+    @Test
+    void geradesDoppeltesZeichenSchliesstMitGeradenUndTypografischenZeichen() {
+        assertTrue(PathChars.closesQuote(0, '"'));
+        assertTrue(PathChars.closesQuote(0, '\u201C'));
+        assertTrue(PathChars.closesQuote(0, '\u201D'));
+        assertFalse(PathChars.closesQuote(0, '\u201E'));
+        assertFalse(PathChars.closesQuote(0, '\u00BB'));
+        assertFalse(PathChars.closesQuote(0, '\''));
+        assertFalse(PathChars.closesQuote(0, '`'));
+    }
+
+    @Test
+    void typografischeDoppelteZeichenSchliessenMitJedemDerDoppeltenFamilie() {
+        for (int kind = 1; kind <= 5; kind++) {
+            for (int j = 0; j <= 5; j++) {
+                assertTrue(PathChars.closesQuote(kind, ALLE_ANFUEHRUNGSZEICHEN.charAt(j)), kind + "/" + j);
+            }
+            for (int j = 6; j < ALLE_ANFUEHRUNGSZEICHEN.length(); j++) {
+                assertFalse(PathChars.closesQuote(kind, ALLE_ANFUEHRUNGSZEICHEN.charAt(j)), kind + "/" + j);
+            }
+        }
+    }
+
+    @Test
+    void einfacheZeichenSchliessenNurInIhrerFamilieUndBacktickNurMitBacktick() {
+        assertTrue(PathChars.closesQuote(6, '\''));
+        assertTrue(PathChars.closesQuote(6, '\u2018'));
+        assertTrue(PathChars.closesQuote(6, '\u2019'));
+        assertFalse(PathChars.closesQuote(6, '\u201A'));
+        assertFalse(PathChars.closesQuote(6, '"'));
+        for (int kind = 7; kind <= 11; kind++) {
+            for (int j = 6; j <= 11; j++) {
+                assertTrue(PathChars.closesQuote(kind, ALLE_ANFUEHRUNGSZEICHEN.charAt(j)), kind + "/" + j);
+            }
+            assertFalse(PathChars.closesQuote(kind, '"'));
+            assertFalse(PathChars.closesQuote(kind, '`'));
+        }
+        assertTrue(PathChars.closesQuote(12, '`'));
+        assertFalse(PathChars.closesQuote(12, '\''));
+        assertFalse(PathChars.closesQuote(12, '"'));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\n", "\r", "\t", "\u0000", "\u007F", "\u0085", "\u2028", "\u2029", "<", ">", "|"})
+    void abbruchzeichenBeendenDieSucheFuerJedeArt(String zeichen) {
+        for (int kind = 0; kind < PathChars.QUOTE_KINDS; kind++) {
+            assertTrue(PathChars.abortsQuoteSearch(kind, zeichen.charAt(0)), kind + "/" + (int) zeichen.charAt(0));
+        }
+    }
+
+    @Test
+    void leerzeichenBeendenDieSucheNichtUndGeradesDoppeltesZeichenNurAusserhalbDerDoppeltenFamilie() {
+        for (int kind = 0; kind < PathChars.QUOTE_KINDS; kind++) {
+            assertFalse(PathChars.abortsQuoteSearch(kind, ' '));
+            assertFalse(PathChars.abortsQuoteSearch(kind, '\u00A0'));
+            assertFalse(PathChars.abortsQuoteSearch(kind, 'a'));
+            assertEquals(kind > 5, PathChars.abortsQuoteSearch(kind, '"'), "Art " + kind);
+        }
     }
 }

@@ -65,9 +65,80 @@ final class PathChars {
         }
     }
 
-    /** Anführungszeichen, die einen Pfad umschließen können: {@code "}, {@code '} und Backtick. */
-    static boolean isQuote(char c) {
-        return c == '"' || c == '\'' || c == '`';
+    /** Anzahl der Arten öffnender Anführungszeichen, siehe {@link #quoteKind}. */
+    static final int QUOTE_KINDS = 13;
+
+    /**
+     * Art eines öffnenden Anführungszeichens (0 bis {@link #QUOTE_KINDS} - 1) oder -1. Doppelte Familie (0 bis 5):
+     * {@code "}, U+201C, U+201D, U+201E, U+00AB, U+00BB. Einfache Familie (6 bis 11): {@code '}, U+2018, U+2019,
+     * U+201A, U+2039, U+203A. Backtick: 12. Jedes Zeichen kann öffnen und schließen; ob ein Paar zustande kommt, regelt
+     * {@link #closesQuote}.
+     */
+    static int quoteKind(char c) {
+        switch (c) {
+            case '"':
+                return 0;
+            case 0x201C:
+                return 1;
+            case 0x201D:
+                return 2;
+            case 0x201E:
+                return 3;
+            case 0x00AB:
+                return 4;
+            case 0x00BB:
+                return 5;
+            case '\'':
+                return 6;
+            case 0x2018:
+                return 7;
+            case 0x2019:
+                return 8;
+            case 0x201A:
+                return 9;
+            case 0x2039:
+                return 10;
+            case 0x203A:
+                return 11;
+            case '`':
+                return 12;
+            default:
+                return -1;
+        }
+    }
+
+    /**
+     * Ob {@code c} ein Anführungszeichen der Art {@code kind} schließt. Das gerade {@code "} schließt mit {@code "},
+     * U+201C oder U+201D; ein typografisches doppeltes Zeichen mit jedem Zeichen der doppelten Familie (gemischte
+     * Paare wie U+201E ... U+201C oder U+00BB ... U+00AB); das gerade {@code '} mit {@code '}, U+2018 oder U+2019; ein
+     * typografisches einfaches Zeichen mit jedem der einfachen Familie; Backtick nur mit Backtick. Jede Art wird
+     * auch von ihrem eigenen Zeichen geschlossen; daraus folgt die lineare Laufzeit der Suche (Bereiche gleicher Art
+     * überlappen nicht).
+     */
+    static boolean closesQuote(int kind, char c) {
+        if (kind == 0) {
+            return c == '"' || c == 0x201C || c == 0x201D;
+        }
+        if (kind <= 5) {
+            return quoteKind(c) >= 0 && quoteKind(c) <= 5;
+        }
+        if (kind == 6) {
+            return c == '\'' || c == 0x2018 || c == 0x2019;
+        }
+        if (kind <= 11) {
+            return quoteKind(c) >= 6 && quoteKind(c) <= 11;
+        }
+        return c == '`';
+    }
+
+    /**
+     * Ob die Suche nach dem schließenden Anführungszeichen der Art {@code kind} am Zeichen {@code c} erfolglos
+     * endet: Steuerzeichen (Zeilenende, Tab), U+2028, U+2029, {@code <}, {@code >}, {@code |}; für alle Arten außer
+     * der doppelten Familie außerdem das gerade {@code "}. Leerzeichen beenden die Suche nicht.
+     */
+    static boolean abortsQuoteSearch(int kind, char c) {
+        return Character.isISOControl(c) || c == 0x2028 || c == 0x2029 || c == '<' || c == '>' || c == '|'
+                || (kind > 5 && c == '"');
     }
 
     /** Satzzeichen, die am Ende eines Fundes immer gekürzt werden: {@code . , ; : ! ?} und {@code '}. */
