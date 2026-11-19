@@ -217,6 +217,27 @@ Gemeinsame Regeln (AK-49, TE-7):
 4. Kein `java.net.URL`/`URI`/`InetAddress` (u. a. löst `URL.equals/hashCode` DNS aus).
 5. Jeder Erkennertest prüft `text.substring(start, end).equals(originalValue)` für jeden Fund (AK-1).
 
+*(Korrektur 19.11.2026 nach security-Befund T-3, Schwere mittel – gilt für alle drei Muster dieser Tabelle:
+Regel 1 darf nicht dazu führen, dass ein gültiger Wert gar nicht erkannt wird, nur weil unmittelbar davor
+Füll- oder Satzzeichen aus der eigenen Klasse stehen. Belegter Fall: `E-Mail` + 60 × `.` + Adresse ergab keinen
+Fund, weil der Treffer nur am Anfang des Zeichenlaufs beginnen durfte und der lokale Teil auf 64 Zeichen begrenzt
+ist. Deshalb: Der Lookbehind schließt nur die Zeichen aus, die den Wert wirklich fortsetzen würden – bei E-Mail
+Buchstaben/Marken/Ziffern, nicht aber `. _ % + -`; der Wert selbst beginnt dann mit einem Buchstaben oder einer
+Ziffer. Für IP (`(?<![0-9.])`) und URL (`(?<![\p{L}\p{N}+.-])`) ist dieselbe Frage in T-4 bzw. T-5 zu prüfen und zu
+testen: Punktführer, Binde- oder Unterstrichfolgen direkt vor dem Wert dürfen den Fund nicht verhindern. Die
+Laufzeitgarantie aus Regel 1 muss dabei erhalten bleiben und mit pathologischen Eingaben belegt werden.
+Grundsatz für alle Erkenner: Im Zweifel ist ein zu großer oder ein Teilfund besser als kein Fund.)*
+
+*(Nachtrag 19.11.2026 zu T-3 nach security-Befunden der Durchläufe 4 und 5, vom Nutzer entschieden – weicht vom
+Muster der Tabelle ab: (1) Hängen Adressen ohne Leerraum aneinander, darf der E-Mail-Erkenner einen Fund am letzten
+`.` vor einem weiteren `@` in zwei Funde teilen; zwischen den Teilfunden bleibt dann nur dieser eine Punkt frei.
+(2) Ein Rest aus `@` plus Domain hinter einem Fund wird als eigener EMAIL-Fund gemeldet. Ein EMAIL-Fund beginnt
+also nicht immer mit einem Zeichen des lokalen Teils, er kann mit `@` beginnen; Folgetasks (T-6 ff.) dürfen das
+nicht voraussetzen. (3) Obermengen-Garantie per Konstruktion: Der Erkenner berechnet immer auch das Ergebnis ohne
+Aufteilen und gleicht ab. Jede Textposition, die ohne Aufteilen abgedeckt wäre, ist im Ergebnis abgedeckt, außer
+einem einzelnen Trenner-Punkt direkt zwischen zwei Funden; sonst bleibt der große Fund. Ein Zufalls-Differenztest
+sichert das ab. Wer in T-4/T-5 ebenfalls Funde teilt oder kürzt, übernimmt dieses Vorgehen.)*
+
 | Typ | Muster (Skizze) | Nachbearbeitung | Konfidenz | Quelle |
 |-----|-----------------|-----------------|-----------|--------|
 | `EMAIL` | `(?<![\p{L}\p{M}\p{N}._%+-])`, lokal `[\p{L}\p{M}\p{N}._%+-]{1,64}+`, `@`, Domain `[\p{L}\p{M}\p{N}-]{1,63}+(?:\.[\p{L}\p{M}\p{N}-]{1,63}+)++` | – (Schlusspunkt/Komma nicht in der Klasse bzw. ohne folgendes Label, AK-3) | 0.95 sicher | `email` |
