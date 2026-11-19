@@ -1,8 +1,8 @@
 # Architektur: Text-Pseudonymisierung (Fachkern)
 
 Feature-Kurzname: `text-pseudonymisierung-kern`
-Grundlage: `docs/features/text-pseudonymisierung-kern/anforderung.md` (Neufassung: AK-1 bis AK-54, D-1 bis D-7,
-A-1 bis A-12, OF-4 bis OF-15), `Plan.md` Kap. 2, 5–8, 11, 13, 14, `docs/BLUEPRINT_SkillShield_Java.md`, `CLAUDE.md`,
+Grundlage: `docs/features/text-pseudonymisierung-kern/anforderung.md` (Neufassung: AK-1 bis AK-54, D-1 bis D-8,
+A-1 bis A-12, OF-4 bis OF-16), `Plan.md` Kap. 2, 5–8, 11, 13, 14, `docs/BLUEPRINT_SkillShield_Java.md`, `CLAUDE.md`,
 Parent-`pom.xml`, `skillshield-core/pom.xml`.
 
 Stand des Codes (geprüft): `skillshield-core` enthält nur `de/skillshield/core/package-info.java` und `CoreModulTest`.
@@ -16,12 +16,20 @@ vor Konfidenz, Kap. 2.5). `Finding` verliert das Feld `note` (kein Nutzer mehr i
 (zustandslose Schritte, `PlaceholderSyntax.tokenize` für Hin- und Rückweg, Literalschutz `[[TEXT_n]]`, klartextfreies
 `toString()`, Regex-Härtung, Quelltext-Prüftest) bleibt.
 
+**Nachtrag 19.11.2026 (Nutzerentscheidung D-8 nach Sicherheitsbefund zu T-2):** Teilweise überlappende Kandidaten
+werden zu einem Fund zusammengelegt statt verworfen; Enthaltensein bleibt (Kap. 2.5, TE-3, TE-19). Stand des Codes:
+T-1 committet, T-2 nach alter Regel umgesetzt, nicht abgenommen; T-2 wird nach dieser Fassung nachgearbeitet.
+`ConflictResolver.resolve` erhält den Text als Parameter, `Finding` die Quellenkonstante `zusammengelegt`,
+`TextScanner` kapselt Ausnahmen der Erkenner klartextfrei (TE-20). Geändert: Kap. 1, 2.1, 2.2, 2.4.3, 2.4.5, 2.5,
+2.9, 5, T-2, T-7, T-11, T-16 bis T-20, Zuordnung, Kap. 7, 8, 9.
+
 ---
 
 ## 1. Lösungsansatz
 
 Der Fachkern besteht aus drei zustandslosen Schritten auf einem `String` im Modul `skillshield-core`:
-**Scan** (`TextScanner` ruft die Erkenner auf, `ConflictResolver` macht die Kandidaten überlappungsfrei),
+**Scan** (`TextScanner` ruft die Erkenner auf, `ConflictResolver` macht die Kandidaten überlappungsfrei, indem er
+enthaltene Kandidaten im umschließenden aufgehen lässt und teilweise überlappende zusammenlegt),
 **Pseudonymisierung** (`Pseudonymizer` ersetzt genau die übergebenen Funde durch `[[TYP_n]]`, ein Pfad wird genau ein
 `[[PFAD_n]]`) und **Rückübersetzung** (`Reidentifier` ersetzt einpassig jeden erkannten Platzhalter, auch tolerierte
 Varianten, und meldet unbekannte und beschädigte). Platzhalterähnlicher Originaltext wird bei der Pseudonymisierung
@@ -35,7 +43,9 @@ abschließender Satzzeichen und unpaariger schließender Klammern (D-5: Ende am 
 Kopf ein Anführungszeichen und wird es auf derselben Zeile geschlossen, ist der ganze Inhalt der Fund (AK-16). Die
 Pfadformen unterscheiden sich nur im Kopf, in der Mindestzahl der Segmente und in der Konfidenz; Laufzerlegung,
 Anführungszeichen, Ende und Segmentzählung sind gemeinsam. E-Mail, IPv4 und URL bleiben Regex-Erkenner. Bei
-Überlappung gewinnt der umschließende Fund unabhängig von der Konfidenz (OF-12).
+vollständigem Enthaltensein gewinnt der umschließende Fund unabhängig von der Konfidenz (AK-24); teilweise überlappende
+Kandidaten werden zu einem Fund über den gesamten Bereich zusammengelegt (D-8, AK-7), sodass keine von einem Erkenner
+abgedeckte Position durch die Konfliktauflösung in den Klartext fällt.
 
 Feature-Schnitt: 20 kleine Tasks. Nach T-9 steht der vollständige Roundtrip mit E-Mail, IP, URL und manuellen Funden;
 T-10 bis T-16 fügen je eine Pfadform bzw. einen Pfadaspekt hinzu.
@@ -53,14 +63,14 @@ Das Paket `recognizer.kv` bleibt in diesem Feature leer (Folgefeature).
 |-------|-----|-----|-------|
 | `model` | `FindingType` | record | Typname (`PFAD`, `EMAIL`, `IP`, `URL`, `TEXT`, freie Namen für manuelle Funde) |
 | `model` | `ConfidenceLevel` | enum | `SICHER`, `WAHRSCHEINLICH`, `FRAGLICH`; Zuordnung aus Konfidenz |
-| `model` | `Finding` | record | Fund; `toString()` ohne Klartext |
+| `model` | `Finding` | record | Fund; `toString()` ohne Klartext; Quellenkonstanten `manuell`, `zusammengelegt` |
 | `recognizer` | `Recognizer` | interface | ein Erkenner |
-| `recognizer` | `TextScanner` | final class | Scan = alle Erkenner + Konfliktauflösung |
+| `recognizer` | `TextScanner` | final class | Scan = alle Erkenner + Konfliktauflösung; kapselt Erkenner-Ausnahmen klartextfrei |
 | `recognizer.general` | `EmailRecognizer`, `Ipv4Recognizer`, `UrlRecognizer` | final class | Regex-Erkenner |
 | `recognizer.general` | `PathRecognizer` | final class | Pfad-Erkenner (Durchlauf, Läufe, Anführungszeichen, Ende) |
 | `recognizer.general` | `PathForm` | enum (package-private) | je Pfadform: Kopf, Mindestsegmente, Konfidenz, Quelle |
 | `recognizer.general` | `PathChars` | final class (package-private) | Zeichenklassen (Trenner, Endzeichen, Startgrenze, Kürzung) |
-| `conflict` | `ConflictResolver` | final class | überlappungsfreie Auswahl |
+| `conflict` | `ConflictResolver` | final class | überlappungsfreie Fundliste: Enthaltensein und Zusammenlegung (Kap. 2.5) |
 | `pseudonymize` | `PlaceholderSyntax` | final class | Format und Erkennung von Platzhaltern (Hin- und Rückweg) |
 | `pseudonymize` | `PlaceholderMapping` | final class | unveränderliche Zuordnung Platzhalter → Originalwert |
 | `pseudonymize` | `PseudonymizationResult` | record | Text + Zuordnung |
@@ -98,18 +108,21 @@ public enum ConfidenceLevel {
 public record Finding(FindingType type, String originalValue, int start, int end,
                       double confidence, String source) {
     public static final String SOURCE_MANUAL = "manuell";
-    public Finding { /* type, originalValue, source != null; start >= 0; end > start;
+    public static final String SOURCE_MERGED = "zusammengelegt";   // nur ConflictResolver (Kap. 2.5, TE-19)
+    public static final int MAX_SOURCE_LENGTH = 32;                 // Quelle im Format [a-z][a-z0-9-]{0,31}
+    public Finding { /* type, originalValue, source != null; Quellenformat; start >= 0; end > start;
                         originalValue.length() == end - start; 0.0 <= confidence <= 1.0, kein NaN
                         -> sonst IllegalArgumentException / NullPointerException, Meldung ohne Werte */ }
     public static Finding manual(FindingType type, String text, int start, int end); // 1.0, "manuell"
     public ConfidenceLevel level();
     @Override public String toString();
     // "Finding[type=PFAD, start=6, end=31, confidence=0.95, level=SICHER, source=pfad-laufwerk]" – ohne originalValue
+    // zusammengelegt: "Finding[type=PFAD, start=5, end=83, confidence=0.95, level=SICHER, source=zusammengelegt]"
 }
 
 // ---------- recognizer ----------
 public interface Recognizer {
-    /** Liefert Kandidaten; darf überlappen, verändert nichts. */
+    /** Liefert Kandidaten; darf überlappen, verändert nichts. Quelle "zusammengelegt" ist nicht erlaubt. */
     List<Finding> detect(String text);
 }
 
@@ -117,7 +130,9 @@ public final class TextScanner {
     public TextScanner(List<? extends Recognizer> recognizers);
     public static TextScanner standard();   // E-Mail, IPv4, URL, Pfad (wächst mit T-3, T-4, T-5, T-10)
     public List<Finding> scan(String text); // NPE("text") bei null; unveränderlich, überlappungsfrei,
-                                            // aufsteigend nach start (AK-1, AK-7, AK-8)
+                                            // aufsteigend nach start (AK-1, AK-7, AK-8);
+                                            // Erkenner wirft RuntimeException -> IllegalStateException
+                                            // ohne Originalmeldung, ohne cause (TE-20)
 }
 
 // ---------- recognizer.general (Pfade) ----------
@@ -141,7 +156,8 @@ final class PathChars {                                  // package-private, nur
 
 // ---------- conflict ----------
 public final class ConflictResolver {
-    public static List<Finding> resolve(List<Finding> candidates);   // Regeln Kap. 2.5
+    /** Regeln Kap. 2.5. Jeder Kandidat muss zum Text passen (sonst IAE mit Listenindex, ohne Wert). */
+    public static List<Finding> resolve(String text, List<Finding> candidates);
 }
 
 // ---------- pseudonymize ----------
@@ -269,7 +285,10 @@ Startgrenze ist durch q erfüllt):
 
 Folge: `'` vor einem Pfadkopf wirkt als Anführungszeichen. `'C:\a' und 'C:\b'` ergibt zwei Funde; ein Apostroph vor
 einem Pfad, dem auf derselben Zeile ein weiteres `'` folgt, kann einen Fund mit Leerzeichen erzeugen (mehr Text
-geschützt als nötig, kein Leck).
+geschützt als nötig, kein Leck). Steht das öffnende `'` innerhalb einer URL (`https://intranet.invalid/?f='C:/Akte
+2025/…/x.pdf'`), endet der URL-Kandidat am Leerzeichen, der Pfad-Kandidat reicht darüber hinaus: Teilüberlappung, der
+Resolver legt beide zusammen (Kap. 2.5, AK-7 (g)). Das öffnende `'` liegt dann im Inneren des Fundes und geht im
+Platzhalter auf (A-12), das schließende `'` bleibt stehen.
 
 #### 2.4.4 Durchlauf (linear, AK-49)
 
@@ -306,46 +325,109 @@ Endzeichen oder nach dem Kürzen vor einem ASCII-Satzzeichen; folgt einem Kürzu
 ist das kombinierende das letzte Zeichen und es wird nicht gekürzt. Steht vor einem Kopf ein kombinierendes Zeichen,
 ist keine Startgrenze erfüllt.
 
-#### 2.4.5 Abgrenzung zu URL, IP, E-Mail (AK-24, AK-5)
+#### 2.4.5 Abgrenzung zu URL, IP, E-Mail (AK-24, AK-5, AK-7)
 
 Die Abgrenzung entsteht aus Startgrenze und Konfliktauflösung, nicht aus Sonderfällen im Pfad-Erkenner:
 - (a) `https://example.invalid/a/b`: `/a` hat keine Startgrenze → kein Pfad-Kandidat; nur URL.
 - (b) `https://example.invalid/?datei=C:\Tools\a.exe`: Pfad-Kandidat `C:\Tools\a.exe` (Startgrenze `=`) liegt ganz in
-  der URL → URL gewinnt (2.5).
-- (c) `\\192.0.2.10\freigabe\ordner`: IP-Kandidat liegt ganz im UNC-Pfad → PFAD gewinnt.
-- (d) `C:\Benutzer\erika.beispiel@example.invalid\ablage`: E-Mail liegt ganz im Pfad → PFAD gewinnt.
+  der URL → URL-Fund unverändert (Enthaltensein, 2.5).
+- (c) `\\192.0.2.10\freigabe\ordner`: IP-Kandidat liegt ganz im UNC-Pfad → PFAD-Fund unverändert.
+- (d) `C:\Benutzer\erika.beispiel@example.invalid\ablage`: E-Mail liegt ganz im Pfad → PFAD-Fund unverändert.
 - (e) `file:///C:/Tools/BeispielTool/tool.exe`: `FILE_URI` liefert einen Fund über den ganzen Ausdruck; `/C:` und
   `C:` haben keine Startgrenze; die URL-Regex kennt `file` nicht.
+- (f) `Link https://intranet.invalid/?f='C:/Akte 2025/erika.beispiel@example.invalid/x.pdf' ende`: URL-Kandidat bis
+  `Akte`, Pfad-Kandidat in `'…'`, E-Mail im Pfad enthalten → **ein zusammengelegter Fund** (2.5, Ergebnis siehe
+  TE-19 (c)).
+- (g) `https://intranet.invalid/?f="C:/Akte 2025/x.pdf"`: `"` gehört nicht zur URL; URL endet vor `"`, der Pfad beginnt
+  nach `"` → keine Überlappung, zwei Funde `[[URL_1]]"[[PFAD_2]]"` (AK-7 (e)).
 
-### 2.5 Konfliktauflösung (`ConflictResolver`, AK-7, AK-24, OF-12)
+### 2.5 Konfliktauflösung (`ConflictResolver`, AK-6, AK-7, AK-24, D-8, OF-16)
 
-**Stufe 1 – Enthaltensein (umschließender Fund gewinnt, unabhängig von der Konfidenz):** Kandidaten sortieren nach
-`start` aufsteigend, `end` absteigend, dann (nur für gleiche Bereiche) Konfidenz absteigend, Typrang (`URL` < `PFAD` <
-`EMAIL` < `IP` < übrige alphabetisch), `source` alphabetisch. Durchlauf mit `maxEnd`: Kandidat mit `end <= maxEnd` ist in
-einem früheren enthalten (oder bereichsgleich mit einem höher eingestuften) und entfällt; sonst behalten,
-`maxEnd = end`. Danach sind `start` und `end` streng aufsteigend; es bleiben nur Teilüberlappungen.
+Signatur `resolve(String text, List<Finding> candidates)`. Der Text wird gebraucht, weil ein zusammengelegter Fund
+einen Originalwert hat, den kein einzelner Kandidat enthält.
 
-**Stufe 2 – Teilüberlappung (kein Fund enthält den anderen):** Priorität Konfidenz absteigend, dann `start`
-aufsteigend (früherer gewinnt), dann Länge absteigend, Typrang, `source`. Gierig übernehmen, wenn der Kandidat keinen
-übernommenen überlappt (`TreeMap<start, Finding>`). Der Verlierer entfällt ganz; keine Vereinigung (AK-7: höhere
-Konfidenz bleibt). Ergebnis nach `start` sortiert. O(n log n), deterministisch (AK-8).
+**Begriffe.** Zwei Kandidaten **überlappen**, wenn sie mindestens ein Zeichen teilen (`a.start < b.end && b.start <
+a.end`); aneinandergrenzende (`a.end == b.start`) überlappen nicht (AK-7 (e)). Ein Kandidat ist **enthalten**, wenn ein
+anderer Kandidat seinen Bereich ganz umfasst; bei gleichem Bereich gilt der schwächere (Ordnung `STAERKE`) als im
+stärkeren enthalten. **Maximal** ist ein Kandidat, der nicht enthalten ist.
 
-Teilüberlappungen sind mit den Erkennern dieses Features nur konstruiert möglich, z. B.
-`https://example.invalid/a'C:\Program Files\b'` (URL bis zum Leerzeichen, Pfad in `'…'`). Bekannte Folge: Der nicht
-überlappende Rest des Verlierers bleibt Klartext, und ein in Stufe 1 entfernter, im Verlierer enthaltener Kandidat
-lebt nicht wieder auf (TE-3).
+**Stärke** (`STAERKE`, totale Ordnung, OF-16 (a)): Konfidenz absteigend, dann Länge absteigend, dann Start
+aufsteigend, dann Typrang (`URL` < `PFAD` < `EMAIL` < `IP` < übrige), Typname, Quelle, Originalwert (die letzten drei
+nur für Totalität und Determinismus).
+
+**Algorithmus** (eine Sortierung, ein Durchlauf):
+0. Prüfen, ohne etwas zu verändern: `text`, `candidates` nicht `null` (NPE `"text"`/`"candidates"`), kein
+   `null`-Element (NPE `"candidates enthält null"`), jeder Kandidat passt zum Text (`end <= text.length()` und
+   `text.regionMatches(start, originalValue, 0, len)`), sonst `IllegalArgumentException("Kandidat an Listenindex i passt
+   nicht zum Text")` – ohne Wert.
+1. Kopie sortieren nach `start` aufsteigend, `end` absteigend, dann `STAERKE`.
+2. Durchlauf mit einer offenen **Gruppe** (`gStart`, `gEnd`, Liste `M` der maximalen Kandidaten der Gruppe):
+   - keine Gruppe offen oder `f.start >= gEnd`: offene Gruppe abschließen (Schritt 3); neue Gruppe mit
+     `gStart = f.start`, `gEnd = f.end`, `M = [f]`.
+   - sonst, wenn `f.end > gEnd`: `f` ist maximal und überlappt das letzte Glied von `M` teilweise → `M.add(f)`,
+     `gEnd = f.end`.
+   - sonst: `f` liegt im letzten Glied von `M` (dessen Start ≤ `f.start`, dessen Ende = `gEnd` ≥ `f.end`) → übergehen.
+3. Gruppe abschließen:
+   - `|M| = 1`: das Kandidatenobjekt **unverändert** übernehmen (kein Konflikt oder reines Enthaltensein; Typ,
+     Konfidenz, Stufe und Quelle des umschließenden, AK-24, AK-7 (d), AK-6 letzter Satz).
+   - `|M| ≥ 2`: **zusammengelegter Fund** `new Finding(typ, text.substring(gStart, gEnd), gStart, gEnd, konfidenz,
+     Finding.SOURCE_MERGED)` mit `typ` = Typ des stärksten Glieds von `M` (`STAERKE`) und `konfidenz` = kleinste
+     Konfidenz in `M`.
+4. Ergebnis: unveränderliche Liste in Abschlussreihenfolge (= aufsteigend nach `start`).
+
+**Warum das die Kriterien erfüllt** (für Review und Tests):
+- Kette (AK-7 (b), (c)): Ein neues Glied `f` hat `f.start < gEnd = last.end` und `f.end > last.end`; gleicher Start mit
+  `last` ist ausgeschlossen (bei gleichem Start sortiert `end` absteigend, also `f.end <= last.end`). Also überlappt
+  jedes Glied seinen Vorgänger echt teilweise; `M` ist eine Kette beliebiger Länge, die Gruppe ihr gemeinsamer Fund.
+- Enthaltensein (AK-7 (d), AK-24): Ein übergangener Kandidat liegt ganz in einem Glied von `M`. Ein Kandidat, der nur
+  in der Vereinigung, aber in keinem einzelnen Kandidaten liegt (A = [0,10), B = [5,15), C = [8,20)), ist maximal und
+  Glied der Kette.
+- Schutzgarantie (AK-7 (a)): Jeder Kandidat gehört zu genau einer Gruppe; der Gruppenbereich `[gStart, gEnd)` ist
+  lückenlos die Vereinigung ihrer Kandidaten (jedes neue Glied beginnt vor `gEnd`), und genau dieser Bereich ist ein
+  Ergebnisfund. Umgekehrt (AK-7 (e)) enthält kein Ergebnisfund eine Position, die kein Kandidat abdeckt; angrenzende
+  Kandidaten (`f.start == gEnd`) beginnen eine neue Gruppe.
+- Überlappungsfreiheit (AK-7): Jede neue Gruppe beginnt bei `start >= gEnd` der vorigen.
+- Unicode (AK-23): Grenzen eines Ergebnisfundes sind Grenzen von Kandidaten; es entstehen keine neuen Grenzen.
+- Determinismus (AK-8): `STAERKE` ist total; die Ausgabe hängt nicht von der Eingabereihenfolge ab (bis auf
+  vollständig gleiche Kandidaten, die gleiche Ergebnisse liefern).
+- Laufzeit (AK-49): O(n log n) Sortierung, O(n) Durchlauf, `substring` je Gruppe (Gruppen disjunkt, zusammen O(Text)).
+  Keine Rekursion, kein `TreeMap`, auch bei 100 000 Gliedern einer Kette.
+
+**AK-24 und AK-7 (f) widerspruchsfrei:** Typ und Konfidenz kommen **nur aus `M`** (den maximalen Gliedern). Enthaltene
+Kandidaten bestimmen weder Typ noch Konfidenz noch Quelle – im reinen Enthaltensein (`|M| = 1`, AK-24, unabhängig von
+der Konfidenz) ebenso wie in einer Kette. Gemischte Kette „A enthält B, A überlappt C teilweise“: `M = [A, C]`, B wird
+übergangen; Typ = stärkerer von A und C; Konfidenz = min(A, C). Damit gibt es keine Konstellation, in der ein
+enthaltener Fund mit höherer Konfidenz den umschließenden verdrängt (AK-24) und keine, in der Typ oder Stufe eines
+Kettenfundes von einem nicht beteiligten Fund stammt (AK-7 (f)).
+
+**Enthaltene Kandidaten zählen für die Stufe nicht** (OF-16 (b)), Begründung: (1) AK-6 legt für Enthaltensein die Stufe
+des umschließenden fest; die Kette ändert an diesem Verhältnis nichts, denn jede Position des enthaltenen Kandidaten
+ist bereits vom umschließenden Glied abgedeckt. Die Stufenregel soll Positionen sichtbar machen, die **nur** ein
+unsicherer Erkenner abgedeckt hat; ein enthaltener Kandidat fügt keine solche Position hinzu. (2) Sonst wäre die Regel
+unstetig: Ein sicherer Nachbar, der A nur am Rand berührt, würde die Stufe von A auf die eines darin enthaltenen
+fraglichen Kandidaten senken, ohne dass sich an der Abdeckung etwas ändert. (3) Im Beispiel AK-7 (g) ist die E-Mail
+enthalten; sie liefert weder den Typ (gefordert: nicht EMAIL) noch die Stufe.
+
+**Originalwert (Punkt „Konsistenz“):** `text.substring(gStart, gEnd)`. Weil Schritt 0 jeden Kandidaten gegen den Text
+prüft, sind die Werte überlappender Kandidaten zwangsläufig konsistent; es gibt keinen eigenen Fehlerfall
+„Inkonsistenz“. Verworfen: den Wert aus den Kandidatenwerten zusammensetzen (braucht eine eigene Konsistenzprüfung und
+einen Fehlerpfad, ohne Nutzen). `TextScanner` behält seine eigene Prüfung (`IllegalStateException`, Erkennerfehler);
+die Prüfung im Resolver schützt die öffentliche Methode.
+
+Die Pseudonymisierung legt nichts zusammen; eine überlappende Fundliste bleibt dort ungültig (AK-32, Kap. 2.6).
 
 ### 2.6 Pseudonymisierung (`Pseudonymizer`)
 
 1. Eingaben vollständig prüfen, bevor etwas erzeugt wird (AK-32): Text und Liste nicht `null`; je Element nicht `null`,
    `end <= text.length()`, `text.regionMatches(start, originalValue, 0, len)`, `start`/`end` trennen kein
    Surrogatpaar; nach Sortierung keine Überlappung (Angrenzen erlaubt, AK-34). Negative Position und `start >= end`
-   lehnt bereits der `Finding`-Konstruktor ab (TE-10).
+   lehnt bereits der `Finding`-Konstruktor ab (TE-10). Überlappende Funde werden nicht zusammengelegt, sondern
+   abgelehnt (D-8 gilt nur im Scan).
 2. Funde nach `start` sortieren (AK-27).
 3. Literalschutz (ab T-9, Kap. 2.7): Lücken zwischen den Funden tokenisieren; jedes Token wird ein `TEXT`-Fund.
 4. In Textreihenfolge Platzhalter vergeben: Schlüssel (Typname, Originalwert) zeichengleich (AK-28, D-7); neuer
-   Schlüssel → nächstes `n` (global ab 1, A-4); vorhandener → derselbe Platzhalter. Zähler je Aufruf, kein statischer
-   Zustand (AK-29).
+   Schlüssel → nächstes `n` (global ab 1, A-4; ein zusammengelegter Fund ist ein Fund); vorhandener → derselbe
+   Platzhalter. Zähler je Aufruf, kein statischer Zustand (AK-29).
 5. Ausgabe per `StringBuilder.append`: Lücken unverändert (AK-33), Funde durch Platzhalter. **Kein** `String.replace*`,
    `Matcher.appendReplacement` oder `Matcher.quoteReplacement` (Originalwerte mit `$1`, `\1`, AK-38).
 6. Ergebnis mit Zuordnung nur für tatsächlich ersetzte Werte (AK-35).
@@ -384,6 +466,11 @@ ASCII-Buchstaben/Ziffern, `_`, Leerzeichen, ≤ ca. 60 Zeichen), enthält also k
   (Länge/Anzahl statt Inhalt). `UnresolvedPlaceholder` behält das Record-`toString()` (nur Platzhalter).
 - Ausnahmemeldungen nennen nur Parametername, Listenindex, Grund, Position, Typ oder Platzhalter; nie Originalwert,
   Text oder Ausschnitte; keine `cause` mit Klartext.
+- **Ausnahmen der Erkenner** (TE-20): `TextScanner` ruft `recognizer.detect(text)` in `try`/`catch (RuntimeException e)`
+  auf und wirft `new IllegalStateException("Erkenner an Index " + i + " fehlgeschlagen: " + e.getClass().getName())` –
+  ohne `cause`, ohne `addSuppressed`, ohne `e.getMessage()`. Eine Erkenner-Meldung mit Eingabetext kann so nicht nach
+  außen gelangen. `Error` (z. B. `StackOverflowError`) wird nicht abgefangen (trägt keinen Eingabetext; Linearität
+  verhindert ihn).
 - Kein `System.out`/`System.err`, kein `printStackTrace`, kein Logging im Fachkern.
 
 ### 2.10 Hinweise für Testdaten mit Backslashes (verbindlich für alle Tasks)
@@ -408,9 +495,12 @@ abschließende Leerzeichen (gefährlich für `C:\a `-Fälle und `\r\n`-Tests). D
 
 - Vorhandene Modul- und Paketstruktur von `skillshield-core` (`model`, `recognizer/general`, `conflict`,
   `pseudonymize`, `reidentify`); `CoreModulTest` bleibt unverändert; Enforcer-Regel `modulrichtung` sichert AK-52.
+- Bereits umgesetzt (T-1, T-2): `Finding` (inkl. Quellenformat `[a-z][a-z0-9-]{0,31}`), `FindingType`,
+  `ConfidenceLevel`, `Recognizer`, `TextScanner`, `ConflictResolver` (Sortierschlüssel `byTieBreak`/`typeRank` bleiben
+  als Teil von `STAERKE` verwendbar).
 - JUnit 5 inkl. `junit-jupiter-params` (`@ParameterizedTest`, `@MethodSource`), `assertTimeoutPreemptively`.
 - JDK: `java.util.regex`, `java.util.Random` (fester Startwert), `Character`, `Objects`, `List.copyOf`, `Map.copyOf`,
-  `TreeMap`, `StringBuilder`.
+  `StringBuilder`.
 
 ## 4. Neue Abhängigkeiten
 
@@ -423,7 +513,15 @@ Keine (AK-52). Kein POM wird geändert.
 - **Kein Netzwerk-, DNS- oder Dateisystemzugriff** (AK-51): keine Klassen aus `java.net`, `javax.net`, `java.nio`,
   `java.io` im Produktivcode; IP/URL/UNC nur per Zeichenprüfung. Belegt durch Quelltext-Prüftest (T-20).
 - **Kein Klartext** in `toString()`, Ausnahmen, Ausgaben (2.9). Belegt durch Marker-Test über alle Fehlerpfade (T-20).
-- **Laufzeitsicherheit**: Regex-Regeln 2.3, linearer Pfad-Durchlauf 2.4.4; Grenzlasttests (T-19) und je Pfad-Task.
+  Ausnahmen von Erkennern werden ohne Meldung und ohne `cause` gekapselt (TE-20, T-2).
+- **Schutzgarantie der Konfliktauflösung** (D-8, AK-7 (a)): Jede von einem Kandidaten abgedeckte Position ist im
+  Scan-Ergebnis abgedeckt. Belegt durch Eigenschaftstest auf Resolver-Ebene (T-2) und mit echten Erkennern im Fuzz-Test
+  (T-18). Die Garantie betrifft nur Positionen, die ein Erkenner gefunden hat (D-5-Reste bleiben Klartext).
+- **Größere Funde durch Zusammenlegung**: Ein zusammengelegter Fund kann unkritischen Text mitnehmen und lässt sich im
+  Review nur ganz übernehmen oder ganz ablehnen (Abgrenzung D-8). Die Quelle `zusammengelegt` und die Konfidenz des
+  schwächsten Glieds machen das im Review sichtbar (AK-6).
+- **Laufzeitsicherheit**: Regex-Regeln 2.3, linearer Pfad-Durchlauf 2.4.4, Konfliktauflösung O(n log n) auch bei
+  langen Ketten (2.5); Grenzlasttests (T-2, T-19) und je Pfad-Task.
 - **Bekannte Schutzlücke D-5**: Pfade mit Leerzeichen ohne Anführungszeichen werden nur bis zum ersten Leerzeichen
   erkannt; Ordner- und Programmnamen dahinter bleiben Klartext (Nutzerentscheidung). Ein Test in T-10 hält das
   Verhalten fest, damit es nicht unbemerkt geändert wird.
@@ -451,16 +549,107 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
   `ConfidenceLevel.of` an 0.70/0.90/0.0/1.0; Konstruktor lehnt negative Position, `start >= end`, Längenabweichung,
   Konfidenz außerhalb [0,1]/NaN, `null` ab; `manual(…)`; `toString()` ohne Marker-Originalwert; `bs(…)` liefert die
   erwartete Backslash-Anzahl.
+- **Stand**: committet. Die Ergänzung `SOURCE_MERGED` erfolgt in T-2.
 
-### T-2: Erkenner-Schnittstelle, Konfliktauflösung, Scanner
-- **Dateien**: `recognizer/Recognizer.java`, `recognizer/TextScanner.java` (`standard()` zunächst leer),
-  `conflict/ConflictResolver.java`; Tests `ConflictResolverTest`, `TextScannerTest` (Stub-Erkenner im Test).
-- **AK**: AK-1, AK-6 (Stufe „fraglich“ bleibt), AK-7, AK-8, AK-24 (Regel mit Stubs), AK-46 (Scan), AK-47 (Scan),
-  AK-54.
-- **Tests**: enthaltener Fund mit **höherer** Konfidenz verliert gegen umschließenden mit niedrigerer; bereichsgleich →
-  höhere Konfidenz, dann Typrang; Teilüberlappung → höhere Konfidenz, Gleichstand → früherer Start; Duplikate;
-  Ergebnis überlappungsfrei, nach `start` sortiert, unveränderlich; `FRAGLICH`-Stub-Fund bleibt; zwei Aufrufe gleich;
-  Eingaben unverändert; `""`/Leerraum → leer; `null` → NPE „text“.
+### T-2: Erkenner-Schnittstelle, Konfliktauflösung (Enthaltensein und Zusammenlegung, D-8), Scanner
+- **Stand und Auftrag**: T-2 ist nach der alten Regel (Stufe 2 „Verlierer entfällt“) umgesetzt und nicht abgenommen.
+  Nacharbeit nach Kap. 2.5 dieser Fassung. Die bisherige Stufe 2 (`FOR_PARTIAL_OVERLAP`, `TreeMap`,
+  `overlapsAccepted`) entfällt ersatzlos; Tests, die die alte Regel belegen (Teilüberlappung → ein Fund entfällt,
+  „Gleichstand → früherer Start gewinnt“ als Auswahl), werden entfernt bzw. auf die neue Regel umgeschrieben, nicht
+  ergänzt.
+- **Dateien**:
+  - `conflict/ConflictResolver.java`: Signatur `resolve(String text, List<Finding> candidates)`; Prüfung, Sortierung,
+    Durchlauf und Gruppenabschluss genau nach 2.5 (Schritte 0–4). Ordnung `STAERKE` als eine `Comparator`-Konstante
+    (Konfidenz ab, Länge ab, Start auf, Typrang, Typname, Quelle, Originalwert); Sortierschlüssel für Schritt 1 =
+    `start` auf, `end` ab, dann `STAERKE`. Javadoc beschreibt Enthaltensein, Gruppe/Kette, Typ, Konfidenz, Quelle,
+    Laufzeit und die Ausnahmen; keine Meldung enthält Werte.
+  - `model/Finding.java`: Konstante `public static final String SOURCE_MERGED = "zusammengelegt";` mit Javadoc
+    („Quelle eines vom ConflictResolver aus teilweise überlappenden Kandidaten zusammengelegten Fundes; Konfidenz =
+    schwächstes beteiligtes Glied; Erkenner verwenden diese Quelle nicht“); Javadoc des Parameters `source` nennt
+    beide Konstanten. Keine weiteren Änderungen (kein neues Feld, `toString()` unverändert).
+  - `recognizer/TextScanner.java`: Aufruf `ConflictResolver.resolve(text, candidates)`; `recognizer.detect(text)` in
+    `try`/`catch (RuntimeException e)` mit Indexzählung, Ersatz durch `new IllegalStateException("Erkenner an Index "
+    + i + " fehlgeschlagen: " + e.getClass().getName())` ohne `cause`, ohne `addSuppressed` (2.9, TE-20). Bestehende
+    Prüfungen (Ergebnis `null`, Element `null`, Fund passt nicht zum Text) bleiben außerhalb des `try`. Javadoc
+    `@throws` ergänzen.
+  - `recognizer/Recognizer.java`: Javadoc ergänzen: Quelle `zusammengelegt` ist dem Resolver vorbehalten; Ausnahmen
+    eines Erkenners werden vom Scanner ohne Meldung weitergegeben, Erkenner sollen trotzdem keinen Text in Meldungen
+    schreiben.
+  - Tests: `conflict/ConflictResolverTest` (überarbeitet), `conflict/ConflictResolverEigenschaftTest` (neu),
+    `recognizer/TextScannerTest` (ergänzt), `model/FindingTest` (ergänzt).
+- **AK**: AK-1, AK-6 (Stufe „fraglich“ bleibt; Stufe des zusammengelegten Fundes; Enthaltensein behält Stufe des
+  umschließenden), AK-7 (a)–(f) und (g) mit Stub-Erkennern, AK-8 (inkl. zusammengelegter Funde,
+  Reihenfolgeunabhängigkeit), AK-23 (keine neuen Fundgrenzen, Eigenschaftstest), AK-24 (Regel mit Stubs), AK-46
+  (Scan), AK-47 (Scan, Resolver), AK-49 (Konfliktauflösung, lange Ketten), AK-50 (Meldungen von Resolver und Scanner,
+  `toString` mit Quelle `zusammengelegt`), AK-54.
+- **Tests** – Grundsatz: Jede Regel hat einen eigenen Test, in dem das nachrangige Kriterium das **Gegenteil** des
+  erwarteten Ergebnisses liefern würde; vertauschte Kriterien oder eine fehlende Regel machen den Test rot. Stub-Funde
+  werden über eine Testhilfe aus einem festen Text geschnitten (Originalwert = `text.substring(start, end)`), damit die
+  Prüfung in Schritt 0 besteht. Jeder Test prüft Bereich, Typ, Konfidenz und Quelle des Ergebnisses.
+  - `ConflictResolverTest`, **Enthaltensein**:
+    - E-1 Enthaltensein vor Konfidenz: EMAIL [5,10) 1.0 in PFAD [0,20) 0.80 → genau der PFAD-Kandidat (`equals`),
+      Konfidenz 0.80, Quelle unverändert (nicht `zusammengelegt`).
+    - E-2 Stufe des umschließenden: FRAGLICH-Kandidat (0.30) in SICHER-Kandidat (0.95) → Ergebnis SICHER (AK-6).
+    - E-3 Randfälle der Sortierung: [0,10) in [0,20) (gleicher Start) und [10,20) in [0,20) (gleiches Ende) → je nur
+      [0,20).
+    - E-4 dreifach verschachtelt → nur der äußerste.
+  - **Gleicher Bereich**:
+    - G-1 Konfidenz vor Typrang: PFAD 0.95 und URL 0.80 auf [0,10) → PFAD.
+    - G-2 Typrang bei gleicher Konfidenz: PFAD und URL 0.95 auf [0,10) → URL, auch in umgekehrter Eingabereihenfolge.
+    - G-3 vollständig gleiche Duplikate → ein Fund.
+  - **Zusammenlegung und Ketten**:
+    - Z-1 [0,10) und [5,15) → genau ein Fund [0,15), Originalwert = `text.substring(0,15)`, Quelle `zusammengelegt`.
+    - Z-2 AK-7 (c): A [0,10), B [5,15), C [12,20) → genau ein Fund [0,20); ebenso in umgekehrter und gemischter
+      Eingabereihenfolge.
+    - Z-3 AK-7 (e): [0,5) und [5,10) → zwei unveränderte Funde; [0,5) und [6,10) → zwei Funde, Position 5 in keinem.
+    - Z-4 zwei getrennte Ketten im selben Text → zwei zusammengelegte Funde, aufsteigend nach `start`.
+    - Z-5 Mitglied nur in der Vereinigung: A [0,10), B [5,15), C [8,20) → ein Fund [0,20), B ist beteiligt (siehe K-3).
+  - **Typ** (OF-16 (a), nur aus maximalen Gliedern):
+    - T-a Konfidenz vor Länge und Start: IP [0,12) 0.80 (früher, länger) und EMAIL [8,14) 0.95 → Typ EMAIL.
+    - T-b Länge vor Start und Typrang: URL [0,6) 0.90 und PFAD [3,15) 0.90 → Typ PFAD (Start und Typrang ergäben URL).
+    - T-c Start vor Typrang: IP [0,8) 0.90 und URL [4,12) 0.90 (gleiche Länge) → Typ IP.
+    - T-d Enthaltener liefert keinen Typ: URL [0,10) 0.90 enthält EMAIL [2,6) 1.0, PFAD [8,16) 0.80 überlappt URL →
+      ein Fund [0,16), Typ URL (nicht EMAIL trotz höchster Konfidenz).
+  - **Konfidenz und Stufe** (OF-16 (b)):
+    - K-1 Schwächstes Glied, nicht Typgeber: PFAD [0,10) 0.95 und IP [5,12) 0.40 → Typ PFAD, Konfidenz 0.40, Stufe
+      FRAGLICH, Quelle `zusammengelegt`.
+    - K-2 Enthaltener zählt nicht: URL [0,10) 0.95 enthält X [2,4) 0.30, PFAD [8,15) 0.85 → Konfidenz 0.85, Stufe
+      WAHRSCHEINLICH (nicht FRAGLICH).
+    - K-3 Glied nur in der Vereinigung zählt: A [0,10) 0.95, B [5,15) 0.50, C [8,20) 0.95 → Konfidenz 0.50.
+    - K-4 alle Glieder sicher → Stufe SICHER, Quelle `zusammengelegt`.
+  - **Beispiel AK-7 (g) mit Stubs** (Regression des Sicherheitsbefunds): Text
+    `Link https://intranet.invalid/?f='C:/Akte 2025/erika.beispiel@example.invalid/x.pdf' ende`; Kandidaten URL
+    [5,41) 0.95 `url`, PFAD [34,83) 0.95 `pfad-laufwerk`, EMAIL [47,77) 0.95 `email` (Positionen im Test per
+    `indexOf` herleiten und gegen diese Zahlen prüfen) → genau ein Fund [5,83), Typ PFAD (gleiche Konfidenz, PFAD
+    länger), Konfidenz 0.95, Quelle `zusammengelegt`; `text.charAt(83) == '\''`; keine Position aus [5,83) unbedeckt.
+  - **Eingaben und Fehler**: Ergebnis unveränderlich; Eingabeliste unverändert; zwei Aufrufe gleich; alle
+    Permutationen einer Liste aus vier Kandidaten (Kette mit Enthaltensein) → gleiches Ergebnis; leere Liste → leer;
+    `null` Text/Liste/Element → NPE mit Meldung `text`/`candidates`/`candidates enthält null`; Kandidat mit falschem
+    Wert und mit `end > text.length()` → `IllegalArgumentException` mit Listenindex, Meldung ohne Marker-Wert.
+  - **Grenzlast** (AK-49, je < 2 s): Kette aus 100 000 Kandidaten [2i, 2i+3) → genau ein Fund; dieselbe Kette mit
+    fester Mischung (`new Random(Konstante)`); 10 000 verschachtelte [i, N−i) → genau der äußerste; 100 000 disjunkte
+    → 100 000 Funde. Gemessen wird nur der Aufruf von `resolve`, nicht der Aufbau der Kandidaten.
+    *(Korrektur 19.11.2026 nach reviewer-Befund T-2, Durchlauf 2: Die frühere Vorgabe von 100 000 verschachtelten
+    Kandidaten ist nicht durchführbar, weil jeder Kandidat seinen eigenen Originalwert hält und die Verschachtelung
+    damit quadratisch Speicher braucht – rund 10 GB. Mit 10 000 sind es rund 100 MB. Die Zeitgrenze von 2 s bleibt.)*
+    *(Korrektur 19.11.2026 nach security-Befund T-2, Durchlauf 2: Der Schlüssel „Originalwert“ entfällt aus der
+    Stärke-Ordnung. Er ist überflüssig – gleicher Bereich im selben Text ergibt denselben Wert – und kostet je
+    Vergleich Zeit proportional zur Fundlänge. Die Ordnung endet bei „Quelle“; das gilt auch für Kap. 2.5 und TE-19.)*
+  - `ConflictResolverEigenschaftTest`: 2 000 zufällige Kandidatenmengen (`new Random(Konstante)`, 0–30 Kandidaten auf
+    einem Text der Länge 60, Typen URL/PFAD/EMAIL/IP, Konfidenzen aus {0.30, 0.80, 0.85, 0.95, 1.0}); geprüft gegen
+    eine naive Referenz im Test (O(n²): Enthaltensein paarweise, Gruppen per Überlappung): (1) überlappungsfrei, nach
+    `start` sortiert; (2) Menge der abgedeckten Positionen des Ergebnisses = Vereinigung der Kandidatenpositionen
+    (⊇ ist AK-7 (a), ⊆ ist AK-7 (e)); (3) jeder Ergebnisfund ist ein Eingabekandidat oder hat Quelle `zusammengelegt`,
+    Originalwert = Teilstring; (4) bei `zusammengelegt`: Typ = Typ des nach `STAERKE` stärksten maximalen Kandidaten
+    der Gruppe, Konfidenz = Minimum der maximalen Kandidaten; (5) gemischte Eingabe → gleiches Ergebnis. Meldung bei
+    Fehlschlag: Startwert und Iteration, keine Texte.
+  - `TextScannerTest` (ergänzt): drei Stub-Erkenner liefern die Kandidaten aus AK-7 (g) → ein Fund wie oben, auch bei
+    vertauschter Erkenner-Reihenfolge; Stub-Erkenner wirft `RuntimeException` mit Marker in Meldung und in `cause` →
+    `IllegalStateException`, Meldung enthält Index und Klassennamen, nicht den Marker; `getCause() == null`;
+    `getSuppressed().length == 0`; bestehende Tests (`FRAGLICH`-Fund bleibt, `""`/Leerraum → leer, `null` → NPE
+    „text“, Erkenner liefert `null`/unpassenden Fund) bleiben.
+  - `FindingTest` (ergänzt): `SOURCE_MERGED` ist eine gültige Quelle; `toString()` enthält `source=zusammengelegt` und
+    nicht den Originalwert.
 
 ### T-3: E-Mail-Erkenner
 - **Dateien**: `recognizer/general/EmailRecognizer.java`, `TextScanner.standard()`; Test `EmailRecognizerTest`.
@@ -497,10 +686,12 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
 
 ### T-7: Eingabeprüfung der Pseudonymisierung
 - **Dateien**: `pseudonymize/InvalidFindingException.java`, `Pseudonymizer.java`; Test `PseudonymizerValidierungTest`.
-- **AK**: AK-32, AK-47 (Pseudonymisierung), AK-50 (Meldungen).
-- **Tests**: je Fall ein Test mit erwartetem `Reason`: `null`-Element, `end` > Länge, Überlappung (auch unsortiert),
-  Wert passt nicht, Fund trennt Surrogatpaar (Anfang und Ende); `null` Text/Liste → NPE mit Parametername; kein
-  Teilergebnis; keine Meldung enthält den Marker.
+- **AK**: AK-32 (inkl. Ergänzung D-8: keine Zusammenlegung in der Pseudonymisierung), AK-47 (Pseudonymisierung),
+  AK-50 (Meldungen).
+- **Tests**: je Fall ein Test mit erwartetem `Reason`: `null`-Element, `end` > Länge, Überlappung (auch unsortiert;
+  ausdrücklich: zwei teilweise überlappende Funde werden mit `OVERLAP` abgelehnt, nicht zusammengelegt), Wert passt
+  nicht, Fund trennt Surrogatpaar (Anfang und Ende); `null` Text/Liste → NPE mit Parametername; kein Teilergebnis;
+  keine Meldung enthält den Marker.
 
 ### T-8: Rückübersetzung
 - **Dateien**: `PlaceholderSyntax.java` (T/D, `tokenize`, `Token`), `reidentify/Reidentifier.java`,
@@ -535,16 +726,29 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
   Kombinationsfolge; `/log=`-Fall dokumentiert (vor T-13 noch Laufwerksfund `C:\Logs\a.log`, Test in T-13 angepasst);
   Grenzlast je < 2 s, zusätzlich `(`×100 000 + `C:\a` + `)`×100 000.
 
-### T-11: Pfad-Erkenner – Anführungszeichen
-- **Dateien**: `PathRecognizer.java` (Regel 2.4.3 inkl. Rückfall); Test `PathRecognizerAnfuehrungTest`.
-- **AK**: AK-16, AK-17 (c), AK-20, AK-23 (in Anführungszeichen), AK-49 (`"` ×100 000, `"C:\ a b c …` nie
-  geschlossen).
+### T-11: Pfad-Erkenner – Anführungszeichen; Zusammenlegung mit echten Erkennern
+- **Dateien**: `PathRecognizer.java` (Regel 2.4.3 inkl. Rückfall); Tests `PathRecognizerAnfuehrungTest`,
+  `recognizer/TextScannerZusammenlegungTest` (neu).
+- **AK**: AK-7 (e), (g) mit echten Erkennern, AK-16, AK-17 (c), AK-20, AK-23 (in Anführungszeichen), AK-49 (`"`
+  ×100 000, `"C:\ a b c …` nie geschlossen).
+- **Warum hier**: URL (T-5) und Laufwerkspfad (T-10) gibt es ab T-10 gemeinsam, aber erst mit der
+  Anführungszeichenregel entsteht im Beispiel AK-7 (g) der Pfad-Kandidat über das Leerzeichen hinaus und damit die
+  Teilüberlappung. In T-10 wäre der Pfad-Kandidat nur `C:/Akte` und läge ganz in der URL.
 - **Tests**: `Starte "C:\Program Files\Mein Tool\tool.exe" jetzt` → Inhalt als Fund; dasselbe mit `'…'` und
   `` `…` ``; `"C:\Tools\BeispielTool\tool.exe"` → `"[[PFAD_1]]"` nach Pseudonymisierung;
   `C:\Users\mustermann\Übersicht\Größe ✓.txt` und Emoji in Anführungszeichen ganz; nie geschlossen → Rückfall
   (`C:\Program`); Anführungszeichen erst nach Zeilenende → Rückfall; `|` vor dem Schluss → Rückfall; `"C:\"` → kein
   Fund; `'C:\a' und 'C:\b'` → zwei Funde; Grenzlast: `"`×100 000, `"C:\ a b c ` mit 100 000 Leerzeichen-Wörtern,
   `'C:\a `×100 000, `"C:\a|`×100 000 je < 2 s.
+- **Tests `TextScannerZusammenlegungTest`** (mit `TextScanner.standard()`):
+  - Regression AK-7 (g): `Link https://intranet.invalid/?f='C:/Akte 2025/erika.beispiel@example.invalid/x.pdf' ende`.
+    Zuerst die Prämisse je Erkenner einzeln: `UrlRecognizer` liefert `https://intranet.invalid/?f='C:/Akte`,
+    `PathRecognizer` `C:/Akte 2025/erika.beispiel@example.invalid/x.pdf`, `EmailRecognizer`
+    `erika.beispiel@example.invalid`. Dann Scan: genau ein Fund [5,83), Typ PFAD, Konfidenz 0.95, Quelle
+    `zusammengelegt`. Pseudonymisierung aller Funde → exakt `Link [[PFAD_1]]' ende`; Ausgabe enthält keinen der
+    Bestandteile `intranet.invalid`, `Akte`, `2025`, `erika.beispiel@example.invalid`, `x.pdf`; Roundtrip gleich.
+  - AK-7 (e) mit echten Erkennern: `https://intranet.invalid/?f="C:/Akte 2025/x.pdf"` → zwei Funde (URL, PFAD), keine
+    Zusammenlegung, `"` zwischen den Platzhaltern bleibt.
 
 ### T-12: Pfad-Erkenner – UNC
 - **Dateien**: `PathForm.java` (`UNC`); Test `PathRecognizerUncTest`.
@@ -575,36 +779,46 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
 
 ### T-16: Pfad-Erkenner – `file:` und Abgrenzung zu URL, IP, E-Mail
 - **Dateien**: `PathForm.java` (`FILE_URI`); Test `PathRecognizerFileUriTest`, `TextScannerAbgrenzungTest`.
-- **AK**: AK-5 (kein Pfad-Fund für `/pfad`, Scannerebene), AK-7, AK-8 (Standard-Scanner deterministisch), AK-24.
-- **Tests**: Zeile `FILE_URI`; AK-24 (a)–(e) über `TextScanner.standard()` mit genau einem Fund des erwarteten Typs;
-  IP und E-Mail außerhalb des Pfads im selben Satz zusätzlich erkannt; AK-5-Text ergibt nur den URL-Fund;
-  `Mail …, Server 192.0.2.10, Tool C:\Tools\a.exe` → drei Funde in Textreihenfolge; zweimal scannen → gleiche Liste.
+- **AK**: AK-5 (kein Pfad-Fund für `/pfad`, Scannerebene), AK-7 (d) mit echten Erkennern, AK-8 (Standard-Scanner
+  deterministisch), AK-24.
+- **Tests**: Zeile `FILE_URI`; AK-24 (a)–(e) über `TextScanner.standard()` mit genau einem Fund des erwarteten Typs,
+  und zwar dem **unveränderten** Kandidaten des umschließenden Erkenners (Quelle `url` bzw. `pfad-…`, nicht
+  `zusammengelegt`; dessen Konfidenz, auch wenn der enthaltene Kandidat eine höhere hätte); IP und E-Mail außerhalb des
+  Pfads im selben Satz zusätzlich erkannt; AK-5-Text ergibt nur den URL-Fund; `Mail …, Server 192.0.2.10, Tool
+  C:\Tools\a.exe` → drei Funde in Textreihenfolge; zweimal scannen → gleiche Liste; AK-7 (g)-Text zweimal gescannt →
+  gleiche Liste.
 
 ### T-17: Roundtrip-Korpus
 - **Dateien**: Test `RoundtripKorpusTest` (Paket `de.skillshield.core`), Texte als Java-Strings mit `bs(…)`.
-- **AK**: AK-25, AK-26, AK-28, AK-37, AK-38, AK-39, AK-54 (KI-Simulation durch feste Umformung).
+- **AK**: AK-7 (g) (im Korpus), AK-25, AK-26, AK-28, AK-37, AK-38, AK-39, AK-54 (KI-Simulation durch feste Umformung).
 - **Tests**: Korpus mit allen Pfadformen (AK-9 bis AK-18, mit und ohne Anführungszeichen, doppelte Backslashes,
-  `$`, `${HOME}`, `%APPDATA%`), E-Mail, IP, URL, `file:`, manuellen `PERSON`-Funden; je Text Scan → alle Funde
-  pseudonymisieren → keine Pfadbestandteile im Ausgabetext → Rückübersetzung → `assertEquals` mit Original, keine
-  Meldung; Zeilenenden-Varianten, führender/abschließender Leerraum, Tabs, Umlaute, `e`+U+0301, Emoji vor/hinter/
-  zwischen Funden, U+FEFF am Anfang, U+200B, RTL-Text; feste Umformung (Zeilen vertauschen, Präfix/Suffix) vor der
-  Rückübersetzung.
+  `$`, `${HOME}`, `%APPDATA%`), E-Mail, IP, URL, `file:`, manuellen `PERSON`-Funden, dem Text aus AK-7 (g) und einer
+  Variante mit `\`-Trennern (`bs(…)`); je Text Scan → alle Funde pseudonymisieren → keine Pfadbestandteile im
+  Ausgabetext → Rückübersetzung → `assertEquals` mit Original, keine Meldung; Zeilenenden-Varianten,
+  führender/abschließender Leerraum, Tabs, Umlaute, `e`+U+0301, Emoji vor/hinter/zwischen Funden, U+FEFF am Anfang,
+  U+200B, RTL-Text; feste Umformung (Zeilen vertauschen, Präfix/Suffix) vor der Rückübersetzung.
 
 ### T-18: Fuzz-Test
 - **Dateien**: Test `RoundtripFuzzTest`.
-- **AK**: AK-45, AK-1.
+- **AK**: AK-45, AK-1, AK-7 (a), (e) mit echten Erkennern.
 - **Tests**: 1 000 Texte aus `new Random(<Konstante>)`, Bausteine: synthetische Funde inkl. Pfade aller Formen mit
-  Backslashes, Leerzeichen, Anführungszeichen (auch ungeschlossen), Sonderzeichen, Unicode, Zeilenenden, `[`, `]`,
-  `_`, `[[X_1]]`, `[[TEXT_1]]`, `[[PERSON_1`; zufällige Teilmenge der Scan-Funde plus manuelle Funde (surrogatsicher,
-  überlappungsfrei); Prüfung Teilstring-Invariante, Roundtrip gleich, keine Meldung. Teil 2: 1 000 Zufallseingaben an
-  `restore` mit fester Zuordnung → keine Ausnahme. Fehlermeldung nennt Startwert und Iteration, keine Texte.
+  Backslashes, Leerzeichen, Anführungszeichen (auch ungeschlossen), URL mit angehängtem `'…'`-Pfad mit Leerzeichen
+  (erzeugt Teilüberlappungen), Sonderzeichen, Unicode, Zeilenenden, `[`, `]`, `_`, `[[X_1]]`, `[[TEXT_1]]`,
+  `[[PERSON_1`; zufällige Teilmenge der Scan-Funde plus manuelle Funde (surrogatsicher, überlappungsfrei); Prüfung
+  Teilstring-Invariante, Roundtrip gleich, keine Meldung. **Schutzgarantie**: je Text die Kandidaten jedes
+  Standard-Erkenners einzeln (`new EmailRecognizer().detect(text)` usw.) gegen `TextScanner.standard().scan(text)`:
+  abgedeckte Positionen des Scans = Vereinigung der Kandidatenpositionen. Teil 2: 1 000 Zufallseingaben an `restore`
+  mit fester Zuordnung → keine Ausnahme. Fehlermeldung nennt Startwert und Iteration, keine Texte.
 
 ### T-19: Grenzlast
 - **Dateien**: Test `GrenzlastTest`.
-- **AK**: AK-48, AK-49 (alle Eingaben durch alle drei Schritte).
+- **AK**: AK-48, AK-49 (alle Eingaben durch alle drei Schritte, inkl. langer Ketten).
 - **Tests**: ≥ 1 000 000 Zeichen mit ≥ 10 000 Funden, davon mindestens die Hälfte Pfade aller Formen: Scan,
   Pseudonymisierung, Rückübersetzung je < 10 s, Roundtrip gleich. Jede Eingabe aus AK-49 sowie 100 000 × `[[` und
-  × `[[A_` durch alle drei Schritte je < 2 s. Standard-Heap des Surefire-Laufs.
+  × `[[A_` durch alle drei Schritte je < 2 s. **Lange Kette mit echten Erkennern**: `bs("https://e.invalid/''C:¦a ")`
+  × 40 000 (jede URL enthält das schließende `'` des vorigen und das öffnende `'` des nächsten Pfad-Kandidaten in
+  Anführungszeichen; ergibt eine Kette über fast den ganzen Text) durch alle drei Schritte je < 2 s, Roundtrip gleich,
+  Schutzgarantie wie in T-18 (keine feste Fundzahl prüfen). Standard-Heap des Surefire-Laufs.
 
 ### T-20: Projektregeln (Netz, Dateisystem, Klartext, Testdaten)
 - **Dateien**: Tests `ArchitekturRegelnTest`, `KlartextFreiheitTest`, `TestdatenSynthetischTest` (Paket
@@ -615,10 +829,13 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
     `java.net`, `javax.net`, `java.nio`, `java.io`, `InetAddress`, `Socket`, `URLConnection`, `HttpClient`,
     `FileSystem`, `Files`, `Paths`, `ProcessBuilder`, `Runtime`, `System.out`, `System.err`, `printStackTrace`,
     `java.util.logging`, `System.Logger` (Wortgrenzen); alle Dateien unter `de/skillshield/core`. Diese Wörter dürfen
-    auch in Kommentaren des Produktivcodes nicht stehen.
+    auch in Kommentaren des Produktivcodes nicht stehen. (Hinweis: `RuntimeException` ist von der Wortgrenze bei
+    `Runtime` nicht betroffen; der Test muss das berücksichtigen.)
   - `KlartextFreiheitTest`: Marker-Pfad `bs("C:¦Marker¦mustermann¦MarkerTool.exe")` und Marker-E-Mail durch jeden
-    Fehlerpfad aus AK-32, AK-41, AK-42, AK-47; prüft Meldung, `cause`-Kette, alle `toString()` und umgeleitete
-    `System.out`/`System.err`.
+    Fehlerpfad aus AK-32, AK-41, AK-42, AK-47, zusätzlich: `ConflictResolver.resolve` mit unpassendem Kandidaten,
+    `TextScanner` mit einem Erkenner, der eine `RuntimeException` mit Marker in Meldung und `cause` wirft, und
+    `toString()` eines zusammengelegten Fundes; prüft Meldung, `cause`-Kette, `getSuppressed()`, alle `toString()` und
+    umgeleitete `System.out`/`System.err`.
   - `TestdatenSynthetischTest`: liest `src/test/java/**/*.java`; jede E-Mail-ähnliche Zeichenfolge endet auf
     `example.invalid|example.org|example.net`; jede gültige IPv4 liegt in den RFC-5737-Bereichen; Pfade per Durchsicht.
 
@@ -630,16 +847,16 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
 | AK-2 | T-3 | AK-20 | T-10, T-11 | AK-38 | T-8, T-17 |
 | AK-3 | T-3, T-5 | AK-21 | T-10 | AK-39 | T-17 |
 | AK-4 | T-4 | AK-22 | T-10, T-12 | AK-40 | T-8 |
-| AK-5 | T-5, T-16 | AK-23 | T-10, T-11 | AK-41 | T-8 |
-| AK-6 | T-1, T-2, T-3, T-4, T-5, T-10 (je Pfadform T-10–T-16) | AK-24 | T-2, T-16 | AK-42 | T-8 |
-| AK-7 | T-2, T-16 | AK-25 | T-6, T-17 | AK-43 | T-8 |
+| AK-5 | T-5, T-16 | AK-23 | T-2 (Resolver), T-10, T-11 | AK-41 | T-8 |
+| AK-6 | T-1, T-2 (zusammengelegt, Enthaltensein), T-3, T-4, T-5, T-10 (je Pfadform T-10–T-16) | AK-24 | T-2, T-16 | AK-42 | T-8 |
+| AK-7 | T-2 (a)–(g), T-11 (e), (g), T-16 (d), T-17 (g), T-18 (a), (e) | AK-25 | T-6, T-17 | AK-43 | T-8 |
 | AK-8 | T-2, T-3, T-16 | AK-26 | T-6, T-17 | AK-44 | T-8, T-9 |
 | AK-9 | T-10 | AK-27 | T-6 | AK-45 | T-8, T-18 |
 | AK-10 | T-10 | AK-28 | T-6, T-17 | AK-46 | T-2, T-6, T-8 |
 | AK-11 | T-12 | AK-29 | T-6 | AK-47 | T-2, T-6, T-7, T-8, T-20 |
 | AK-12 | T-13 | AK-30 | T-6, T-9 | AK-48 | T-19 |
-| AK-13 | T-13 | AK-31 | T-6 | AK-49 | T-3, T-4, T-5, T-10, T-11, T-12, T-13, T-15, T-19 |
-| AK-14 | T-14 | AK-32 | T-1, T-7 | AK-50 | T-1, T-6, T-7, T-8, T-20 |
+| AK-13 | T-13 | AK-31 | T-6 | AK-49 | T-2 (Ketten), T-3, T-4, T-5, T-10, T-11, T-12, T-13, T-15, T-19 |
+| AK-14 | T-14 | AK-32 | T-1, T-7 | AK-50 | T-1, T-2, T-6, T-7, T-8, T-20 |
 | AK-15 | T-15 | AK-33 | T-6 | AK-51 | T-10 (Entwurf), T-20 |
 | AK-16 | T-11 | AK-34 | T-6 | AK-52 | jeder Task (Build), T-20 |
 | AK-17 | T-10 (a), T-12 (b), T-11 (c) | AK-35 | T-6 | AK-53 | T-20 (Durchsicht durch reviewer) |
@@ -656,6 +873,9 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
 - **reviewer/security**: Testdaten mit Backslashes nach 2.10; AK-53 für Pfade per Durchsicht (keine echten Server-,
   Benutzer-, Produkt- oder KV-internen Namen). Die in T-10/T-13 festgehaltenen bekannten Grenzen (D-5, `und /oder/…`,
   `/log=…`) sind gewollt.
+- **reviewer (T-2)**: Die Regeltests sind so gebaut, dass das nachrangige Kriterium das Gegenteil ergäbe (E-1, G-1,
+  T-a bis T-d, K-1 bis K-3). Prüfprobe: Kriterienreihenfolge in `STAERKE` vertauschen oder Enthaltensein auslassen →
+  mindestens ein Test rot. Der Eigenschaftstest vergleicht gegen eine unabhängige O(n²)-Referenz.
 
 ---
 
@@ -671,28 +891,35 @@ Der Plan ist mit den Empfehlungen umsetzbar.
 | N-2 | **OF-7: `//srv-beispiel/freigabe` und `\\?\C:\…`** | **Erkennen** (Abweichung vom Vorschlag „kein Fund“). `\\srv-beispiel` allein und `C:\` bleiben kein Fund. | Beide sind echte Pfade mit Server- bzw. Ordnernamen. Bei „kein Fund“ bleibt der ganze Pfad Klartext, denn `C:` hinter `\\?\` und `srv` hinter `//` haben keine Startgrenze. Die befürchteten Verwechslungen treten nicht auf: `// Kommentar` hat kein Segment, `https://…` keine Startgrenze. | Vorschlag des product-owner: je eine Zusatzbedingung im Kopf von `UNIX` (kein zweiter `/`) bzw. `UNC` (Server ≠ `?`/`.`); Server- und Pfadnamen bleiben dann sichtbar. |
 | N-3 | **OF-10: Stufen der Pfadformen** (vom PO zur Bestätigung vorgesehen) | Laufwerk, UNC, `file:` **sicher** (0.95); Unix ≥ 3 Segmente und Home **sicher** (0.90); Unix mit 2 Segmenten, relativ, Umgebungsvariable **wahrscheinlich** (0.80); Schwellen sicher ≥ 0.90, wahrscheinlich ≥ 0.70. Kein Review-Flag-Feld. | Entspricht dem PO-Vorschlag; „Home“ ergänzt (eindeutiger Kopf). Funde werden nie verworfen, die Stufe steuert nur die spätere Prüfanzeige. | Nur Konstanten in `PathForm`; teuer wird es erst, wenn die Oberfläche darauf aufbaut. |
 
+Zu D-8/OF-16 ist **keine weitere Nutzerentscheidung nötig**: TE-19 hält AK-6 (Stufe nicht sicherer als das schwächste
+beteiligte Glied) ohne Abweichung ein. Zur Kenntnis (keine Entscheidung): Abweichend vom PO-Vorschlag OF-16 (b) trägt
+der zusammengelegte Fund als Quelle `zusammengelegt` statt der Quelle des Typgebers und nicht die Typen der Beteiligten
+(siehe TE-19 (d), P-6).
+
 ### 8.2 Technisch festgelegt (änderbar)
 
 | Nr. | Thema (OF) | Festlegung |
 |-----|-----------|------------|
 | TE-1 | `Finding` (OF-15) | Record `type, originalValue, start, end, confidence, source`; ohne `replacement` und ohne `note`; `end` exklusiv, UTF-16-Indizes; Validierung im Konstruktor; `toString()` ohne `originalValue`. `RecognitionContext`, `PseudonymMatch`, `PseudonymizedDocument` entfallen. |
-| TE-2 | Konfidenz (OF-10) | E-Mail 0.95, URL 0.95, IP 0.85 (Versionsnummern möglich), Pfade nach N-3. Quellen: `email`, `ipv4`, `url`, `pfad-laufwerk`, `pfad-unc`, `pfad-unix`, `pfad-home`, `pfad-relativ`, `pfad-umgebung`, `pfad-file-uri`, `manuell`. |
-| TE-3 | Konfliktauflösung (OF-12) | Kap. 2.5: Enthaltensein gewinnt immer (umschließender Fund), bereichsgleich → Konfidenz, Typrang URL > PFAD > EMAIL > IP; Teilüberlappung → höhere Konfidenz, dann früherer Start; Verlierer entfällt, keine Vereinigung (AK-7). Alternative „Vereinigung“ würde den Rest des Verlierers schützen, braucht aber eine AK-7-Änderung. |
+| TE-2 | Konfidenz (OF-10) | E-Mail 0.95, URL 0.95, IP 0.85 (Versionsnummern möglich), Pfade nach N-3. Quellen: `email`, `ipv4`, `url`, `pfad-laufwerk`, `pfad-unc`, `pfad-unix`, `pfad-home`, `pfad-relativ`, `pfad-umgebung`, `pfad-file-uri`, `manuell`, `zusammengelegt` (nur Resolver). |
+| TE-3 | Konfliktauflösung (OF-12, D-8) | Kap. 2.5: Kandidaten nach Start sortieren und transitiv überlappende zu Gruppen verschmelzen (ein Durchlauf, O(n log n)). Enthaltene Kandidaten gehen im umschließenden auf; bleibt nur ein maximaler Kandidat, ist er das Ergebnis, unverändert und unabhängig von der Konfidenz (AK-24). Bilden mehrere maximale Kandidaten eine Kette, entsteht ein Fund über die Vereinigung (AK-7). Angrenzende Kandidaten werden nicht vereinigt. Pseudonymisierung legt nichts zusammen (AK-32). |
 | TE-4 | Grenzen (OF-13) | AK-48: 1 000 000 Zeichen, ≥ 10 000 Funde, je Schritt < 10 s (PO-Vorschlag). AK-49: je Eingabe und Schritt < 2 s (strenger als 10 s, damit quadratisches Verhalten sicher auffällt). Keine Obergrenze für Textlänge oder Pfadlänge. |
 | TE-5 | Abbruch, Threads, Tresor (OF-14 a–d) | Kein Abbruch (linear). Alle Klassen zustandslos/unveränderlich, faktisch threadsicher, nicht zugesichert. Keine `Vault`-Schnittstelle; `PlaceholderMapping` ist ein eigener Typ, den das Tresor-Feature ablöst. Fremde Zuordnung nicht verhindert. |
 | TE-6 | Quellenwidersprüche (OF-15) | Basispaket `de.skillshield`; Tresor in `skillshield-vault`; Rückübersetzung nach Platzhalter, nicht nach Position; „keine KI im Produkt“ und „keine KI-Autonomie“ beide eingehalten; Plan.md Kap. 7 („strukturerhaltende Pfade“) sollte nach D-4 nachgezogen werden (keine Codewirkung). |
-| TE-7 | Laufzeitsicherheit | Regex-Regeln 2.3; Pfade ohne Regex, linear nach 2.4.4. |
+| TE-7 | Laufzeitsicherheit | Regex-Regeln 2.3; Pfade ohne Regex, linear nach 2.4.4; Konfliktauflösung ohne Rekursion, O(n log n) (2.5). |
 | TE-8 | Nachweis „kein Netz/Dateisystem“ (AK-51) | Quelltext-Prüftest T-20. Verworfen: SecurityManager (abgekündigt), eigener `InetAddressResolverProvider` (fängt nur DNS). |
 | TE-9 | `Pseudonymizer`/`Reidentifier` | Finale Klassen statt Interface + Implementierung; Zuordnung als `PlaceholderMapping`. |
 | TE-10 | Prüfort AK-32 | Negative Position und `start >= end` lehnt `Finding` ab; textbezogene Fälle `Pseudonymizer`. |
 | TE-11 | Typnamen (OF-11) | `PFAD`, `EMAIL`, `IP`, `URL` (Erkenner), `TEXT` (Literalschutz); manuelle Funde mit beliebigem Namen im Format `[A-Z][A-Z0-9]{0,31}`; Kleinbuchstaben, Unterstrich, Leerzeichen → `IllegalArgumentException` ohne Echo. Nummerierung global (A-4). |
 | TE-12 | Ungeschlossenes Anführungszeichen | Rückfall auf die Regel ohne Anführungszeichen (N-1). Schließendes Zeichen nur auf derselben Zeile, vor Tab und vor `<`, `>`, `\|` (bzw. `"` bei `'`/`` ` ``). |
-| TE-13 | Pfadende und Pfadzeichen (OF-5) | (a) Satzzeichen `. , ; : ! ?` und `'` am Ende gekürzt; umschließende Zeichen nie im Fund. (b) `)`, `]`, `}` am Ende nur, wenn im Fund geöffnet; gleiche Regel für URL (`)`, `]`). (c) `*` gehört zum Pfad, abschließendes `?` nicht. (d) `<`, `>`, `\|`, `"` und Backtick beenden den Pfad. (e) keine weiteren URL-Schemata. |
+| TE-13 | Pfadende und Pfadzeichen (OF-5) | (a) Satzzeichen `. , ; : ! ?` und `'` am Ende gekürzt; umschließende Zeichen nie am Rand eines Fundes (im Inneren eines zusammengelegten Fundes möglich, A-12). (b) `)`, `]`, `}` am Ende nur, wenn im Fund geöffnet; gleiche Regel für URL (`)`, `]`). (c) `*` gehört zum Pfad, abschließendes `?` nicht. (d) `<`, `>`, `\|`, `"` und Backtick beenden den Pfad. (e) keine weiteren URL-Schemata. |
 | TE-14 | Unix (OF-4) | Absolut ≥ 2 Segmente, Home ≥ 1 Segment nach `~/`, `~benutzer/x` kein Fund, Beginn nur an Startgrenze; `/` und `\` sind für alle Formen Trenner. |
 | TE-15 | Umgebungsvariablen (OF-6) | Wie PO-Vorschlag; Namen höchstens 64 Zeichen; PowerShell `$env:NAME\…` nicht abgedeckt. |
 | TE-16 | `file:` (OF-8) | PFAD-Fund über den ganzen Ausdruck inkl. `file:///` (PO-Vorschlag). |
 | TE-17 | Doppelte Backslashes (OF-9) | Wie PO-Vorschlag; Trenner-Läufe zählen als ein Trenner; UNC-Kopf mit genau 2 oder 4 Backslashes. |
 | TE-18 | Ein Pfad-Erkenner | Ein `PathRecognizer` mit Formen als Enum-Konstanten (Begründung 2.4); kein `java.nio.file`, kein Dateisystem. |
+| TE-19 | Zusammengelegter Fund (OF-16) | (a) **Typ**: vom stärksten maximalen Glied nach `STAERKE` = Konfidenz ab, Länge ab, Start auf, dann Typrang `URL` < `PFAD` < `EMAIL` < `IP` < übrige, Typname, Quelle (PO-Vorschlag, ergänzt um Typrang für Totalität). Gilt ebenso für gleiche Bereiche; enthaltene Kandidaten liefern nie den Typ. (b) **Konfidenz** = kleinste Konfidenz der maximalen Glieder, damit Stufe = Stufe des schwächsten Glieds (AK-6). In einem Glied enthaltene Kandidaten zählen nicht (Begründung 2.5: keine zusätzlich abgedeckte Position, Stetigkeit, Gleichlauf mit AK-24). **Quelle** `zusammengelegt`. (c) **Beispiel AK-7 (g)**: Fund [5,83) = `https://intranet.invalid/?f='C:/Akte 2025/erika.beispiel@example.invalid/x.pdf'` ohne das schließende `'`; das öffnende `'` liegt innen. Typ PFAD (beide 0.95, PFAD mit 49 Zeichen länger als URL mit 36), Konfidenz 0.95, Stufe sicher. Pseudonymisiert: `Link [[PFAD_1]]' ende`. Das schließende `'` gehört zu keinem Kandidaten (URL endet am Leerzeichen, der Pfad in Anführungszeichen endet vor dem `'`); die Zusammenlegung nimmt keinen Text außerhalb der Kandidaten auf (AK-7 (e)). (d) **Kennzeichnung**: über die Quelle `Finding.SOURCE_MERGED = "zusammengelegt"` (passt in das Format `[a-z][a-z0-9-]{0,31}`). Kein neues Feld, kein neuer Konstruktorparameter, `toString()` unverändert (zeigt `source=zusammengelegt`). Die Typen der Beteiligten werden nicht mitgeführt (P-6). |
+| TE-20 | Ausnahmen von Erkennern | `TextScanner` kapselt `RuntimeException` aus `detect` in `IllegalStateException` mit Index und Ausnahmeklasse, ohne Meldung des Originals, ohne `cause`, ohne Suppressed (2.9). Umsetzung in T-2 (Scanner ist dort noch offen), Marker-Test zusätzlich in T-20. Ein Marker-Test allein reicht nicht: er deckt nur die vorhandenen Erkenner und nur die getesteten Eingaben ab, künftige Erkenner (Namen, KV) nicht. Preis: der Stacktrace der Ursache fehlt; Erkenner sind deterministisch und per Test reproduzierbar. |
 
 ---
 
@@ -707,9 +934,17 @@ Der Plan ist mit den Empfehlungen umsetzbar.
   wiederverwendet (Nutzerentscheidung: Sekundärquellen-Stand mit Vermerk, ungültige Prüfziffer → „fraglich“). Es
   braucht dann ein Feld `note` in `Finding` und die damaligen offenen Punkte (Quellenangaben, offizielle
   Spezifikationen) erneut. Der Anhang kann nach Übernahme gelöscht werden.
-- **P-4 Teilüberlappung** (TE-3): mit künftigen Erkennern (Namen) neu bewerten.
+- **P-4 Teilüberlappung**: durch D-8 erledigt (Zusammenlegung, TE-3/TE-19). Mit künftigen Erkennern (Namen) kann die
+  Zusammenlegung häufiger und größer werden; dann Größe zusammengelegter Funde im Korpus beobachten.
 - **P-5 Plan.md Kap. 7** nach D-4 anpassen („strukturerhaltende Pfade“ streichen bzw. auf „ein Platzhalter je Pfad“
   ändern); Aufgabe außerhalb dieses Features.
+- **P-6 Beteiligte eines zusammengelegten Fundes**: Will die Review-Oberfläche (Folgefeature) „zusammengelegt aus URL
+  und PFAD“ anzeigen, braucht `Finding` dann ein zusätzliches, klartextfreies Feld (z. B. Liste der Typen). Das ist
+  eine mechanische Änderung der Konstruktoraufrufe in `skillshield-core`; heute gibt es keinen Nutzer dafür.
+- **P-7 Lesart AK-7 (b)**: „Bereich = Vereinigung beider“ gilt für zwei Kandidaten ohne weitere Beteiligte. Umfasst
+  ein dritter Kandidat einen der beiden (D = [0,12) enthält A = [2,8), B = [6,15) überlappt A und D), ist das Ergebnis
+  die Vereinigung der Gruppe ([0,15)), also größer als A ∪ B. Das folgt aus (a), (c), (d); zur Kenntnis für den
+  product-owner, keine Entscheidung.
 
 ---
 
@@ -732,3 +967,5 @@ Der Plan ist mit den Empfehlungen umsetzbar.
    Struktur und CLAUDE.md.
 10. **Abweichung vom PO-Vorschlag OF-7** (nicht von Plan.md): `//server/freigabe` und `\\?\…` werden erkannt, falls
     N-2 so entschieden wird.
+11. **Konfliktauflösung (D-8)**: keine Abweichung von Plan.md; Plan.md/Blueprint Kap. 6 nennen nur „Konfliktauflösung“,
+    D-8 konkretisiert sie. Abweichung nur vom PO-Vorschlag OF-16 (b) bei der Quelle (TE-19 (d)).

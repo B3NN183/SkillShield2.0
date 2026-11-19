@@ -4,9 +4,13 @@ import static de.skillshield.core.TestTexte.bs;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Duration;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class FindingTest {
 
@@ -124,6 +128,68 @@ class FindingTest {
             assertFalse(e.getMessage().contains(MARKER));
             assertFalse(e.getMessage().contains("mustermann"));
         }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"manuell", "email", "ipv4", "url", "pfad-laufwerk", "pfad-unc", "pfad-unix",
+            "pfad-home", "pfad-relativ", "pfad-umgebung", "pfad-file-uri", "t", "a1-b2",
+            "abcdefghijklmnopqrstuvwxyz012345"})
+    void gueltigeQuellenWerdenAkzeptiert(String quelle) {
+        assertEquals(quelle, new Finding(FindingType.IP, "ab", 0, 2, 0.5, quelle).source());
+    }
+
+    @Test
+    void manuelleQuelleEntsprichtDemFormat() {
+        assertEquals(Finding.SOURCE_MANUAL, new Finding(FindingType.IP, "ab", 0, 2, 0.5,
+                Finding.SOURCE_MANUAL).source());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", " ", "Email", "EMAIL", "pfad_unc", "pfad unc", "1abc", "-abc", "abc.def",
+            "abc/def", "abc\\def", "abc\n", "abc\ndef", "abc\u0000", "müller", "café", "ab c",
+            "abcdefghijklmnopqrstuvwxyz0123456", "[[PFAD_1]]", "a:b", "a=b"})
+    void ungueltigeQuellenWerdenAbgelehnt(String quelle) {
+        assertThrows(IllegalArgumentException.class,
+                () -> new Finding(FindingType.IP, "ab", 0, 2, 0.5, quelle));
+    }
+
+    @Test
+    void ungueltigeQuelleWiederholtDenWertNichtInDerMeldung() {
+        String quelle = "Quelle-" + MARKER + "_X";
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> new Finding(FindingType.IP, "ab", 0, 2, 0.5, quelle));
+        assertFalse(e.getMessage().contains(MARKER));
+        assertFalse(e.getMessage().contains("mustermann"));
+        assertFalse(e.getMessage().contains("Quelle-"));
+        String zuLang = "a".repeat(Finding.MAX_SOURCE_LENGTH + 1) + "mustermann";
+        IllegalArgumentException e2 = assertThrows(IllegalArgumentException.class,
+                () -> new Finding(FindingType.IP, "ab", 0, 2, 0.5, zuLang));
+        assertFalse(e2.getMessage().contains("mustermann"));
+    }
+
+    @Test
+    void sehrLangeQuelleWirdSchnellAbgelehnt() {
+        String lang = "a".repeat(1_000_000);
+        assertTimeoutPreemptively(Duration.ofSeconds(2), () ->
+                assertThrows(IllegalArgumentException.class,
+                        () -> new Finding(FindingType.IP, "ab", 0, 2, 0.5, lang)));
+    }
+
+    @Test
+    void zusammengelegteQuelleIstGueltigUndErscheintInToStringOhneOriginalwert() {
+        assertEquals("zusammengelegt", Finding.SOURCE_MERGED);
+        Finding f = new Finding(FindingType.PFAD, MARKER, 5, 5 + MARKER.length(), 0.95, Finding.SOURCE_MERGED);
+        assertEquals(Finding.SOURCE_MERGED, f.source());
+        assertTrue(f.toString().contains("source=zusammengelegt"));
+        assertFalse(f.toString().contains(MARKER));
+        assertEquals("Finding[type=PFAD, start=5, end=" + (5 + MARKER.length())
+                + ", confidence=0.95, level=SICHER, source=zusammengelegt]", f.toString());
+    }
+
+    @Test
+    void quelleErscheintInToStringNurImFestenFormat() {
+        Finding f = new Finding(FindingType.IP, "ab", 0, 2, 0.5, "ipv4");
+        assertTrue(f.toString().endsWith("source=ipv4]"));
     }
 
     @Test

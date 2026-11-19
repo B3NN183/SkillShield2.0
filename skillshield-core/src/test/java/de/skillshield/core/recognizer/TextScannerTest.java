@@ -1,0 +1,244 @@
+package de.skillshield.core.recognizer;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import de.skillshield.core.model.ConfidenceLevel;
+import de.skillshield.core.model.Finding;
+import de.skillshield.core.model.FindingType;
+import java.util.ArrayList;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+
+class TextScannerTest {
+
+    private static final String MARKER = "GEHEIM-mustermann-4711";
+
+    /** Stub-Erkenner: findet jedes Vorkommen eines festen Suchworts. */
+    private static Recognizer stub(FindingType type, String wort, double konfidenz, String quelle) {
+        return text -> {
+            List<Finding> r = new ArrayList<>();
+            int i = text.indexOf(wort);
+            while (i >= 0) {
+                r.add(new Finding(type, wort, i, i + wort.length(), konfidenz, quelle));
+                i = text.indexOf(wort, i + 1);
+            }
+            return r;
+        };
+    }
+
+    @Test
+    void ohneErkennerKeineFunde() {
+        assertTrue(new TextScanner(List.of()).scan("irgendein Text").isEmpty());
+        assertTrue(TextScanner.standard().scan("Das Wetter ist heute schön.").isEmpty());
+    }
+
+    @Test
+    void stubFundHatPositionGleichTeilstring() {
+        String text = "ab " + MARKER + " cd " + MARKER;
+        List<Finding> r = new TextScanner(List.of(stub(FindingType.TEXT, MARKER, 0.9, "stub"))).scan(text);
+        assertEquals(2, r.size());
+        for (Finding f : r) {
+            assertEquals(f.originalValue(), text.substring(f.start(), f.end()));
+        }
+        assertTrue(r.get(0).start() < r.get(1).start());
+    }
+
+    @Test
+    void leererTextUndLeerraumLiefernLeereListe() {
+        TextScanner scanner = new TextScanner(List.of(stub(FindingType.TEXT, "xyz", 0.9, "stub")));
+        assertTrue(scanner.scan("").isEmpty());
+        assertTrue(scanner.scan("  \t\r\n  ").isEmpty());
+        assertTrue(TextScanner.standard().scan("").isEmpty());
+    }
+
+    @Test
+    void nullTextWirdMitParameternamenAbgelehnt() {
+        assertEquals("text", assertThrows(NullPointerException.class,
+                () -> new TextScanner(List.of()).scan(null)).getMessage());
+        assertEquals("text", assertThrows(NullPointerException.class,
+                () -> TextScanner.standard().scan(null)).getMessage());
+    }
+
+    @Test
+    void nullErkennerlisteUndNullElementWerdenAbgelehnt() {
+        assertEquals("recognizers", assertThrows(NullPointerException.class,
+                () -> new TextScanner(null)).getMessage());
+        List<Recognizer> mitNull = new ArrayList<>();
+        mitNull.add(null);
+        assertThrows(NullPointerException.class, () -> new TextScanner(mitNull));
+    }
+
+    @Test
+    void erkennerListeWirdKopiert() {
+        List<Recognizer> liste = new ArrayList<>();
+        TextScanner scanner = new TextScanner(liste);
+        liste.add(stub(FindingType.TEXT, "xyz", 0.9, "stub"));
+        assertTrue(scanner.scan("xyz").isEmpty());
+    }
+
+    @Test
+    void umschliessenderFundGewinntGegenEnthaltenenMitHoehererKonfidenz() {
+        String text = "Aufruf https://example.invalid/?datei=C:/Tools/a.exe jetzt";
+        String url = "https://example.invalid/?datei=C:/Tools/a.exe";
+        String pfad = "C:/Tools/a.exe";
+        Recognizer urlStub = stub(FindingType.URL, url, 0.80, "url");
+        Recognizer pfadStub = stub(FindingType.PFAD, pfad, 0.99, "pfad-laufwerk");
+        List<Finding> r = new TextScanner(List.of(pfadStub, urlStub)).scan(text);
+        assertEquals(1, r.size());
+        assertEquals(FindingType.URL, r.get(0).type());
+    }
+
+    @Test
+    void teilueberlappungWirdZusammengelegt() {
+        String text = "xx AAAA BBBB yy";
+        Recognizer a = t -> List.of(new Finding(FindingType.TEXT, "AAAA BB", 3, 10, 0.7, "stub-a"));
+        Recognizer b = t -> List.of(new Finding(FindingType.IP, "BBBB y", 8, 14, 0.9, "stub-b"));
+        List<Finding> r = new TextScanner(List.of(a, b)).scan(text);
+        assertEquals(1, r.size());
+        assertEquals(3, r.get(0).start());
+        assertEquals(14, r.get(0).end());
+        assertEquals(text.substring(3, 14), r.get(0).originalValue());
+        assertEquals(Finding.SOURCE_MERGED, r.get(0).source());
+        assertEquals(0.7, r.get(0).confidence());
+    }
+
+    @Test
+    void beispielAk7gMitStubErkennernErgibtEinenZusammengelegtenFund() {
+        String text = "Link https://intranet.invalid/?f='C:/Akte 2025/erika.beispiel@example.invalid/x.pdf' ende";
+        Recognizer url = stub(FindingType.URL, "https://intranet.invalid/?f='C:/Akte", 0.95, "url");
+        Recognizer pfad = stub(FindingType.PFAD, "C:/Akte 2025/erika.beispiel@example.invalid/x.pdf", 0.95,
+                "pfad-laufwerk");
+        Recognizer mail = stub(FindingType.EMAIL, "erika.beispiel@example.invalid", 0.95, "email");
+        List<List<Recognizer>> reihenfolgen = List.of(List.of(url, pfad, mail), List.of(mail, pfad, url),
+                List.of(pfad, url, mail));
+        for (List<Recognizer> erkenner : reihenfolgen) {
+            List<Finding> r = new TextScanner(erkenner).scan(text);
+            assertEquals(1, r.size());
+            Finding fund = r.get(0);
+            assertEquals(FindingType.PFAD, fund.type());
+            assertEquals(5, fund.start());
+            assertEquals(83, fund.end());
+            assertEquals(text.substring(5, 83), fund.originalValue());
+            assertEquals(0.95, fund.confidence());
+            assertEquals(Finding.SOURCE_MERGED, fund.source());
+            assertEquals('\'', text.charAt(fund.end()));
+        }
+    }
+
+    @Test
+    void ausnahmeEinesErkennersWirdOhneMeldungUndUrsacheGekapselt() {
+        String text = "Text " + MARKER;
+        RuntimeException original = new RuntimeException("Eingabe war " + text,
+                new IllegalArgumentException(MARKER));
+        original.addSuppressed(new IllegalStateException(MARKER));
+        Recognizer ok = stub(FindingType.TEXT, "Text", 0.9, "stub");
+        Recognizer wirft = t -> {
+            throw original;
+        };
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> new TextScanner(List.of(ok, wirft)).scan(text));
+        assertEquals("Erkenner an Index 1 fehlgeschlagen: java.lang.RuntimeException", e.getMessage());
+        assertFalse(e.getMessage().contains(MARKER));
+        assertNull(e.getCause());
+        assertEquals(0, e.getSuppressed().length);
+    }
+
+    @Test
+    void errorEinesErkennersWirdNichtGekapselt() {
+        Recognizer wirft = t -> {
+            throw new StackOverflowError();
+        };
+        assertThrows(StackOverflowError.class, () -> new TextScanner(List.of(wirft)).scan("x"));
+    }
+
+    @Test
+    void ergebnisIstUnabhaengigVonDerReihenfolgeDerErkenner() {
+        String text = "aa bb cc aa bb cc";
+        Recognizer r1 = stub(FindingType.TEXT, "aa", 0.9, "stub-a");
+        Recognizer r2 = stub(FindingType.IP, "bb", 0.6, "stub-b");
+        Recognizer r3 = stub(FindingType.URL, "cc", 0.2, "stub-c");
+        List<Finding> x = new TextScanner(List.of(r1, r2, r3)).scan(text);
+        List<Finding> y = new TextScanner(List.of(r3, r1, r2)).scan(text);
+        List<Finding> z = new TextScanner(List.of(r2, r3, r1)).scan(text);
+        assertEquals(x, y);
+        assertEquals(x, z);
+        assertEquals(6, x.size());
+    }
+
+    @Test
+    void ergebnisIstNachStartSortiertUndUeberlappungsfrei() {
+        String text = "cc aa bb";
+        List<Finding> r = new TextScanner(List.of(
+                stub(FindingType.TEXT, "bb", 0.9, "stub"),
+                stub(FindingType.TEXT, "cc", 0.9, "stub"),
+                stub(FindingType.TEXT, "aa", 0.9, "stub"))).scan(text);
+        for (int i = 1; i < r.size(); i++) {
+            assertTrue(r.get(i - 1).end() <= r.get(i).start());
+        }
+        assertEquals(List.of("cc", "aa", "bb"), r.stream().map(Finding::originalValue).toList());
+    }
+
+    @Test
+    void fraglicherFundBleibtImScanErhalten() {
+        List<Finding> r = new TextScanner(List.of(stub(FindingType.TEXT, "zz", 0.3, "stub"))).scan("a zz b");
+        assertEquals(1, r.size());
+        assertEquals(ConfidenceLevel.FRAGLICH, r.get(0).level());
+    }
+
+    @Test
+    void zweiAufrufeLiefernGleicheListe() {
+        TextScanner scanner = new TextScanner(List.of(
+                stub(FindingType.TEXT, "aa", 0.9, "stub-a"), stub(FindingType.IP, "a", 0.9, "stub-b")));
+        assertEquals(scanner.scan("aa a aa"), scanner.scan("aa a aa"));
+    }
+
+    @Test
+    void ergebnislisteIstUnveraenderlich() {
+        List<Finding> r = new TextScanner(List.of(stub(FindingType.TEXT, "aa", 0.9, "stub"))).scan("aa");
+        assertThrows(UnsupportedOperationException.class, () -> r.add(r.get(0)));
+        assertThrows(UnsupportedOperationException.class, () -> r.remove(0));
+    }
+
+    @Test
+    void fundDerNichtZumTextPasstWirdOhneWertInDerMeldungAbgelehnt() {
+        Recognizer falsch = t -> List.of(new Finding(FindingType.TEXT, MARKER, 0, MARKER.length(), 0.9, "stub"));
+        TextScanner scanner = new TextScanner(List.of(falsch));
+        IllegalStateException e1 = assertThrows(IllegalStateException.class,
+                () -> scanner.scan("ein ganz anderer Text mit genug Laenge"));
+        IllegalStateException e2 = assertThrows(IllegalStateException.class, () -> scanner.scan("kurz"));
+        assertFalse(e1.getMessage().contains(MARKER));
+        assertFalse(e2.getMessage().contains(MARKER));
+        assertFalse(e1.getMessage().contains("mustermann"));
+    }
+
+    @Test
+    void erkennerDerNullLiefertWirdAbgelehnt() {
+        Recognizer nullListe = t -> null;
+        assertThrows(NullPointerException.class, () -> new TextScanner(List.of(nullListe)).scan("x"));
+        Recognizer nullElement = t -> {
+            List<Finding> l = new ArrayList<>();
+            l.add(null);
+            return l;
+        };
+        assertThrows(NullPointerException.class, () -> new TextScanner(List.of(nullElement)).scan("x"));
+    }
+
+    @Test
+    void ausnahmenmeldungenEnthaltenKeinenTextMarker() {
+        String text = "Text " + MARKER;
+        NullPointerException npe = assertThrows(NullPointerException.class,
+                () -> new TextScanner(List.of((Recognizer) t -> null)).scan(text));
+        assertFalse(String.valueOf(npe.getMessage()).contains(MARKER));
+    }
+
+    @Test
+    void ergebnisToStringEnthaeltKeinenMarker() {
+        String text = "x " + MARKER + " y";
+        List<Finding> r = new TextScanner(List.of(stub(FindingType.TEXT, MARKER, 0.9, "stub"))).scan(text);
+        assertFalse(r.toString().contains(MARKER));
+    }
+}
