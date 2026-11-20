@@ -385,10 +385,13 @@ class PathRecognizerLaufwerkTest {
 
     // ------------------------------------------------------------------ AK-21: Dateiname ohne Pfad
 
+    // T-15: Die frueheren Beispiele "%APPDATA%\x" und "$HOME/x" sind seit der Form UMGEBUNG Funde (Plan Zeile
+    // UMGEBUNG, AK-15); sie stehen jetzt als Positivbeispiele in PathRecognizerUmgebungTest.
+
     @ParameterizedTest
     @ValueSource(strings = {"Starte tool.exe", "tool.exe", "BeispielTool.exe l\u00E4uft", "Datei konfig.yml",
             "Programm BeispielTool ist installiert", "ordner\\datei.txt", "ordner/datei.txt", "Files\\Mein",
-            "Tool\\tool.exe", "%APPDATA%\\x", "$HOME/x"})
+            "Tool\\tool.exe"})
     void ak21DateinameOhnePfadUndAndereFormenSindKeinFund(String text) {
         assertKeinFund(text);
     }

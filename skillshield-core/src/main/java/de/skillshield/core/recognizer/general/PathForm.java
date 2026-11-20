@@ -4,9 +4,9 @@ package de.skillshield.core.recognizer.general;
  * Pfadformen des {@link PathRecognizer} (Architektur-Plan Kap. 2.4.2). Jede Form ist eine Konstante mit eigenem
  * Kopf, Mindestzahl an Segmenten, Konfidenz und Quelle; Laufzerlegung, Ende, Klammerregel und Segmentzählung sind
  * allen Formen gemeinsam und liegen im Erkenner. Bisher vorhanden: {@link #LAUFWERK}, {@link #UNC}, {@link #UNIX},
- * {@link #HOME}, {@link #HOST_PFAD}, {@link #RELATIV}, {@link #EINZEL_BACKSLASH}, {@link #BENUTZER_WURZEL} und
- * {@link #WURZEL_ZWEI_SEGMENTE}; die weiteren Formen (Umgebungsvariable, {@code file:}) kommen mit den Folgetasks
- * als zusätzliche Konstanten. Welche Position als Beginn eines Kopfes zulässig ist, entscheidet je Form
+ * {@link #HOME}, {@link #HOST_PFAD}, {@link #RELATIV}, {@link #EINZEL_BACKSLASH}, {@link #BENUTZER_WURZEL},
+ * {@link #WURZEL_ZWEI_SEGMENTE} und {@link #UMGEBUNG}; die weitere Form ({@code file:}) kommt mit dem Folgetask als
+ * zusätzliche Konstante. Welche Position als Beginn eines Kopfes zulässig ist, entscheidet je Form
  * {@link #isStartBoundary(String, int)}.
  *
  * <p>Laufzeit: Der Erkenner prüft jede Position eines Laufs einmal als Beginn; im Zitat-Pfad ruft die Inhaltsprüfung
@@ -573,10 +573,282 @@ enum PathForm {
         String source() {
             return "pfad-relativ";
         }
+    },
+
+    /**
+     * Pfad hinter einer Umgebungsvariable (Plan 2.4.2 Zeile UMGEBUNG, AK-15, OF-6): Die Variable samt Pfad dahinter ist
+     * EIN Fund ({@code %APPDATA%\BeispielTool\konfig.ini}); Ordner-, Benutzer- und Programmnamen hinter der Variable
+     * sind damit mitgeschützt. Die Variable allein ({@code %APPDATA%}, {@code $HOME}, {@code ${HOME}}, {@code %PATH%})
+     * ist kein Fund, ebenso nicht ein Dateiname direkt hinter der Variable ohne Trenner ({@code %~dp0tool.exe},
+     * {@code %USERPROFILE%Desktop}): Wie bei jedem Pfad zählen nur Segmente hinter dem Kopf (AK-21). Es wird nichts
+     * aufgelöst (kein {@code System.getenv}, kein Dateisystem); die Variable ist nur Text.
+     *
+     * <p>Kopfvarianten, jede bis einschließlich eines Trenners ({@code \} oder {@code /}) vor dem ersten Segment:
+     * <ul>
+     *   <li>{@code %NAME%} (Windows), NAME = {@code [A-Za-z_][A-Za-z0-9_()]{0,63}}; bis zu vier solche Gruppen direkt
+     *       hintereinander ({@code %HOMEDRIVE%%HOMEPATH%\x}), danach der Trenner;</li>
+     *   <li>{@code $NAME} (Unix, PowerShell: {@code $HOME/x}, {@code $PSScriptRoot\x}), NAME =
+     *       {@code [A-Za-z_][A-Za-z0-9_]{0,63}}; {@code ${NAME}} und {@code $(NAME)} (Makefile und Shell,
+     *       {@code $(pwd)/x}) mit demselben NAME;</li>
+     *   <li>PowerShell {@code $env:NAME} (NAME wie bei {@code $NAME}) und {@code ${env:NAME}} (NAME wie bei
+     *       {@code %NAME%}, also auch mit Klammern: {@code ${env:ProgramFiles(x86)}\x}); {@code env} in beliebiger
+     *       Groß- und Kleinschreibung;</li>
+     *   <li>verzögerte Batch-Expansion {@code !NAME!} ({@code !USERPROFILE!\Desktop\x}, {@code !APPDATA!/x}), NAME wie
+     *       bei {@code %NAME%}; genau eine Gruppe (keine Kette), danach der Trenner;</li>
+     *   <li>Batch-Parameter {@code %~dp0}, {@code %~dpn0}, {@code %~f1}, {@code %~1}: {@code %~}, höchstens acht
+     *       Modifikatorbuchstaben aus {@code fdpnxsatz} (Groß- und Kleinschreibung egal), eine Ziffer; dahinter
+     *       höchstens 64 Zeichen, die weder Trenner noch Endzeichen sind (der Rest des Batch-Ausdrucks, etwa
+     *       {@code ..} in {@code %~dp0..\erika\a}), und ein Trenner. Der Rest vor dem Trenner gehört zum Kopf und
+     *       wird nicht als Segment gezählt: In {@code %~dp0..\erika\a} endet der Kopf hinter {@code ..\}, gezählt
+     *       werden {@code erika} und {@code a}; {@code %~dp0tool.exe} hat keinen Trenner und ist kein Fund.</li>
+     * </ul>
+     * Bekannte Grenzen: In diesen Fällen entsteht kein Fund, der ganze Ausdruck samt Pfad bleibt im Klartext (nicht nur
+     * die Variable): Variablen mit Ersatzsyntax ({@code ${HOME:-/tmp}/x}, {@code %PATH:~0,5%\x}), Batch-Parameter ohne
+     * Tilde ({@code %1\x}), Variablennamen mit mehr als 64 Zeichen oder mit Punkt oder Minus, Befehlsersetzung mit
+     * Argument ({@code $(dirname $0)/x}), Befehlsersetzung mit Backticks und Variable in eigenen Anführungszeichen,
+     * jeweils mit nur einem Segment dahinter ({@code `dirname $0`/x}, {@code "$HOME"/erika}), sowie ein Dateiname
+     * direkt hinter der Variable ({@code %TEMP%erika.txt}). Nur ein Teil des Ausdrucks wird gefunden: bei einer Kette
+     * aus mehr als vier {@code %NAME%}-Gruppen beginnt der Fund an der viertletzten Gruppe, die davor stehenden
+     * Gruppen bleiben sichtbar; bei verschachtelter Ersatzsyntax ({@code ${X:-$HOME/.config}/app}) beginnt der Fund am
+     * inneren {@code $HOME} und reicht bis zum Ende des Laufs, der Anfang mit der äußeren Variable bleibt sichtbar; bei
+     * einer Variable in eigenen Anführungszeichen oder Backticks mit mindestens zwei Segmenten dahinter
+     * ({@code "$HOME"/erika/akte.pdf}) fassen UNIX bzw. EINZEL_BACKSLASH den Pfad ohne die Variable, die Variable
+     * bleibt sichtbar. Steht eine Variable in der Mitte eines Pfads ({@code C:\Users\%USERNAME%\x},
+     * {@code \\srv\%USERNAME%\x}), deckt der Fund der anderen Form alles ab; der Fund bleibt dann wie bisher
+     * (Konfidenz 0.95), weil ein vollständig enthaltener Fund die Konfidenz nicht ändert (Plan 7a (iii)).
+     *
+     * <p>Konfidenz konstant 0.80 (wahrscheinlich), also in der Segmentzahl nicht fallend (Vertrag, Plan 7a (i)); Quelle
+     * {@code pfad-umgebung}; mindestens ein Segment hinter dem Kopf (konstant für alle Varianten).
+     *
+     * <p>Eigene Entscheidung (Plan-Abweichung, Grundsatz "möglichst viel schützen", Nutzerentscheidung 20.11.2026):
+     * Für diese Form gilt keine Startgrenze ({@link #isStartBoundary(String, int)} ist immer wahr), anders als der
+     * Plan für "alle Formen" sagt. Grund: Der Kopf ist unverwechselbar (Variable plus Trenner plus Segment); eine
+     * Startgrenze würde nur Fälle verlieren, in denen Pfade tatsächlich vorkommen ({@code -I$HOME/inc},
+     * {@code Pfad:%APPDATA%\x}, {@code a\n$HOME/x} in maskiertem Text, {@code --prefix$HOME/x}). Die Alltagsformen in
+     * Geschäftstexten bleiben auch ohne Startgrenze kein Fund, weil ihnen der Kopf fehlt: {@code 50%/Jahr},
+     * {@code 3%/4%}, {@code 5$/Stück}, {@code 100 %/Monat} (hinter {@code %} bzw. {@code $} steht kein Name),
+     * {@code $1/2}, {@code $5/Monat} (Name beginnt mit einer Ziffer), {@code %d/%m/%Y}, {@code %s/%s} (kein
+     * schließendes {@code %} direkt hinter dem Namen), {@code %20/}, {@code %2F}, {@code %E4%B8%AD} (URL-Kodierung:
+     * hinter dem schließenden {@code %} steht immer eine Hexziffer, nie ein Trenner), {@code %1\%2}, {@code a!=b/c},
+     * {@code Achtung!/x} (hinter {@code !} steht kein Name). Bekannte Fehltreffer (zu viel ersetzt, kein Leck,
+     * Konfidenz 0.80): Vorlagen und Formeln mit Name, Trenner und Segment ({@code ${x}/${y}}, {@code $a/$b},
+     * {@code $x/y$}, {@code $USD/MWh}), Escape-Folgen hinter einer Variable ({@code echo $x\n}), Serienbrief-
+     * Platzhalter mit Schrägstrich ({@code %DATUM%/%ORT%}, {@code %VORNAME%/%NACHNAME%}; ersetzt wird nur der
+     * Platzhalter) und ein von zwei Ausrufezeichen umschlossenes Wort vor einem Trenner ({@code !wichtig!/a},
+     * {@code Ja!Nein!/x}).
+     *
+     * <p><b>Laufzeit des Kopfs (linear).</b> Jede Variante liest nur eine begrenzte Zahl von Zeichen ab der Position;
+     * die Namenslänge ist auf 64 begrenzt (ein 65. Namenszeichen beendet die Prüfung), die Gruppenzahl bei
+     * {@code %NAME%} auf vier, die Modifikatoren auf acht, der Rest hinter einem Batch-Parameter auf 64. Je Position
+     * werden höchstens gelesen: an einer Position, die weder {@code %} noch {@code $} noch {@code !} ist, ein Zeichen;
+     * bei {@code %NAME%} höchstens 4 mal 66 Zeichen (je Gruppe {@code %}, höchstens 64 Namenszeichen und ein weiteres
+     * Zeichen) plus ein Zeichen für den Trenner, also höchstens 265; bei {@code $} höchstens 2 plus 4 plus 65 plus 2,
+     * also höchstens 73; bei {@code %~} höchstens 2 plus 8 plus 1 plus 65, also höchstens 76; bei {@code !NAME!}
+     * höchstens 1 plus 65 plus 1, also höchstens 67 (das {@code !}, die Namensprüfung samt dem Zeichen dahinter, der
+     * Trenner). Der Erkenner ruft den Kopf je Position und Durchlauf höchstens einmal auf, im Zitat-Pfad je Position
+     * und Art (13 Arten) einmal; auch wenn sich die Leseabschnitte benachbarter Köpfe überlappen ({@code %a%} mal n,
+     * {@code %a%%b%} mal n, {@code %a} mal n, {@code $} mal n, {@code $} und geschweifte Klammer auf mal n,
+     * {@code %~dp0} mal n, {@code !a!} mal n, {@code !} mal n), ist der Gesamtaufwand je Durchlauf höchstens 265 mal
+     * die Zahl der Stellen mit {@code %}, {@code $} oder {@code !} plus die Textlänge, im Zitat-Pfad höchstens das
+     * 13-fache davon, also linear in der Textlänge. Es gibt keine Schleife, die über eine dieser Schranken hinaus
+     * liest, und keine Rekursion.
+     *
+     * <p>Alle Köpfe dieser Form enden mit einem Trenner und beginnen mit einem Nicht-Trenner ({@code %}, {@code $}
+     * oder {@code !}). Köpfe können sich überlappen ({@code %a%%b%\x}, {@code %~dp0%~dp0\x}); überlappende Köpfe
+     * haben dasselbe Kopfende, und höchstens 28 Köpfe teilen ein Kopfende (Schranke: 22 Batch-Köpfe plus 4 Köpfe der
+     * Kette plus 1 Kopf mit {@code $} plus 1 Kopf mit {@code !}, die Summe der Einzelschranken, ohne dass sie zugleich
+     * erreicht werden müssen; die Herleitung steht im Klassen-Javadoc von {@code PathRecognizer}). Zwischen dem Ende
+     * eines Kopfes und dem Beginn eines Kopfes mit anderem Ende liegt ein Segmentanfang. Das ist die Voraussetzung
+     * der Nachzählung im Erkenner (Beweis im Klassen-Javadoc von {@code PathRecognizer}). Beispiel dafür, warum ein
+     * Batch-Kopf nicht schon hinter der Ziffer endet: {@code %~dp0} mal n gefolgt von {@code \)} hätte sonst n Köpfe
+     * ohne Segmentanfang dazwischen und n Nachzählungen, die je den ganzen Lauf lesen (quadratisch); mit dem Trenner
+     * im Kopf sind es in diesem Beispiel nur 13 (die Köpfe, deren Rest vor dem Trenner höchstens 64 Zeichen lang
+     * ist).
+     */
+    UMGEBUNG {
+        @Override
+        int headEnd(String text, int i) {
+            if (i >= text.length()) {
+                return -1;
+            }
+            char c = text.charAt(i);
+            if (c == '%') {
+                return i + 1 < text.length() && text.charAt(i + 1) == '~' ? batchHeadEnd(text, i)
+                        : percentHeadEnd(text, i);
+            }
+            if (c == '!') {
+                return delayedHeadEnd(text, i);
+            }
+            return c == '$' ? dollarHeadEnd(text, i) : -1;
+        }
+
+        @Override
+        boolean isStartBoundary(String text, int i) {
+            return true;
+        }
+
+        @Override
+        int minSegments() {
+            return 1;
+        }
+
+        @Override
+        double confidence(int headLength, int segmentsCappedAt3) {
+            return CONFIDENCE_PROBABLE;
+        }
+
+        @Override
+        String source() {
+            return "pfad-umgebung";
+        }
     };
 
-    /** Höchstlänge eines Benutzernamens ({@code ~name/}) und eines Host-Laufs vor {@code :/}. */
+    /**
+     * Höchstlänge eines Benutzernamens ({@code ~name/}), eines Host-Laufs vor {@code :/}, eines Variablennamens und
+     * des Rests hinter einem Batch-Parameter ({@code %~dp0}).
+     */
     private static final int MAX_NAME_LENGTH = 64;
+
+    /** Höchstzahl der {@code %NAME%}-Gruppen direkt hintereinander ({@code %HOMEDRIVE%%HOMEPATH%}). */
+    private static final int MAX_PERCENT_GROUPS = 4;
+
+    /** Höchstzahl der Modifikatorbuchstaben eines Batch-Parameters ({@code %~dpnxsatz0}). */
+    private static final int MAX_BATCH_MODIFIERS = 8;
+
+    /** Präfix der PowerShell-Umgebungsvariable hinter {@code $} bzw. {@code ${} ({@code env} und Doppelpunkt). */
+    private static final String ENV_PREFIX = "env:";
+
+    /**
+     * Kopf {@code !NAME!} (verzögerte Batch-Expansion, genau eine Gruppe, keine Kette) und Trenner ab {@code i}
+     * ({@code text[i]} ist {@code !}): Ende hinter dem Trenner oder -1. NAME wie bei {@code %NAME%}. Liest höchstens
+     * 67 Zeichen (das {@code !}, höchstens 65 Zeichen des Namens samt dem Zeichen dahinter, der Trenner).
+     */
+    private static int delayedHeadEnd(String text, int i) {
+        int nameEnd = nameEnd(text, i + 1, true);
+        if (nameEnd < 0 || nameEnd >= text.length() || text.charAt(nameEnd) != '!') {
+            return -1;
+        }
+        return separatorEnd(text, nameEnd + 1);
+    }
+
+    /**
+     * Kopf {@code %NAME%} (eine bis {@value #MAX_PERCENT_GROUPS} Gruppen) und Trenner ab {@code i} ({@code text[i]}
+     * ist {@code %}, dahinter keine Tilde): Ende hinter dem Trenner oder -1. Liest höchstens 265 Zeichen.
+     */
+    private static int percentHeadEnd(String text, int i) {
+        int n = text.length();
+        int pos = i;
+        int groups = 0;
+        while (groups < MAX_PERCENT_GROUPS && pos < n && text.charAt(pos) == '%') {
+            int nameEnd = nameEnd(text, pos + 1, true);
+            if (nameEnd < 0 || nameEnd >= n || text.charAt(nameEnd) != '%') {
+                break;
+            }
+            pos = nameEnd + 1;
+            groups++;
+        }
+        return groups > 0 ? separatorEnd(text, pos) : -1;
+    }
+
+    /**
+     * Kopf mit {@code $} ab {@code i}: {@code $NAME}, {@code ${NAME}}, {@code $(NAME)}, {@code $env:NAME},
+     * {@code ${env:NAME}}, jeweils mit Trenner; Ende hinter dem Trenner oder -1. Liest höchstens 73 Zeichen.
+     */
+    private static int dollarHeadEnd(String text, int i) {
+        int from = i + 1;
+        if (from >= text.length()) {
+            return -1;
+        }
+        char c = text.charAt(from);
+        int end;
+        if (c == '{') {
+            boolean env = isEnvPrefix(text, from + 1);
+            end = closedNameEnd(text, env ? from + 1 + ENV_PREFIX.length() : from + 1, env, '}');
+        } else if (c == '(') {
+            end = closedNameEnd(text, from + 1, false, ')');
+        } else {
+            end = nameEnd(text, isEnvPrefix(text, from) ? from + ENV_PREFIX.length() : from, false);
+        }
+        return end < 0 ? -1 : separatorEnd(text, end);
+    }
+
+    /**
+     * Batch-Parameter {@code %~}, Modifikatoren, Ziffer, höchstens {@value #MAX_NAME_LENGTH} Zeichen und ein Trenner
+     * ab {@code i} ({@code text[i]} ist {@code %}, {@code text[i+1]} die Tilde): Ende hinter dem Trenner oder -1. Die
+     * Zeichen vor dem Trenner dürfen kein Endzeichen sein (der Kopf bleibt im Lauf). {@link #MAX_NAME_LENGTH}
+     * begrenzt hier die Länge des Rests hinter der Ziffer, nicht die eines Namens. Liest höchstens 76 Zeichen.
+     */
+    private static int batchHeadEnd(String text, int i) {
+        int n = text.length();
+        int j = i + 2;
+        while (j < n && j - (i + 2) < MAX_BATCH_MODIFIERS && isBatchModifier(text.charAt(j))) {
+            j++;
+        }
+        if (j >= n || text.charAt(j) < '0' || text.charAt(j) > '9') {
+            return -1;
+        }
+        j++;
+        for (int k = j; k < n && k - j <= MAX_NAME_LENGTH; k++) {
+            char c = text.charAt(k);
+            if (PathChars.isSeparator(c)) {
+                return k + 1;
+            }
+            if (PathChars.isTerminator(c)) {
+                return -1;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Ende eines Variablennamens ab {@code from} ({@code [A-Za-z_]} gefolgt von höchstens 63 Zeichen aus
+     * {@code [A-Za-z0-9_]}, mit {@code parens} auch {@code (} und {@code )}) oder -1 (kein Name oder mehr als 64
+     * Zeichen). Liest höchstens 65 Zeichen.
+     */
+    private static int nameEnd(String text, int from, boolean parens) {
+        int n = text.length();
+        if (from >= n) {
+            return -1;
+        }
+        char first = text.charAt(from);
+        if (!PathChars.isAsciiLetter(first) && first != '_') {
+            return -1;
+        }
+        int j = from + 1;
+        while (j < n && isNameChar(text.charAt(j), parens)) {
+            j++;
+            if (j - from > MAX_NAME_LENGTH) {
+                return -1;
+            }
+        }
+        return j;
+    }
+
+    private static boolean isNameChar(char c, boolean parens) {
+        return PathChars.isAsciiLetter(c) || (c >= '0' && c <= '9') || c == '_' || (parens && (c == '(' || c == ')'));
+    }
+
+    /** Ende hinter dem Namen und dem schließenden Zeichen {@code close} (ab {@code nameStart}) oder -1. */
+    private static int closedNameEnd(String text, int nameStart, boolean parens, char close) {
+        int end = nameEnd(text, nameStart, parens);
+        return end >= 0 && end < text.length() && text.charAt(end) == close ? end + 1 : -1;
+    }
+
+    /** Ob ab {@code i} {@link #ENV_PREFIX} steht (ASCII, Groß- und Kleinschreibung bei {@code env} egal). */
+    private static boolean isEnvPrefix(String text, int i) {
+        int colon = i + ENV_PREFIX.length() - 1;
+        return colon < text.length() && PathChars.matchesAsciiIgnoreCase(text, i, "env") && text.charAt(colon) == ':';
+    }
+
+    /** Modifikatorbuchstabe eines Batch-Parameters: {@code f d p n x s a t z}, Groß- und Kleinschreibung egal. */
+    private static boolean isBatchModifier(char c) {
+        return PathChars.isAsciiLetter(c) && "fdpnxsatz".indexOf(c | 0x20) >= 0;
+    }
+
+    /** Ende hinter dem Trenner an {@code pos} oder -1, wenn dort kein Trenner steht. */
+    private static int separatorEnd(String text, int pos) {
+        return pos < text.length() && PathChars.isSeparator(text.charAt(pos)) ? pos + 1 : -1;
+    }
 
     /** Konfidenz "sicher" (Stufe SICHER). */
     private static final double CONFIDENCE_SURE = 0.95;
@@ -603,7 +875,7 @@ enum PathForm {
 
     /**
      * Ob an Position {@code i} ein Kopf dieser Form beginnen darf. Standard ist die gemeinsame Startgrenze
-     * ({@link PathChars#isStartBoundary}); LAUFWERK, UNC und HOST_PFAD haben keine (immer wahr), RELATIV,
+     * ({@link PathChars#isStartBoundary}); LAUFWERK, UNC, HOST_PFAD und UMGEBUNG haben keine (immer wahr), RELATIV,
      * BENUTZER_WURZEL und WURZEL_ZWEI_SEGMENTE lassen zusätzlich {@code :} davor zu. Im Zitat-Pfad wird die Methode
      * nicht für die erste Inhaltsposition gefragt (dort ist die Grenze durch das öffnende Zeichen erfüllt).
      */

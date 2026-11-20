@@ -49,7 +49,7 @@ class PathRecognizerUnixEigenschaftTest {
     private static final PathForm[] ORAKEL_FORMEN = {PathForm.LAUFWERK, PathForm.UNC, PathForm.UNIX, PathForm.HOME,
             PathForm.HOST_PFAD};
     private static final Set<String> QUELLEN = Set.of("pfad-laufwerk", "pfad-unc", "pfad-unix", "pfad-home", "pfad-relativ",
-            "pfad-host");
+            "pfad-host", "pfad-umgebung");
 
     private static final String[] ANFUEHRUNG = {"\"", "'", "`", "\u201E", "\u201C", "\u201D", "\u00BB", "\u00AB",
             "\u2018", "\u2019", "\u201A", "\u2039", "\u203A"};
@@ -455,9 +455,10 @@ class PathRecognizerUnixEigenschaftTest {
                         }
                     }
                 }
-                // Funde der Quelle pfad-relativ stammen aus Formen ohne Orakel in dieser Datei; ihre Pruefung ohne
-                // Ausnahme steht im Gesamtorakel von PathRecognizerRelativEigenschaftTest
-                assertTrue(beruehrt || f.source().equals("pfad-relativ"), "Fund ohne beruehrenden Orakelfund" + wo);
+                // Funde der Quellen pfad-relativ und pfad-umgebung stammen aus Formen ohne Orakel in dieser Datei; ihre
+                // Pruefung ohne Ausnahme steht im Gesamtorakel von PathRecognizerRelativEigenschaftTest
+                assertTrue(beruehrt || f.source().equals("pfad-relativ") || f.source().equals("pfad-umgebung"),
+                        "Fund ohne beruehrenden Orakelfund" + wo);
             }
             // jede Orakelposition ist abgedeckt
             boolean[] a = abdeckung(text.length(), alle);

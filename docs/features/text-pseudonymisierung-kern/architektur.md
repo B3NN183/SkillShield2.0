@@ -1020,6 +1020,39 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
 - **AK**: AK-15, AK-49 (`%`).
 - **Tests**: Zeile `UMGEBUNG` positiv/negativ; Name mit 64 Zeichen ja, 65 nein; `%`×100 000, `%a`×100 000,
   `$`×100 000 < 2 s.
+- *(Nachtrag 20.11.2026 zu T-15 – Entscheidungen der Hauptsitzung nach dem Grundsatz „möglichst viel schützen"
+  (siehe T-14 Punkt 5); ergänzt bzw. ersetzt die Zeile `UMGEBUNG` (2.4.2), soweit sie widerspricht:*
+  1. *Fund ist die Variable samt Pfad dahinter (mindestens ein Segment); Variable allein (`%APPDATA%`, `$HOME`),
+     `%windir%\` ohne Segment und Dateiname direkt hinter der Variable ohne Trenner (`%~dp0tool.exe`) sind kein
+     Fund. Konfidenz konstant 0.80, Quelle `pfad-umgebung`.*
+  2. *Kopfvarianten (je bis einschließlich eines Trenners): `%NAME%` (Name bis 64 Zeichen, auch mit Klammern wie
+     `ProgramFiles(x86)`), bis zu vier Gruppen direkt hintereinander (`%HOMEDRIVE%%HOMEPATH%\`); `$NAME`,
+     `${NAME}`, `$(NAME)`; PowerShell `$env:NAME`, `${env:NAME}`; Batch `%~` + Modifikatoren + Ziffer
+     (`%~dp0..\erika\a`).*
+  3. *KEINE Startgrenze für `UMGEBUNG` (Abweichung von „Startgrenze gilt für alle Formen"): Der Kopf ist
+     unverwechselbar; mit Startgrenze blieben `-I$HOME/inc`, `Pfad:%APPDATA%\x` ohne Fund. Prozent-, Währungs-
+     und Formatangaben haben keinen Kopf und bleiben ohne Fund (`50%/Jahr`, `3%/4%`, `5$/Stück`, `$5/Monat`,
+     `%d/%m/%Y`, `%s/%s`, `%20/`, `%1\%2`); URL-Kodierung erzeugt keinen Kopf.*
+  4. *Bekannte Fehltreffer (0.80): Vorlagen und Formeln `${x}/${y}`, `$a/$b`, `$x/y$`, `$USD/MWh`, `echo $x\n`.
+     Bekannte Grenzen (kein oder nur Teilfund): Ersatzsyntax (`${V:-x}/…`, `%V:~0,5%\…`), `!VAR!\x`, `%1\x`,
+     Namen mit Punkt oder Minus oder über 64 Zeichen, mehr als vier `%…%`-Gruppen (die erste bleibt sichtbar).
+     Bekannte Folge nach 7a (ii): Ein früher beginnender Variablen-Fund, der einen späteren Fund im selben Lauf
+     verschluckt (`%A%\x;C:\a\b`), trägt 0.80.*
+  5. *Es wird nichts aufgelöst: kein Zugriff auf Umgebungsvariablen oder Systemeigenschaften.*
+  6. *(Nach reviewer-/security-Prüfung Durchlauf 1.) Zusätzliche Kopfvariante: verzögerte Batch-Expansion `!NAME!`
+     + Trenner (`!USERPROFILE!\Desktop\x`), Name wie bei `%NAME%`, keine Kette. Bei den bekannten Grenzen aus
+     Punkt 4 bleibt der GANZE Ausdruck samt Pfad im Klartext (nicht nur die Variable): `%1\x`,
+     `%PATH:~0,5%\x`, `${HOME:-/tmp}/x`, Namen über 64 Zeichen oder mit Punkt/Minus; bei verschachtelter
+     Ersatzsyntax (`${X:-$HOME/.config}/app`) entsteht ein Teilfund. Weitere bekannte Grenzen: Variable in
+     eigenen Anführungszeichen mit nur einem Segment dahinter (`"$HOME"/erika` – ab zwei Segmenten greifen UNIX
+     bzw. EINZEL_BACKSLASH, die Variable bleibt sichtbar); Befehlsersetzung mit Argument (`$(dirname $0)/x`) und
+     mit Backticks; Dateiname direkt hinter der Variable (`%TEMP%erika.txt`). Bekannte Fehltreffer zusätzlich:
+     Serienbrief-Platzhalter mit Schrägstrich (`%DATUM%/%ORT%`, `%VORNAME%/%NACHNAME%`) – ersetzt wird nur der
+     Platzhalter-Ausdruck. Einschränkung der Obermengen-Garantie (reviewer, Durchlauf 2; gilt seit T-12 für
+     mehrere Köpfe DERSELBEN Form in einem Lauf): Beginnt ein Fund durch einen früheren Kopf derselben Form
+     weiter vorn, kann die Klammerzählung eine schließende Klammer am Fundende kürzen, die bei späterem Beginn im
+     Fund läge (`!A!\)%a%\()`, `%a%\)%b%\()`). Betroffen ist nur dieses eine Klammerzeichen, nie ein
+     Pfadbestandteil.)*
 
 ### T-16: Pfad-Erkenner – `file:` und Abgrenzung zu URL, IP, E-Mail
 - **Dateien**: `PathForm.java` (`FILE_URI`); Test `PathRecognizerFileUriTest`, `TextScannerAbgrenzungTest`.

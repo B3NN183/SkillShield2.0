@@ -22,23 +22,26 @@ import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
 /**
- * Eigenschaftstests der Formen RELATIV, EINZEL_BACKSLASH, BENUTZER_WURZEL und WURZEL_ZWEI_SEGMENTE (T-14) mit festem
- * Startwert; Fehlermeldungen nennen nur Startwert und Iteration, keine Texte. Namen sind synthetisch,
+ * Eigenschaftstests der Formen RELATIV, EINZEL_BACKSLASH, BENUTZER_WURZEL und WURZEL_ZWEI_SEGMENTE (T-14) und, als
+ * Orakel (2), UMGEBUNG (T-15; die uebrigen Tests zu UMGEBUNG stehen in PathRecognizerUmgebungEigenschaftTest) mit
+ * festem Startwert; Fehlermeldungen nennen nur Startwert und Iteration, keine Texte. Namen sind synthetisch,
  * Nicht-ASCII-Zeichen stehen nur als Escapes. Die Ausgabe der Messwerte ({@code System.out}) enthaelt nur Zahlen und
  * Startwerte, nie Text.
  *
- * <p>(1) Differenztest (Obermengen-Garantie): Mit allen neun Formen ist jede Position abgedeckt, die ein Durchlauf nur
- * mit den fuenf Formen des Stands T-13 bzw. den sieben Formen von Durchlauf 1 (ohne die beiden Wurzel-Formen)
- * abdeckt, mit und ohne Anfuehrungszeichenregel, mit und ohne Anfuehrungszeichen im Text. Zusaetzlich wird gemessen
- * (und ausgegeben), wie viele bestehende Funde eine niedrigere Konfidenz bekommen: bei gleichen Grenzen (ohne
- * Anfuehrungszeichen im Text muss es 0 sein; mit Anfuehrungszeichen hat jeder Fall die Ursache, dass ein Fund einer
+ * <p>(1) Differenztest (Obermengen-Garantie): Mit allen Formen (T-15: zehn) ist jede Position abgedeckt, die ein
+ * Durchlauf nur mit den fuenf Formen des Stands T-13 bzw. den sieben Formen von Durchlauf 1 (ohne die beiden
+ * Wurzel-Formen) abdeckt, mit und ohne Anfuehrungszeichenregel, mit und ohne Anfuehrungszeichen im Text. Zusaetzlich
+ * wird gemessen (und ausgegeben), wie viele bestehende Funde eine niedrigere Konfidenz bekommen: bei gleichen Grenzen
+ * (ohne Anfuehrungszeichen im Text muss es 0 sein; mit Anfuehrungszeichen hat jeder Fall die Ursache, dass ein Fund einer
  * neuen Form im Zitat-Durchlauf die niedrigere Konfidenz traegt) und bei groesseren Grenzen (Plan Nachtrag T-12 Punkt
  * 7a (ii), T-14 Nachtrag 5 (c)).
- * (2) Orakel: Je einzelne Form (alle neun) deckt sich der Durchlauf mit einer unabhaengigen, naiven Referenz mit
+ * (2) Orakel: Je einzelne Form (alle zehn) deckt sich der Durchlauf mit einer unabhaengigen, naiven Referenz mit
  * eigenen, woertlich ausgeschriebenen Zeichenlisten (nicht {@code PathChars}, kein {@code PathForm.headEnd}),
  * einschliesslich Quelle und Konfidenz. Auf Gesamtebene (Durchlauf mit allen Formen) wird in beide Richtungen
  * geprueft: Jeder Fund wird von mindestens einem Orakelfund irgendeiner Form beruehrt, und jede Orakelposition ist
- * abgedeckt; Funde der Quelle {@code pfad-relativ} sind nicht ausgenommen.
+ * abgedeckt; Funde der Quellen {@code pfad-relativ} und {@code pfad-umgebung} sind nicht ausgenommen. Der Kopf von
+ * UMGEBUNG im Orakel enthaelt die verzoegerte Expansion {@code !NAME!}; ein zusaetzlicher Test vergleicht gegen den
+ * Kopf ohne sie (Durchlauf 1 von T-15, Obermenge).
  * (3) Ueber {@code TextScanner.standard()}, {@code Pseudonymizer} und {@code Reidentifier}: jeder erzeugte Pfad liegt
  * ganz in einem Fund, kein Name eines Pfads steht im pseudonymisierten Text, der Roundtrip ist zeichengleich; jede URL
  * ist genau ein URL-Fund.
@@ -57,9 +60,9 @@ class PathRecognizerRelativEigenschaftTest {
     private static final PathForm[] DURCHLAUF1 = {PathForm.LAUFWERK, PathForm.UNC, PathForm.UNIX, PathForm.HOME,
             PathForm.HOST_PFAD, PathForm.RELATIV, PathForm.EINZEL_BACKSLASH};
     private static final PathForm[] NEUE_FORMEN = {PathForm.RELATIV, PathForm.EINZEL_BACKSLASH,
-            PathForm.BENUTZER_WURZEL, PathForm.WURZEL_ZWEI_SEGMENTE};
+            PathForm.BENUTZER_WURZEL, PathForm.WURZEL_ZWEI_SEGMENTE, PathForm.UMGEBUNG};
     private static final Set<String> QUELLEN = Set.of("pfad-laufwerk", "pfad-unc", "pfad-unix", "pfad-home",
-            "pfad-host", "pfad-relativ");
+            "pfad-host", "pfad-relativ", "pfad-umgebung");
     private static final Set<Double> KONFIDENZEN = Set.of(0.95, 0.90, 0.80, 0.75, 0.60);
 
     /** Die 13 Anfuehrungszeichen-Arten (woertliche Liste dieser Datei, Escapes). */
@@ -74,7 +77,13 @@ class PathRecognizerRelativEigenschaftTest {
             "Users\\", "users/", "USERS\\", "Benutzer/", "Benutzer\\", "benutzer/", "home/", "Home/", "Users", "home",
             "in", "innen", "Innen", "Benutzer/in", "Benutzer/innen.", ".:./", ".:", "x:./", "e", "home/x/y", "home/a/",
             "home/q/r/s", "/b", "Benutzer/in/", "Benutzer/innen/", "BENUTZER/IN\\", ":Users\\", ":home/", ":Benutzer/",
-            "Pfad:Benutzer/", "Benutzer/Passwort", "Benutzer/in-", "Benutzer/\u0131n/"};
+            "Pfad:Benutzer/", "Benutzer/Passwort", "Benutzer/in-", "Benutzer/\u0131n/",
+            // T-15 (Umgebungsvariablen): Koepfe, Nicht-Koepfe, Ketten, Batch, PowerShell
+            "$HOME/", "$a", "${H}/", "${", "$(p)/", "%A%\\", "%a%%b%\\", "%a%", "%~dp0", "%~dp0..\\", "%~f1/", "%~",
+            "$env:A\\", "${env:A}/", "${env:P(x)}\\", "%P(x)%/", "$ENV/", "$1/", "%1\\", "%d/", "%%/", "${}/",
+            "%a%%b%%c%%d%%e%\\", "%~dpnxsatzf0/", "$env:", "${env:",
+            // T-15 Nachtrag Punkt 6: verzoegerte Expansion
+            "!A!\\", "!a!/", "!a!!b!\\", "!!/", "!1!/", "!P(x)!\\", "%~dp0!a!/", "!a b!/"};
 
     // ------------------------------------------------------------------ (1) Differenztest
 
@@ -312,6 +321,32 @@ class PathRecognizerRelativEigenschaftTest {
     private static final Pattern KOPF_WURZEL_ZWEI = Pattern.compile("(?:home|[Bb][Ee][Nn][Uu][Tt][Zz][Ee][Rr])/");
     /** Gendern: erstes Segment hinter Benutzer/ ist genau in oder innen, direkt dahinter ein Trenner. */
     private static final Pattern GENDER_SEGMENT = Pattern.compile("(?:[Ii][Nn][Nn][Ee][Nn]|[Ii][Nn])[/\\\\]");
+    /** Variablenname bei {@code %NAME%} und {@code ${env:NAME}}: 1 bis 64 Zeichen, auch Klammern. */
+    private static final String NAME_PROZENT = "[A-Za-z_][A-Za-z0-9_()]{0,63}";
+    /** Variablenname bei {@code $NAME}, {@code ${NAME}}, {@code $(NAME)} und {@code $env:NAME}: 1 bis 64 Zeichen. */
+    private static final String NAME_DOLLAR = "[A-Za-z_][A-Za-z0-9_]{0,63}";
+    /** Kopfvarianten (a) bis (g) der Form UMGEBUNG, woertlich (siehe {@link #KOPF_UMGEBUNG}). */
+    private static final String KOPF_UMGEBUNG_A_BIS_G =
+            "(?:(?:%" + NAME_PROZENT + "%){1,4}"
+            + "|\\$" + NAME_DOLLAR
+            + "|\\$\\{" + NAME_DOLLAR + "\\}"
+            + "|\\$\\(" + NAME_DOLLAR + "\\)"
+            + "|\\$[Ee][Nn][Vv]:" + NAME_DOLLAR
+            + "|\\$\\{[Ee][Nn][Vv]:" + NAME_PROZENT + "\\})[/\\\\]"
+            + "|%~[fdpnxsatzFDPNXSATZ]{0,8}[0-9][^/\\\\\\p{Z}\\p{Cc}\"`<>|]{0,64}[/\\\\]";
+    /** Variante (h): verzoegerte Expansion {@code !NAME!}, eine Gruppe, mit Trenner. */
+    private static final String VERZOEGERT = "|!" + NAME_PROZENT + "![/\\\\]";
+    /**
+     * Kopf der Form UMGEBUNG (woertlich): (a) eine bis vier {@code %NAME%}-Gruppen, (b) {@code $NAME}, (c)
+     * {@code ${NAME}}, (d) {@code $(NAME)}, (e) {@code $env:NAME}, (f) {@code ${env:NAME}}, jeweils mit Trenner; (g)
+     * Batch {@code %~}, 0 bis 8 Modifikatoren aus {@code fdpnxsatz}, eine Ziffer, 0 bis 64 Zeichen, die weder Trenner
+     * noch Endzeichen sind, und ein Trenner; (h) verzoegerte Expansion {@code !NAME!} (NAME wie bei {@code %NAME%},
+     * genau eine Gruppe) und ein Trenner. Endzeichen sind Leerraum-Kategorien (Z), Steuerzeichen (Cc) und {@code "},
+     * Backtick, {@code <}, {@code >}, {@code |}.
+     */
+    private static final Pattern KOPF_UMGEBUNG = Pattern.compile(KOPF_UMGEBUNG_A_BIS_G + VERZOEGERT);
+    /** Die Kopfvarianten (a) bis (g), also der Kopf der Form UMGEBUNG in Durchlauf 1 (ohne {@code !NAME!}). */
+    private static final Pattern KOPF_UMGEBUNG_DURCHLAUF1 = Pattern.compile(KOPF_UMGEBUNG_A_BIS_G);
     private static final String ANFUEHRUNG_START = ANFUEHRUNG_ALLE;
     private static final String START_ZEICHEN = "([{<>=,;|";
     private static final String HOST_ZEICHEN = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-";
@@ -326,7 +361,8 @@ class PathRecognizerRelativEigenschaftTest {
     }
 
     private static boolean ohneStartgrenze(PathForm form) {
-        return form == PathForm.LAUFWERK || form == PathForm.UNC || form == PathForm.HOST_PFAD;
+        return form == PathForm.LAUFWERK || form == PathForm.UNC || form == PathForm.HOST_PFAD
+                || form == PathForm.UMGEBUNG;
     }
 
     private static boolean startgrenze(String text, int pos, PathForm form) {
@@ -340,8 +376,12 @@ class PathRecognizerRelativEigenschaftTest {
                         || form == PathForm.WURZEL_ZWEI_SEGMENTE) && p == ':');
     }
 
-    /** Kopfende laut Referenz (Regex bzw. Zeichenvergleich, ohne {@code PathForm.headEnd}), -1 wenn kein Kopf. */
-    private static int kopf(String text, int pos, PathForm form) {
+    /**
+     * Kopfende laut Referenz (Regex bzw. Zeichenvergleich, ohne {@code PathForm.headEnd}), -1 wenn kein Kopf. Fuer
+     * UMGEBUNG gilt das Muster {@code umgebung} (aktuell {@link #KOPF_UMGEBUNG} oder, fuer den Vergleich mit
+     * Durchlauf 1, {@link #KOPF_UMGEBUNG_DURCHLAUF1}).
+     */
+    private static int kopf(String text, int pos, PathForm form, Pattern umgebung) {
         int n = text.length();
         switch (form) {
             case LAUFWERK:
@@ -365,6 +405,8 @@ class PathRecognizerRelativEigenschaftTest {
                 return regionKopf(KOPF_WURZEL_EIN, text, pos);
             case WURZEL_ZWEI_SEGMENTE:
                 return kopfWurzelZwei(text, pos);
+            case UMGEBUNG:
+                return regionKopf(umgebung, text, pos);
             default:
                 throw new IllegalStateException("Form ohne Orakel: " + form);
         }
@@ -438,6 +480,7 @@ class PathRecognizerRelativEigenschaftTest {
             case HOST_PFAD:
                 return segmente >= 2 ? 0.90 : 0.80;
             case RELATIV:
+            case UMGEBUNG:
                 return 0.80;
             case EINZEL_BACKSLASH:
                 return 0.75;
@@ -461,6 +504,8 @@ class PathRecognizerRelativEigenschaftTest {
                 return "pfad-home";
             case HOST_PFAD:
                 return "pfad-host";
+            case UMGEBUNG:
+                return "pfad-umgebung";
             default:
                 return "pfad-relativ";
         }
@@ -468,6 +513,11 @@ class PathRecognizerRelativEigenschaftTest {
 
     /** Referenz fuer den Durchlauf ohne Anfuehrungszeichen mit nur einer Form (quadratisch, nur fuer kurze Texte). */
     private static List<Fund> orakel(String text, PathForm form) {
+        return orakel(text, form, KOPF_UMGEBUNG);
+    }
+
+    /** Wie oben, mit wahlweise anderem Kopf-Muster fuer UMGEBUNG (siehe {@code kopf}). */
+    private static List<Fund> orakel(String text, PathForm form, Pattern umgebung) {
         List<Fund> r = new ArrayList<>();
         int n = text.length();
         int pos = 0;
@@ -480,7 +530,7 @@ class PathRecognizerRelativEigenschaftTest {
             while (laufEnde < n && !endzeichen(text.charAt(laufEnde))) {
                 laufEnde++;
             }
-            int kopf = startgrenze(text, pos, form) ? kopf(text, pos, form) : -1;
+            int kopf = startgrenze(text, pos, form) ? kopf(text, pos, form, umgebung) : -1;
             if (kopf >= 0) {
                 int ende = kuerze(text, pos, laufEnde, kopf);
                 int segmente = Math.min(3, segmente(text, kopf, ende));
@@ -607,7 +657,7 @@ class PathRecognizerRelativEigenschaftTest {
     }
 
     /**
-     * Gesamtebene (Durchlauf mit allen neun Formen), in beide Richtungen und ohne Ausnahme fuer eine Quelle: (a) Jeder
+     * Gesamtebene (Durchlauf mit allen zehn Formen), in beide Richtungen und ohne Ausnahme fuer eine Quelle: (a) Jeder
      * Fund wird von mindestens einem Orakelfund irgendeiner Form beruehrt. (b) Jede Position, die die Referenz einer
      * Form als Fund meldet, ist abgedeckt. (c) Die Konfidenz eines Fundes liegt zwischen der niedrigsten und der
      * hoechsten Konfidenz der ihn beruehrenden Orakelfunde (zusammengelegte Funde tragen die niedrigste Konfidenz der
@@ -618,6 +668,7 @@ class PathRecognizerRelativEigenschaftTest {
         Random rnd = new Random(SEED + 6);
         long funde = 0;
         long relativ = 0;
+        long umgebung = 0;
         for (int it = 0; it < 100_000; it++) {
             String text = zufallstext(rnd, 1 + rnd.nextInt(10), 0);
             String wo = ", Startwert " + (SEED + 6) + ", Iteration " + it;
@@ -630,6 +681,7 @@ class PathRecognizerRelativEigenschaftTest {
             for (Finding f : alle) {
                 funde++;
                 relativ += f.source().equals("pfad-relativ") ? 1 : 0;
+                umgebung += f.source().equals("pfad-umgebung") ? 1 : 0;
                 double min = 2.0;
                 double max = 0.0;
                 boolean quelleGefunden = false;
@@ -653,6 +705,59 @@ class PathRecognizerRelativEigenschaftTest {
         }
         assertTrue(funde > 20_000, "zu wenige Funde im Gesamttest: " + funde);
         assertTrue(relativ > 5_000, "zu wenige Funde der Quelle pfad-relativ im Gesamttest: " + relativ);
+        assertTrue(umgebung > 3_000, "zu wenige Funde der Quelle pfad-umgebung im Gesamttest: " + umgebung);
+    }
+
+    /**
+     * Obermengen-Garantie gegenueber Durchlauf 1 des Tasks (UMGEBUNG ohne {@code !NAME!}): Jede Position, die die
+     * Referenz einer Form mit dem Kopf von Durchlauf 1 meldet, ist im Durchlauf mit allen Formen und im Durchlauf mit
+     * der Einzelform abgedeckt. Enthaelt der Text kein {@code !}, sind beide Referenzen gleich, und der Durchlauf der
+     * Einzelform UMGEBUNG stimmt mit der Referenz von Durchlauf 1 in Grenzen, Konfidenz und Quelle ueberein.
+     */
+    @Test
+    void obermengeGegenueberDurchlauf1OhneVerzoegerteExpansion() {
+        Random rnd = new Random(SEED + 11);
+        PathForm[] formen = PathForm.values();
+        int mitAusrufezeichen = 0;
+        int mitFundDurchlauf1 = 0;
+        int echtGroesser = 0;
+        for (int it = 0; it < 100_000; it++) {
+            String text = zufallstext(rnd, 1 + rnd.nextInt(10), 0);
+            String wo = ", Startwert " + (SEED + 11) + ", Iteration " + it;
+            boolean[] alle = abdeckung(text.length(), R.detectWithoutQuotes(text));
+            boolean[] einzeln = abdeckung(text.length(),
+                    R.detectWithoutQuotes(text, new PathForm[] {PathForm.UMGEBUNG}));
+            boolean[] referenz1 = new boolean[text.length()];
+            for (PathForm form : formen) {
+                for (Fund o : orakel(text, form, KOPF_UMGEBUNG_DURCHLAUF1)) {
+                    for (int i = o.start(); i < o.ende(); i++) {
+                        referenz1[i] = true;
+                        assertTrue(alle[i], "Position von Durchlauf 1 nicht mehr abgedeckt, Form " + form + wo);
+                    }
+                }
+            }
+            List<Fund> nurUmgebung1 = orakel(text, PathForm.UMGEBUNG, KOPF_UMGEBUNG_DURCHLAUF1);
+            for (Fund o : nurUmgebung1) {
+                for (int i = o.start(); i < o.ende(); i++) {
+                    assertTrue(einzeln[i], "Position von Durchlauf 1 nicht mehr abgedeckt, UMGEBUNG allein" + wo);
+                }
+            }
+            if (text.indexOf('!') < 0) {
+                vergleiche(nurUmgebung1, R.detectWithoutQuotes(text, new PathForm[] {PathForm.UMGEBUNG}), wo, true);
+            } else {
+                mitAusrufezeichen++;
+                for (int i = 0; i < text.length(); i++) {
+                    if (alle[i] && !referenz1[i]) {
+                        echtGroesser++;
+                        break;
+                    }
+                }
+            }
+            mitFundDurchlauf1 += nurUmgebung1.isEmpty() ? 0 : 1;
+        }
+        assertTrue(mitAusrufezeichen > 10_000, "zu wenige Texte mit Ausrufezeichen: " + mitAusrufezeichen);
+        assertTrue(mitFundDurchlauf1 > 3_000, "zu wenige Funde von Durchlauf 1: " + mitFundDurchlauf1);
+        assertTrue(echtGroesser > 500, "zu wenige echte Vergroesserungen durch !NAME!: " + echtGroesser);
     }
 
     // ------------------------------------------------------------------ Hilfen
