@@ -748,17 +748,18 @@ class PathRecognizerLaufwerkTest {
     // ------------------------------------------------------------------ dokumentierte Ist-Zustände (Review T-10)
 
     @Test
-    void fileUriVorT16BeginntDerFundAmLaufwerksbuchstabenAehnlichenKopfUndLaesstFilSichtbar() {
-        // Ist-Zustand vor T-16 (wird in T-16 angepasst, dort liefert die Form FILE_URI den ganzen Ausdruck): Der
-        // Laufwerkskopf braucht keine Startgrenze, daher beginnt der Fund am 'e' von "file" (e, ':', '/') und
-        // reicht bis zum Ende; "fil" bleibt im Klartext sichtbar. Das ist ein Teilfund, kein Totalverlust.
+    void fileUriLiefertSeitT16DenGanzenAusdruckUndLaesstFilNichtMehrSichtbar() {
+        // Geaendert in T-16 (Ist-Zustand bis T-16: Der Laufwerkskopf braucht keine Startgrenze, daher begann der Fund
+        // am 'e' von "file" (e, ':', '/') und "fil" blieb im Klartext sichtbar). Jetzt liefert die Form FILE_URI den
+        // ganzen Ausdruck ab dem 'f' (Quelle pfad-file-uri, 0.95); der Laufwerkskopf e:/ liegt darin.
         String text = "file:///C:/Tools/a.exe";
-        List<Finding> funde = funde(text);
+        List<Finding> funde = R.detect(text); // nicht funde(...): der Helfer verlangt die Quelle pfad-laufwerk
         assertEquals(1, funde.size());
-        assertEquals(3, funde.get(0).start());
+        assertEquals(0, funde.get(0).start());
         assertEquals(text.length(), funde.get(0).end());
-        assertEquals("e:///C:/Tools/a.exe", funde.get(0).originalValue());
-        assertEquals("fil", text.substring(0, funde.get(0).start()));
+        assertEquals(text, funde.get(0).originalValue());
+        assertEquals("pfad-file-uri", funde.get(0).source());
+        assertEquals(0.95, funde.get(0).confidence());
     }
 
     @Test

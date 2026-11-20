@@ -1064,6 +1064,41 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
   Pfads im selben Satz zusätzlich erkannt; AK-5-Text ergibt nur den URL-Fund; `Mail …, Server 192.0.2.10, Tool
   C:\Tools\a.exe` → drei Funde in Textreihenfolge; zweimal scannen → gleiche Liste; AK-7 (g)-Text zweimal gescannt →
   gleiche Liste.
+- **Nachtrag 20.11.2026 (Umsetzung T-16; Detailregeln ohne Rückfrage in Richtung „möglichst viel schützen"
+  entschieden, siehe T-14 Punkt 5):**
+  1. *Kopf von `FILE_URI`: `file:` (ASCII, Groß/klein egal) + mindestens ein Trenner (`/` und `\` gemischt), ODER
+     ohne Trenner direkt gefolgt vom Kopf von LAUFWERK, RELATIV, HOME oder UMGEBUNG (`file:C:\x`, `file:./a`,
+     `file:~/x`, `file:%USERPROFILE%/x`). Fund über den ganzen Ausdruck ab `f`, Typ PFAD, Quelle `pfad-file-uri`,
+     Konfidenz konstant 0.95. Query, Fragment und URL-Kodierung (`%20`) gehören zum Fund; Ende und Zitatregel wie
+     bei den anderen Formen. Keine Startgrenze (`siehe:file:///…`).*
+  2. *Mindestsegmente 1 (Abweichung von der Zeile FILE_URI, Kap. 2.4.2): Bis T-15 war `file:/x` ein Host-Fund;
+     die Obermengen-Garantie verlangt, dass er bleibt. Folge: `file:///C:/`, `file:///etc`, `file://srv-beispiel`,
+     `file:/text` sind Funde (0.95). Ohne Fund bleiben `file:`, `file:///`, `file://`, `file:foo`, `file:C:\`,
+     `file:./`.*
+  3. *HOST_PFAD schließt den Lauf genau `file` (Groß/klein egal) aus; damit hat ein Start nur eine Form
+     (Voraussetzung von 7a (i)). Läufe, die `file` nur enthalten (`xfile:/a/b`, `profile:/x/y`), bleiben
+     Host-Funde. Die Obermengen-Garantie für HOST_PFAD gilt seit T-16 nach Abdeckung (jede bis T-15 abgedeckte
+     Position bleibt abgedeckt), nicht mehr nach Formzuordnung; Quelle und Konfidenz dieser Funde wechseln
+     plangemäß auf `pfad-file-uri` 0.95.*
+  4. *Standard-Scanner: Ein `file:`-Ausdruck ist genau ein PFAD-Fund; Zugangsdaten, E-Mail- und IP-Bestandteile
+     (`file://nutzer:geheim@srv.example/x`, `file://192.0.2.10/freigabe/a`) gehen darin auf. URLs anderer Schemata
+     bleiben unverändert genau ein URL-Fund, auch mit `file:` oder Pfad im Query. `xfile://…` und `profile://…`
+     sind URL-Funde (T-5 Punkt 3). Ohne Leerraum aneinandergeklebte URL und `file:`-Ausdruck ergeben einen Fund
+     mit dem Typ des umschließenden (früher beginnenden) Kandidaten.*
+  5. *Bekannte Grenzen: unsichtbares Zeichen in `file` (`fi` bleibt sichtbar), Vollbreite-Doppelpunkt,
+     `file :///…`, `file%3A///…` (jeweils nur der Pfad dahinter als Fund); `profile:///C:/x` im reinen
+     Pfad-Erkenner: Fund ab `file:`, `pro` bleibt sichtbar (im Standard-Scanner URL-Fund über alles). Bekannte
+     Folge nach 7a (ii): Verbindet ein Zitat-Fund ab `file:` zwei bisher getrennte Funde, gilt die niedrigste
+     Konfidenz der Beteiligten. Es wird nichts geöffnet oder aufgelöst.*
+  6. *(Nach reviewer-/security-Prüfung Durchlauf 1.) Weitere bekannte Grenze: `file:` ohne Trenner und ohne
+     Pfadkopf dahinter (`file:erika/akte`, `file:srv.example/freigabe/akte`, `file:nutzer:geheim@srv.example/x`)
+     ergibt keinen FILE_URI-Fund (wie bis T-15; andere Erkenner greifen ggf. auf Teile). Einschränkung der
+     Obermengen-Garantie aus Punkt 3 (dieselbe Ursache wie T-15 Punkt 6, mehrere Köpfe derselben Form in einem
+     Lauf): Beginnt im selben Lauf weiter vorn ein FILE_URI-Kopf, entsteht für ein späteres `file:/…` kein
+     eigener Kandidat mehr; die Klammerzählung ab dem früheren Start kann dann eine schließende Klammer am
+     Fundende samt einem davor gekürzten Satzzeichen aus dem Fund nehmen (`FILE:\\a)file:/b(c)` – bis T-15
+     Abdeckung bis einschließlich `)`, seit T-16 ohne die letzte `)`). Betroffen sind nur `)`, `]`, `}` und
+     gekürzte Satzzeichen, nie ein Pfadbestandteil.*
 
 ### T-17: Roundtrip-Korpus
 - **Dateien**: Test `RoundtripKorpusTest` (Paket `de.skillshield.core`), Texte als Java-Strings mit `bs(…)`.

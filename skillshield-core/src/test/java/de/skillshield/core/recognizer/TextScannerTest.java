@@ -100,11 +100,18 @@ class TextScannerTest {
     }
 
     @Test
-    void fileUriLiefertKeinenUrlFund() {
+    void fileUriLiefertKeinenUrlFundSondernGenauEinenPfadFundSeitT16() {
+        // Geaendert in T-16: bis dahin nur "kein URL-Fund" (der Rest blieb ein Laufwerks- bzw. Teilfund); jetzt genau
+        // ein PFAD-Fund der Form FILE_URI ueber den ganzen Ausdruck.
         for (String text : List.of("file:///C:/Akte/x.pdf", "Datei file:///srv/beispiel/x.pdf offen",
                 "FILE://srv.example/x", "x:file://srv.example/x")) {
-            assertTrue(TextScanner.standard().scan(text).stream().noneMatch(f -> f.type() == FindingType.URL),
-                    text);
+            List<Finding> r = TextScanner.standard().scan(text);
+            assertTrue(r.stream().noneMatch(f -> f.type() == FindingType.URL), text);
+            assertEquals(1, r.size(), text);
+            assertEquals(FindingType.PFAD, r.get(0).type(), text);
+            assertEquals("pfad-file-uri", r.get(0).source(), text);
+            assertTrue(text.toLowerCase().contains(r.get(0).originalValue().toLowerCase()), text);
+            assertTrue(r.get(0).originalValue().toLowerCase().startsWith("file:"), text);
         }
     }
 

@@ -999,7 +999,8 @@ class PathRecognizerUmgebungTest {
     @Test
     void alleFormenHabenQuelleMitPfadPraefix() {
         for (PathForm form : PathForm.values()) {
-            assertTrue(form.source().matches("pfad-[a-z]+"), form.name());
+            // T-16: pfad-file-uri (Plan TE-2) hat zwei Bindestriche; Format weiter [a-z][a-z0-9-]{0,31}
+            assertTrue(form.source().matches("pfad-[a-z]+(-[a-z]+)?"), form.name());
         }
     }
 

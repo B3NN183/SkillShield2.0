@@ -14,15 +14,16 @@ import java.util.Objects;
  * Fund vom Typ {@link FindingType#PFAD} geliefert; Programm-, Benutzer-, Server- und Ordnernamen darin sind damit
  * mitgeschützt.
  *
- * <p>Stand dieses Tasks (T-15): zehn Formen: {@link PathForm#LAUFWERK}, {@link PathForm#UNC},
+ * <p>Stand dieses Tasks (T-16): elf Formen: {@link PathForm#LAUFWERK}, {@link PathForm#UNC},
  * {@link PathForm#UNIX}, {@link PathForm#HOME} (auch {@code ~name/}), {@link PathForm#HOST_PFAD}
  * ({@code host.example:/export/home}), {@link PathForm#RELATIV} ({@code ./a}, {@code ../a}),
  * {@link PathForm#EINZEL_BACKSLASH} (ein führender Backslash, mindestens zwei Segmente),
  * {@link PathForm#BENUTZER_WURZEL} ({@code Users\erika\x}, {@code Benutzer\erika}) und
  * {@link PathForm#WURZEL_ZWEI_SEGMENTE} ({@code home/erika/x}, {@code Benutzer/erika/x}) und
- * {@link PathForm#UMGEBUNG} ({@code %APPDATA%\x}, {@code $HOME/x}, {@code %~dp0..\x}) mit Anführungszeichenregel;
- * die weitere Form folgt mit dem Folgetask, ohne dass sich Läufe, Ende und Segmentzählung ändern. Für Laufwerks-,
- * UNC-, Host- und Umgebungs-Pfade gilt keine Startgrenze (Text direkt davor verhindert den Fund nicht). Alle anderen
+ * {@link PathForm#UMGEBUNG} ({@code %APPDATA%\x}, {@code $HOME/x}, {@code %~dp0..\x}) und
+ * {@link PathForm#FILE_URI} ({@code file:///C:/x}, {@code file:/home/erika/a.txt}, {@code file:C:\x}) mit
+ * Anführungszeichenregel; Läufe, Ende und Segmentzählung sind allen Formen gemeinsam. Für Laufwerks-, UNC-, Host-,
+ * Umgebungs- und {@code file:}-Pfade gilt keine Startgrenze (Text direkt davor verhindert den Fund nicht). Alle anderen
  * Formen beginnen nur an einer Startgrenze ({@link PathForm#isStartBoundary(String, int)}, in der Regel
  * {@link PathChars#isStartBoundary}; bei RELATIV und den beiden Wurzel-Formen zusätzlich nach {@code :}), weil
  * {@code /}, {@code .} und der Backslash in gewöhnlichem Text häufig sind ({@code und/oder}, {@code km/h},
@@ -32,7 +33,14 @@ import java.util.Objects;
  * Durchlauf mit allen Formen und je einem Durchlauf mit nur einer Form
  * ({@link #detectWithoutQuotes(String, PathForm[])}); eine später hinzukommende Form macht den Fund einer bisherigen
  * Form daher nie kleiner (ein Lauf liefert sonst höchstens einen Fund, und der Fund einer früher beginnenden Form
- * kann am Ende kürzer sein).
+ * kann am Ende kürzer sein). Seit T-16 gilt die Garantie für HOST_PFAD in der Abdeckung, nicht in der Formzuordnung:
+ * Der Lauf {@code file} vor {@code :/} ist kein Host-Kopf mehr, die Form FILE_URI deckt {@code file:/...} dafür ab
+ * (Quelle {@code pfad-file-uri}, Konfidenz 0.95 statt 0.80 oder 0.90), mit einer bekannten Grenze (Plan Nachtrag T-16
+ * Punkt 6): Beginnt im selben Lauf weiter vorn ein FILE_URI-Fund, entsteht für ein späteres {@code file:/...} kein
+ * eigener Kandidat mehr, und die Klammerzählung ab dem früheren Start kann eine schließende Klammer am Fundende samt
+ * davor stehenden Kürzungszeichen aus dem Fund nehmen ({@code FILE:\\a)file:/b(c)}: bis T-15 Abdeckung bis
+ * einschließlich der letzten {@code )}, seit T-16 ohne sie). Betroffen sind nur schließende Klammern
+ * ({@code )}, {@code ]} und die geschweifte Klammer zu) und Kürzungszeichen, nie ein Pfadbestandteil.
  *
  * <p><b>Anführungszeichen (T-11).</b> Zusätzlich zum Durchlauf nach den folgenden Absätzen wird jedes
  * Anführungszeichen (die 13 Arten aus {@link PathChars#quoteKind}) immer als öffnendes probiert und mit dem nächsten
@@ -57,7 +65,8 @@ import java.util.Objects;
  * Laufende und wird dann am Ende gekürzt. Ein Lauf liefert höchstens einen Fund, auch wenn er mehrere Pfade enthält
  * ({@code C:\a;C:\b}: ein Fund). Bei Formen ohne Startgrenze beginnt der Fund am Kopf selbst: {@code Pfad:C:\x},
  * {@code abcC:\x} und {@code .....C:\x} ergeben den Fund ab dem Laufwerksbuchstaben, {@code Pfad:/etc/hosts} ab dem
- * Host-Lauf {@code Pfad} ({@link PathForm#HOST_PFAD}).
+ * Host-Lauf {@code Pfad} ({@link PathForm#HOST_PFAD}); {@code Pfad:file:///C:/x} und {@code profile:///C:/x} ergeben
+ * den Fund ab dem {@code f} von {@code file:} ({@link PathForm#FILE_URI}, der ganze Ausdruck samt {@code file:///}).
  *
  * <p><b>Kürzung am Ende.</b> Von hinten werden wiederholt entfernt: {@code . , ; : ! ?} und {@code '}; ferner
  * schließende runde, eckige und geschweifte Klammern nur, wenn der Fund (ab seinem Beginn gezählt) mehr schließende
@@ -65,9 +74,9 @@ import java.util.Objects;
  * verliert die Klammer). {@code *} und ein abschließender Trenner bleiben im Fund.
  *
  * <p><b>Segmente und Konfidenz.</b> Hinter dem Kopf müssen nach der Kürzung mindestens so viele Segmente (nichtleere
- * Folgen von Nicht-Trennern) stehen, wie die Form verlangt (Laufwerk, UNC, Home, Host, relativ, Umgebung und
- * Benutzer-Wurzel {@code Users\}, {@code Users/}, {@code Benutzer\}: eines; Unix, Einzel-Backslash, {@code home/} und
- * {@code Benutzer/}: zwei). Die Prüfung geschieht mit der Zahl NACH der Kürzung: Die vorab berechnete
+ * Folgen von Nicht-Trennern) stehen, wie die Form verlangt (Laufwerk, UNC, Home, Host, relativ, Umgebung,
+ * {@code file:} und Benutzer-Wurzel {@code Users\}, {@code Users/}, {@code Benutzer\}: eines; Unix, Einzel-Backslash,
+ * {@code home/} und {@code Benutzer/}: zwei). Die Prüfung geschieht mit der Zahl NACH der Kürzung: Die vorab berechnete
  * (pessimistische) Zahl ist höchstens um eines kleiner, denn hinter dem pessimistischen Ende stehen nur Satzzeichen und
  * schließende Klammern, und davon bildet höchstens ein Block direkt hinter einem Trenner ein weiteres Segment
  * ({@code /opt(/)} hat zwei Segmente, {@code opt(} und {@code )}). Fehlt der pessimistischen Zahl genau eines und
@@ -80,60 +89,88 @@ import java.util.Objects;
  * (amortisiert) O(1) als Beginn geprüft, die Kürzung läuft einmal je Fund über dessen Lauf; danach springt der
  * Durchlauf ans Laufende. Der Kopf einer Form liest nur eine feste, kleine Zahl von Zeichen in der Umgebung der
  * Position, nie Servernamen, Freigabe oder Segmente (deren Anzahl liefern die Laufdaten in O(1)). Die Belege je Form
- * (UNC, HOME, HOST_PFAD, UMGEBUNG) stehen im Javadoc der Form: UNIX, LAUFWERK, RELATIV, EINZEL_BACKSLASH,
- * BENUTZER_WURZEL (höchstens 9 Zeichen) und WURZEL_ZWEI_SEGMENTE (höchstens 15 Zeichen) prüfen nur wenige Zeichen,
- * UNC liest den Backslash-Lauf nur an dessen erstem Backslash, HOME liest höchstens 66 Zeichen je Tilde in nicht
+ * (UNC, HOME, HOST_PFAD, UMGEBUNG, FILE_URI) stehen im Javadoc der Form: UNIX, LAUFWERK, RELATIV, EINZEL_BACKSLASH,
+ * BENUTZER_WURZEL (höchstens 9 Zeichen) und WURZEL_ZWEI_SEGMENTE (höchstens 15 Zeichen) prüfen nur wenige Zeichen, UNC
+ * liest den Backslash-Lauf nur an dessen erstem Backslash, HOME liest höchstens 66 Zeichen je Tilde in nicht
  * überlappenden Abschnitten, HOST_PFAD liest höchstens 64 Zeichen je {@code :/}-Stelle (O(64 n)), UMGEBUNG höchstens
  * 265 Zeichen je {@code %}-, {@code $}- oder {@code !}-Stelle (O(265 n); die Abschnitte benachbarter Köpfe dürfen sich
- * überlappen). Die Zählung nach der Kürzung (siehe Segmente) kostet O(Lauflänge) und läuft nur für Köpfe, deren
- * pessimistische Zahl genau eines unter der Mindestzahl liegt und hinter denen ein Klammer-Segment möglich ist. Das
- * sind je Lauf höchstens eine Handvoll Köpfe: Köpfe der Formen LAUFWERK, UNIX, HOME, HOST_PFAD, RELATIV,
- * BENUTZER_WURZEL, WURZEL_ZWEI_SEGMENTE und UMGEBUNG enden mit einem Trenner. Zwischen dem Kopfende und dem Beginn
- * des nächsten Kopfes derselben Form liegt ein Segmentanfang: Der nächste Kopf beginnt mit einem Nicht-Trenner, bei
- * UNIX steht wegen der Startgrenze vor seinem Trenner ein Nicht-Trenner (für UMGEBUNG gilt das nur für Köpfe mit
- * verschiedenem Kopfende, siehe unten). Bei EINZEL_BACKSLASH ist das Kopfende selbst ein Segmentanfang (das Zeichen
- * hinter dem Backslash ist kein Trenner). Ein solcher Segmentanfang kann im abschließenden Satzzeichen-Bereich hinter
- * {@code tail} liegen (bei EINZEL_BACKSLASH das Kopfende des letzten Kopfes, etwa bei {@code \a\.}) und ist dann in
- * den Laufdaten nicht enthalten; ein Kopf selbst liegt aber immer vor {@code tail}. Deshalb haben nur die letzten
- * zwei Köpfe je Lauf (Mindestzahl höchstens zwei) einen Segmentanfang weniger in den Laufdaten und werden
- * nachgezählt; jeder Kopf mit mindestens zwei späteren Köpfen derselben Form hat die Mindestzahl an Segmenten und
- * wird ohne Zählung angenommen. UMGEBUNG (Mindestzahl eins) ist die Ausnahme von "ein Kopf pro Kopfende": Köpfe
- * dieser Form können sich überlappen ({@code %a%%b%\x}: Köpfe ab {@code %a%} und ab {@code %b%};
- * {@code %~dp0%~dp0\x}: ein Batch-Kopf kann bis zu 64 Zeichen Rest vor seinem Trenner enthalten). Überlappende Köpfe
- * haben dasselbe Kopfende: Kein Kopf enthält vor seinem Trenner einen Trenner, und ein innerer Kopf beginnt mit
- * {@code %}, {@code $} oder {@code !} und endet am ersten Trenner hinter seinem Beginn; ein {@code %}-, {@code $}-
- * oder {@code !}-Zeichen im Inneren eines Kopfes liegt entweder in einem Batch-Rest oder ist das öffnende {@code %}
- * einer späteren Gruppe der Kette (ein schließendes {@code %} ist von einem {@code %} oder dem Trenner gefolgt, ein
- * schließendes {@code !} vom Trenner; beide eröffnen keinen Kopf, denn ein Name beginnt mit einem Buchstaben oder
- * {@code _}). Köpfe mit verschiedenem Kopfende überlappen daher nicht, und zwischen ihnen liegt ein Segmentanfang;
- * ein Kopf, hinter dessen Ende ein Kopf mit späterem Ende beginnt, hat damit mindestens ein Segment und wird ohne
- * Zählung angenommen. Nachgezählt werden nur die Köpfe mit dem letzten Kopfende E des Laufs; es sind höchstens 28.
- * Herleitung: (1) Ein Batch-Kopf mit Ende E besteht aus {@code %~}, höchstens acht Modifikatoren, einer Ziffer,
- * höchstens 64 Restzeichen und dem Trenner an E-1; er beginnt höchstens bei E-4. Der früheste solche Kopf mit m
- * Modifikatoren beginnt frühestens bei E-68-m. Jeder weitere beginnt im Inneren eines früheren, und dort steht ein
- * {@code %} nur im Rest, also frühestens drei Zeichen plus m hinter dem Beginn des früheren (die Tilde, die
- * Modifikatoren und die Ziffer sind kein {@code %}); die weiteren Köpfe liegen daher in E-65 bis E-4 mit Abstand
- * mindestens drei, das sind höchstens 21, mit dem ersten höchstens 22. (2) Köpfe der Kette ({@code %NAME%}-Gruppen):
- * Alle beginnen im Inneren des frühesten von ihnen, also an einem öffnenden {@code %} einer seiner höchstens vier
- * Gruppen: höchstens 4. (3) Ein Kopf mit {@code $} enthält in seinem Inneren kein {@code $}; ein zweiter Kopf mit
- * {@code $} und demselben Ende müsste dort beginnen: höchstens 1. (4) Ebenso bei {@code !}: höchstens 1. Die Summe 22
- * plus 4 plus 1 plus 1 gleich 28 ist eine Schranke (die Summe der Einzelschranken, ohne dass sie zugleich erreicht
- * werden müssen); sie hängt nicht von der Textlänge ab. Köpfe verschiedener Formen können dasselbe Kopfende haben
- * (HOST_PFAD {@code ab:/} und LAUFWERK {@code b:/}); das vervielfacht die Zahl der Köpfe nur um einen konstanten
- * Faktor (höchstens die Zahl der Formen, bei UMGEBUNG höchstens 28 Köpfe je Kopfende). Der Gesamtaufwand bleibt O(n).
- * Eine neue Form mit dichten Köpfen muss das erneut belegen. Die Suche nach dem schließenden
- * Anführungszeichen endet spätestens am nächsten Zeichen derselben Art (jedes Zeichen schließt seine eigene Art). Je
- * Art sind die Bereiche der Paare daher paarweise disjunkt, und die Inhaltsprüfung liest jede Position je Art
- * höchstens einmal. Die Kopfprüfungen an diesen Positionen kosten je Art so viel, wie das Javadoc der jeweiligen Form
- * belegt (HOST_PFAD bis zu 64 Zeichen je {@code :/}-Stelle in überlappenden Abschnitten, HOME bis zu 66 Zeichen je
- * Tilde, UMGEBUNG bis zu 265 Zeichen je {@code %}-, {@code $}- oder {@code !}-Stelle in überlappenden Abschnitten),
- * insgesamt O(13 mal 265 mal n); keine Rekursion. Die Funde der Paare entstehen nicht unbedingt in
- * Startreihenfolge (Paare verschiedener Arten verschachteln sich, und der erste gültige Kopf hängt vom Ende des
- * Paars und von der Mindestsegmentzahl der Form ab) und werden deshalb einmal nach Start sortiert. Jede Position
- * liegt in höchstens 13
- * Paar-Funden (einer je Art), die Teilstrings der Paar-Funde summieren sich daher auf höchstens 13 mal n Zeichen. Die
- * Vereinigung ist ein einziger Durchlauf über beide nach Start sortierten Listen, führt nur Zahlen mit und baut je
- * Ergebnis einen Fund.
+ * überlappen), FILE_URI höchstens 343 Zeichen je {@code file:} plus die Trenner-Läufe (insgesamt höchstens 74 n). Die
+ * Zählung nach der Kürzung (siehe Segmente) kostet O(Lauflänge) und läuft nur für Köpfe, deren pessimistische Zahl
+ * genau eines unter der Mindestzahl liegt und hinter denen ein Klammer-Segment möglich ist. Das sind je Lauf nur
+ * wenige Köpfe, höchstens eine feste Zahl (UMGEBUNG und FILE_URI siehe unten). Köpfe der Formen LAUFWERK, UNIX, HOME,
+ * HOST_PFAD, RELATIV, BENUTZER_WURZEL, WURZEL_ZWEI_SEGMENTE, UMGEBUNG und FILE_URI enden mit einem Trenner. Zwischen
+ * dem Kopfende und dem Beginn des nächsten Kopfes derselben Form liegt ein Segmentanfang: Der nächste
+ * Kopf beginnt mit einem Nicht-Trenner, bei UNIX steht wegen der Startgrenze vor seinem Trenner ein Nicht-Trenner (für
+ * UMGEBUNG und FILE_URI gilt das nur für Köpfe, die sich nicht überlappen, siehe unten). Bei UNC und
+ * EINZEL_BACKSLASH ist das Kopfende selbst ein Segmentanfang (das Zeichen hinter dem Backslash-Lauf bzw. dem Backslash
+ * ist kein Trenner). Ein solcher Segmentanfang kann im abschließenden Satzzeichen-Bereich hinter {@code tail} liegen
+ * (bei EINZEL_BACKSLASH das Kopfende des letzten Kopfes, etwa bei {@code \a\.}) und ist dann in den Laufdaten nicht
+ * enthalten; ein Kopf selbst liegt aber immer vor {@code tail}. Deshalb haben nur die letzten zwei Köpfe je Lauf
+ * (Mindestzahl höchstens zwei) einen Segmentanfang weniger in den Laufdaten und werden nachgezählt; jeder Kopf mit
+ * mindestens zwei späteren Köpfen derselben Form hat die Mindestzahl an Segmenten und wird ohne Zählung angenommen.
+ * UMGEBUNG und FILE_URI (Mindestzahl eins) sind die Ausnahmen von "ein Kopf pro Kopfende": Ihre Köpfe können sich
+ * überlappen. Für beide gilt eine eigene Herleitung (UMGEBUNG hier, FILE_URI weiter unten). UMGEBUNG ({@code %a%%b%\x}:
+ * Köpfe ab {@code %a%} und ab {@code %b%}; {@code %~dp0%~dp0\x}: ein Batch-Kopf kann bis zu 64 Zeichen Rest vor seinem
+ * Trenner enthalten): Überlappende UMGEBUNG-Köpfe haben dasselbe Kopfende. Kein UMGEBUNG-Kopf enthält vor seinem
+ * Trenner einen Trenner, und ein innerer Kopf beginnt mit {@code %}, {@code $} oder {@code !} und endet am ersten
+ * Trenner hinter seinem Beginn; ein {@code %}-, {@code $}- oder {@code !}-Zeichen im Inneren eines Kopfes liegt
+ * entweder in einem Batch-Rest oder ist das öffnende {@code %} einer späteren Gruppe der Kette (ein schließendes
+ * {@code %} ist von einem {@code %} oder dem Trenner gefolgt, ein schließendes {@code !} vom Trenner; beide eröffnen
+ * keinen Kopf, denn ein Name beginnt mit einem Buchstaben oder {@code _}). UMGEBUNG-Köpfe mit verschiedenem Kopfende
+ * überlappen daher nicht, und zwischen ihnen liegt ein Segmentanfang; ein Kopf, hinter dessen Ende ein UMGEBUNG-Kopf
+ * mit späterem Ende beginnt, hat damit mindestens ein Segment und wird ohne Zählung angenommen. Nachgezählt werden
+ * von UMGEBUNG nur die Köpfe mit dem letzten Kopfende E des Laufs; es sind höchstens 28. Herleitung: (1) Ein
+ * Batch-Kopf mit Ende E besteht aus {@code %~}, höchstens acht Modifikatoren, einer Ziffer, höchstens 64 Restzeichen
+ * und dem Trenner an E-1; er beginnt höchstens bei E-4. Der früheste solche Kopf mit m Modifikatoren beginnt frühestens
+ * bei E-68-m. Jeder weitere beginnt im Inneren eines früheren, und dort steht ein {@code %} nur im Rest, also
+ * frühestens drei Zeichen plus m hinter dem Beginn des früheren (die Tilde, die Modifikatoren und die Ziffer sind kein
+ * {@code %}); die weiteren Köpfe liegen daher in E-65 bis E-4 mit Abstand mindestens drei, das sind höchstens 21, mit
+ * dem ersten höchstens 22. (2) Köpfe der Kette ({@code %NAME%}-Gruppen): Alle beginnen im Inneren des frühesten von
+ * ihnen, also an einem öffnenden {@code %} einer seiner höchstens vier Gruppen: höchstens 4. (3) Ein Kopf mit {@code $}
+ * enthält in seinem Inneren kein {@code $}; ein zweiter Kopf mit {@code $} und demselben Ende müsste dort beginnen:
+ * höchstens 1. (4) Ebenso bei {@code !}: höchstens 1. Die Summe 22 plus 4 plus 1 plus 1 gleich 28 ist eine Schranke
+ * (die Summe der Einzelschranken, ohne dass sie zugleich erreicht werden müssen); sie hängt nicht von der Textlänge ab.
+ * Köpfe verschiedener Formen können dasselbe Kopfende haben (HOST_PFAD {@code ab:/} und LAUFWERK {@code b:/}); das
+ * vervielfacht die Zahl der Köpfe nur um einen konstanten Faktor (höchstens die Zahl der Formen; bei UMGEBUNG höchstens
+ * 28 nachgezählte Köpfe je Lauf, bei FILE_URI höchstens 53, siehe unten). Der Gesamtaufwand bleibt O(n). FILE_URI
+ * (Mindestzahl eins): Auch hier enden alle Köpfe mit einem Trenner. Ein Kopf beginnt mit {@code f}, besteht bis zu
+ * seinem ersten Trenner q nur aus Nicht-Trennern ({@code file:} und, bei einem Pfadkopf dahinter, dessen Zeichen vor
+ * dem Trenner) und endet hinter q: bei einem Trenner-Lauf hinter dem ganzen Lauf, bei einem Pfadkopf der Form
+ * LAUFWERK, RELATIV, HOME oder UMGEBUNG (er beginnt unmittelbar hinter {@code file:}) unmittelbar hinter q. Auch
+ * FILE_URI-Köpfe können sich überlappen, und zwar nur so: Ein innerer Kopf beginnt im Rest eines Batch-Parameters des
+ * äußeren ({@code file:%~dp0file:///.}: der äußere Kopf ist {@code file:} plus der Batch-Kopf {@code %~dp0file:/} und
+ * endet bei 16; der innere beginnt bei 10, ist {@code file:} plus der Trenner-Lauf {@code ///} und endet bei 18).
+ * Denn ein innerer Kopf beginnt mit {@code f}, also nicht in einem Trenner-Lauf und nicht in {@code file:} selbst (das
+ * Wort hat keinen Rand), und sein {@code file:} enthält ein {@code :} und ist fünf Zeichen lang: In einem
+ * LAUFWERK- oder RELATIV-Kopf (höchstens drei Zeichen) hat es keinen Platz, in einem Namen von HOME oder in einem
+ * UMGEBUNG-Kopf außerhalb des Batch-Rests ebenso nicht (diese Teile enthalten kein {@code :}; das einzige {@code :}
+ * liegt in {@code env:} hinter {@code env}, nicht hinter {@code file}). Nur der Batch-Rest (höchstens 64 Zeichen ohne
+ * Trenner und Endzeichen) kann {@code file:} enthalten. Überlappende Köpfe haben denselben ersten Trenner q: Der
+ * innere beginnt vor dem q des äußeren (ein Kopf beginnt nicht mit einem Trenner), und bis q steht kein Trenner. Ihre
+ * Kopfenden können verschieden sein (im Beispiel 16 und 18). Köpfe mit verschiedenem q überlappen daher nicht, und
+ * zwischen ihnen liegt ein Segmentanfang (der spätere beginnt mit einem Nicht-Trenner hinter dem Trenner am Ende des
+ * früheren); ein Kopf, hinter dessen Ende ein weiterer Kopf beginnt, hat damit mindestens ein Segment und wird ohne
+ * Zählung angenommen. Nachgezählt wird nur ein Kopf mit Ende E, hinter dem bis {@code tail} nur Trenner stehen (sonst
+ * beginnt dort ein Segment, denn vor dem Ende steht ein Trenner; es gilt E höchstens {@code tail}). Der Trenner-Block
+ * B, der an {@code tail} endet, enthält dann E-1 und damit q (zwischen q und E-1 stehen nur Trenner), und vor q steht
+ * ein Nicht-Trenner: q ist das erste Zeichen von B. Alle nachgezählten Köpfe haben also dasselbe q. Ihre Anfänge
+ * liegen zwischen q-269 und q-5: Ein Pfadkopf hat höchstens 265 Zeichen (vier {@code %NAME%}-Gruppen zu je höchstens
+ * 66 Zeichen und der Trenner), der Kopf bis einschließlich q also höchstens 270 Zeichen, und bei einem Trenner-Lauf
+ * liegt q genau fünf Zeichen hinter dem Anfang. Zwei Anfänge liegen mindestens fünf Zeichen auseinander ({@code
+ * file:} hat keinen Rand): Das sind höchstens 53 Köpfe (265 Positionen, Abstand mindestens fünf), und die Zählung
+ * kostet je Kopf O(Lauflänge), zusammen höchstens 53 mal die Lauflänge je Durchlauf. Eine neue Form mit dichten Köpfen
+ * muss das erneut belegen. Die Suche nach dem schließenden Anführungszeichen endet spätestens am nächsten Zeichen
+ * derselben Art (jedes Zeichen schließt seine eigene Art). Je Art sind die Bereiche der Paare daher
+ * paarweise disjunkt, und die Inhaltsprüfung liest jede Position je Art höchstens einmal. Die Kopfprüfungen an diesen
+ * Positionen kosten je Art so viel, wie das Javadoc der jeweiligen Form belegt (HOST_PFAD bis zu 64 Zeichen je {@code
+ * :/}-Stelle in überlappenden Abschnitten, HOME bis zu 66 Zeichen je Tilde, UMGEBUNG bis zu 265 Zeichen je {@code %}-,
+ * {@code $}- oder {@code !}-Stelle in überlappenden Abschnitten, FILE_URI bis zu 343 Zeichen je {@code file:} und die
+ * Trenner-Läufe dahinter; höchstens 74 n je Art), insgesamt linear; keine Rekursion. Die Funde der Paare
+ * entstehen nicht unbedingt in Startreihenfolge (Paare verschiedener Arten verschachteln sich, und der erste gültige
+ * Kopf hängt vom Ende des Paars und von der Mindestsegmentzahl der Form ab) und werden deshalb einmal nach Start
+ * sortiert. Jede Position liegt in höchstens 13 Paar-Funden (einer je Art), die Teilstrings der Paar-Funde
+ * summieren sich daher auf höchstens 13 mal n Zeichen. Die Vereinigung ist ein einziger Durchlauf über beide nach
+ * Start sortierten Listen, führt nur Zahlen mit und baut je Ergebnis einen Fund.
  *
  * <p>Unicode: Alle Kopf-, Trenner-, Kürzungs- und Endzeichen sind BMP-Zeichen außerhalb der Surrogatbereiche; ein
  * Fund beginnt daher nie in einem Surrogatpaar und endet nie zwischen Grundzeichen und kombinierendem Zeichen.
@@ -360,7 +397,7 @@ public final class PathRecognizer implements Recognizer {
      * einer früher beginnenden Form (UNC vor einem Laufwerkskopf im selben Lauf) kann am Ende kürzer ausfallen, weil
      * die Klammerzählung früher beginnt. Ohne die Vereinigung könnte so der Fund einer einzelnen Form durch eine
      * andere Form kleiner werden. Der Aufwand sind (Formzahl + 1) lineare Durchläufe: einer mit allen Formen und je
-     * einer je Form (derzeit zehn Formen, also elf Durchläufe).
+     * einer je Form (derzeit elf Formen, also zwölf Durchläufe).
      */
     List<Finding> detectWithoutQuotes(String text, PathForm[] forms) {
         Objects.requireNonNull(text, "text");

@@ -5,9 +5,8 @@ package de.skillshield.core.recognizer.general;
  * Kopf, Mindestzahl an Segmenten, Konfidenz und Quelle; Laufzerlegung, Ende, Klammerregel und Segmentzählung sind
  * allen Formen gemeinsam und liegen im Erkenner. Bisher vorhanden: {@link #LAUFWERK}, {@link #UNC}, {@link #UNIX},
  * {@link #HOME}, {@link #HOST_PFAD}, {@link #RELATIV}, {@link #EINZEL_BACKSLASH}, {@link #BENUTZER_WURZEL},
- * {@link #WURZEL_ZWEI_SEGMENTE} und {@link #UMGEBUNG}; die weitere Form ({@code file:}) kommt mit dem Folgetask als
- * zusätzliche Konstante. Welche Position als Beginn eines Kopfes zulässig ist, entscheidet je Form
- * {@link #isStartBoundary(String, int)}.
+ * {@link #WURZEL_ZWEI_SEGMENTE}, {@link #UMGEBUNG} und (seit T-16) {@link #FILE_URI}. Welche Position als Beginn eines
+ * Kopfes zulässig ist, entscheidet je Form {@link #isStartBoundary(String, int)}.
  *
  * <p>Laufzeit: Der Erkenner prüft jede Position eines Laufs einmal als Beginn; im Zitat-Pfad ruft die Inhaltsprüfung
  * die Kopfprüfung an jeder Inhaltsposition je Art auf (siehe das Klassen-Javadoc von {@code PathRecognizer}). Den
@@ -242,6 +241,21 @@ enum PathForm {
      * bei Teilüberlappung mit einem Zitat {@code pfad-host} statt {@code zusammengelegt}). Der Schutz bleibt: der
      * Laufwerkskopf {@code s:/} deckt das Schema ab dem letzten Buchstaben ab wie bisher.
      *
+     * <p>Eigene Entscheidung (T-16, Plan-Abweichung): Besteht der Host-Lauf genau aus {@code file} (ASCII, Groß- und
+     * Kleinschreibung egal, Lauf vom Wortanfang bis {@code :/}), ist es kein Kopf dieser Form: {@code file:} gehört der
+     * Form {@link #FILE_URI}. Sonst hätten {@code file:/home/erika/a.txt} und {@code file:///x} am selben Start zwei
+     * Formen, und die Konfidenzregel beim Zusammenlegen (Plan 7a (i): Funde desselben Starts haben dieselbe Form)
+     * gälte nicht mehr. FILE_URI deckt, was Host für {@code file:/...} abdeckte (Kopf {@code file:} mit mindestens
+     * einem Trenner, mindestens ein Segment dahinter, Ende und Klammerzählung ab {@code f}); die Quelle des Fundes
+     * wechselt von {@code pfad-host} zu {@code pfad-file-uri}, die Konfidenz steigt auf 0.95. Eine Ausnahme gibt es
+     * (bekannte Grenze, Plan Nachtrag T-16 Punkt 6): Beginnt im selben Lauf weiter vorn ein FILE_URI-Fund, entsteht
+     * für ein späteres {@code file:/...} kein eigener Kandidat mehr, und die Klammerzählung ab dem früheren Start kann
+     * eine schließende Klammer am Fundende samt davor stehenden Kürzungszeichen aus dem Fund nehmen
+     * ({@code FILE:\\a)file:/b(c)}: bis T-15 war die letzte {@code )} abgedeckt, seit T-16 nicht). Betroffen sind nur
+     * schließende Klammern ({@code )}, {@code ]} und die geschweifte Klammer zu) und Kürzungszeichen, nie ein
+     * Pfadbestandteil. Läufe, die {@code file} nur enthalten ({@code xfile:/a/b}, {@code .file:/a/b},
+     * {@code profile:/a/b}), sind weiter Host-Funde ab dem Laufanfang.
+     *
      * <p>Ein Lauf aus genau einem Zeichen ({@code C:/x}) ist die Form {@link #LAUFWERK}: gleicher Start, gleiche
      * Abdeckung, Konfidenz 0.95; diese Form lässt ihn aus, damit der Fund unverändert {@code pfad-laufwerk} mit 0.95
      * bleibt. Beginnt der Host-Lauf früher als der Laufwerkskopf ({@code host.example:/export/home} mit dem
@@ -266,8 +280,9 @@ enum PathForm {
      *       {@code :/}-Stelle.</li>
      * </ul>
      * Der Gesamtaufwand der Kopfprüfungen ist damit höchstens n (Wortanfänge) plus 64 mal die Zahl der
-     * {@code :/}-Stellen (höchstens n/2), also O(64 n), linear in der Textlänge. Ein Fund beginnt immer an einem
-     * ASCII-Zeichen (kein Surrogat, keine Kombinationsfolge).
+     * {@code :/}-Stellen (höchstens n/2), also O(64 n), linear in der Textlänge. Der Vergleich auf {@code file} (T-16)
+     * liest nur Zeichen des Host-Laufs, die die Prüfung ohnehin schon gelesen hat (genau vier), und ändert die
+     * Schranken nicht. Ein Fund beginnt immer an einem ASCII-Zeichen (kein Surrogat, keine Kombinationsfolge).
      */
     HOST_PFAD {
         @Override
@@ -306,6 +321,9 @@ enum PathForm {
             }
             if (colon + 2 < n && text.charAt(colon + 2) == '/') {
                 return -1; // "://": Adresse (URL, file:), nicht scp-Schreibweise
+            }
+            if (colon - i == FILE_SCHEME.length() && PathChars.matchesAsciiIgnoreCase(text, i, FILE_SCHEME)) {
+                return -1; // Lauf genau "file": Kopf der Form FILE_URI (T-16), nicht scp-Schreibweise
             }
             return colon + 2;
         }
@@ -701,6 +719,112 @@ enum PathForm {
         String source() {
             return "pfad-umgebung";
         }
+    },
+
+    /**
+     * Adresse mit Schema {@code file} (Plan 2.4.2 Zeile FILE_URI, OF-8, AK-24 (e), TE-16): Der Fund ist der GANZE
+     * Ausdruck ab dem {@code f} von {@code file:}, einschließlich {@code file:///} und aller Trenner dahinter, Typ
+     * PFAD ({@code file:///C:/Tools/BeispielTool/tool.exe}, {@code file://srv-beispiel/freigabe/x},
+     * {@code file:/home/erika/a.txt}, {@code FILE:///opt/x/y}). Es entsteht weder ein URL-Fund (der URL-Erkenner kennt
+     * das Schema {@code file} nicht) noch bleibt {@code fil} sichtbar, wie es der Laufwerkskopf {@code e:/} bis T-16
+     * hinterließ. Nichts wird geöffnet oder aufgelöst; die Adresse ist nur Text.
+     *
+     * <p>Kopf: {@code file:} (ASCII, Groß- und Kleinschreibung egal), danach entweder
+     * <ul>
+     *   <li>ein Lauf aus mindestens einem Trenner ({@code /} oder {@code \}, beliebig gemischt: {@code file:/},
+     *       {@code file://}, {@code file:///}, {@code file:\\}, {@code file:///\\}); der Kopf endet hinter dem
+     *       letzten Trenner des Laufs, oder</li>
+     *   <li>(eigene Entscheidung, Grundsatz "möglichst viel schützen") ohne Trenner, wenn direkt dahinter ein Kopf der
+     *       Formen {@link #LAUFWERK}, {@link #RELATIV}, {@link #HOME} oder {@link #UMGEBUNG} beginnt
+     *       ({@code file:C:\x}, {@code file:C:/x}, {@code file:./a}, {@code file:..\x}, {@code file:~/x},
+     *       {@code file:%USERPROFILE%/x}); der Kopf endet dann hinter dem Kopf dieser Form, also hinter dessen
+     *       Trenner ({@code file:C:\}, {@code file:./}, {@code file:~/}, {@code file:%USERPROFILE%/}). Ohne diese
+     *       Variante bliebe {@code file:} vor dem Fund der anderen Form sichtbar.</li>
+     * </ul>
+     * Keine Startgrenze (eigene Entscheidung, wie bei {@link #LAUFWERK}): {@code siehe:file:///C:/x},
+     * {@code x=file:///C:/x} und {@code (file:///C:/x)} sind Funde ab {@code f}. Das gilt auch für Wörter, die auf
+     * {@code file} enden: bei {@code profile:///C:/x} beginnt der Fund am {@code f}, davor stehende Buchstaben bleiben
+     * sichtbar ({@code pro}); bis T-16 blieb dort mehr sichtbar ({@code profil} vor {@code e:///}). Bei
+     * {@code xfile:/a/b} beginnt der Host-Fund (Lauf {@code xfile} bis {@code :/}) früher und umfasst den
+     * FILE_URI-Fund; die Konfidenz ist dann die des früheren Fundes (Plan 7a (iii)).
+     *
+     * <p>Mindestens ein Segment hinter dem Kopf, Konfidenz konstant 0.95 (sicher, Plan N-3), Quelle
+     * {@code pfad-file-uri} (TE-2). Kein Fund: {@code file:}, {@code file:///} (kein Segment), {@code file:foo}
+     * (kein Trenner, kein Pfadkopf), {@code file:C:} und {@code file:C:\} ohne Segment dahinter,
+     * {@code file:./} und {@code file: /x} (Leerzeichen beendet den Lauf).
+     *
+     * <p>Eigene Entscheidung (Plan-Abweichung): Der Plan verlangt zwei Segmente und nennt {@code file:///C:/} und
+     * {@code profile:///x} als Negativbeispiele. Ein Segment genügt hier, weil Host-Funde für {@code file:/x} (ein
+     * Segment, Konfidenz 0.80) bis T-16 existierten und die Obermengen-Garantie sie verlangt; {@code file:///C:/}
+     * (Segment {@code C:}), {@code file:///etc}, {@code file://srv-beispiel} (nur der Servername) und
+     * {@code profile:///x} (Fund ab {@code file:}) sind damit ebenfalls Funde mit Konfidenz 0.95. Bis T-16 waren die
+     * ersten drei schon Laufwerksfunde ab {@code e:/} mit 0.95; die Konfidenz sinkt nirgends (für {@code file:/x}
+     * steigt sie von 0.80 auf 0.95). Die Konfidenz ist konstant und damit in der Segmentzahl monoton nicht fallend
+     * (Vertrag, Plan 7a (i)).
+     *
+     * <p>Zitat: Im Anführungszeichen-Pfad ist der Fund der Inhalt ab {@code file:} bis zum schließenden Zeichen, auch
+     * mit Leerzeichen ({@code "file:///C:/Mein Ordner/a.txt"}). Query und Fragment ({@code ?x=1}, {@code #abschnitt})
+     * gehören zum Lauf und damit zum Fund; kodierte Leerzeichen ({@code %20}) ebenso. Ende und Kürzung wie bei allen
+     * Formen (Plan 2.4.1).
+     *
+     * <p><b>Laufzeit des Kopfs (linear).</b> An einer Position ohne {@code file:} liest {@code headEnd} höchstens
+     * fünf Zeichen (das Zeichen an {@code i + 4}, dann höchstens vier). Steht dort {@code file:}, liest die Prüfung
+     * zusätzlich das Zeichen hinter {@code file:} (der Trenner-Lauf endet am ersten Nicht-Trenner) und, wenn dort kein
+     * Trenner steht, den Kopf der Formen {@link #LAUFWERK}, {@link #RELATIV}, {@link #HOME} und {@link #UMGEBUNG}.
+     * Diese vier Formen werden nacheinander probiert, ihre Lesungen addieren sich daher: höchstens 3 plus 3 plus 66
+     * plus 265, zusammen 337 Zeichen. Mit den fünf Zeichen von {@code file:} und dem einen Zeichen dahinter sind das
+     * höchstens 343 Zeichen je Vorkommen. Steht hinter {@code file:} ein Trenner, kommen die weiteren Trenner des
+     * Laufs hinzu und kein Kopf einer der vier Formen wird gelesen. Die Trenner-Läufe zweier Vorkommen sind disjunkt:
+     * Zwei Vorkommen von {@code file:} beginnen mindestens fünf Zeichen auseinander (das Wort hat keinen Rand: kein
+     * echtes Präfix ist zugleich Suffix), und das {@code f} des späteren ist ein Nicht-Trenner, der den Lauf des
+     * früheren spätestens beendet; alle Trenner-Läufe zusammen sind höchstens n Zeichen. Mit k Vorkommen (k höchstens
+     * n/5) ist der Aufwand je Durchlauf höchstens 5 mal (n minus k) für die Positionen ohne {@code file:}, 343 mal k
+     * für die Vorkommen und n für die Trenner-Läufe, also 6 n plus 338 k, mit k höchstens n/5 höchstens 6 n plus 67,6 n
+     * gleich 73,6 n und damit höchstens 74 n. Im Zitat-Pfad ist es höchstens das 13-fache, weil die Inhaltsprüfung je
+     * Art jede Position höchstens einmal liest und der Trenner-Lauf spätestens am schließenden Zeichen endet (das kein
+     * Trenner ist). Proben: {@code f} mal n (je Position höchstens fünf Zeichen), {@code file:} mal n (kein Trenner,
+     * der Kopf dahinter scheitert an {@code f} nach wenigen Zeichen), {@code file:/} mal n und {@code file://} mal n
+     * (je Kopf ein bis zwei Trenner; ein Fund über den ganzen Lauf), {@code file:} gefolgt von n
+     * Trennern ohne Segment (ein Lesen über n Zeichen; an den Trennern beginnt kein Kopf dieser Form, je Position O(1))
+     * und {@code "file:///"} mal n (Zitate).
+     */
+    FILE_URI {
+        @Override
+        int headEnd(String text, int i) {
+            int n = text.length();
+            if (i + FILE_HEAD_LENGTH > n || text.charAt(i + FILE_SCHEME.length()) != ':'
+                    || !PathChars.matchesAsciiIgnoreCase(text, i, FILE_SCHEME)) {
+                return -1;
+            }
+            int j = i + FILE_HEAD_LENGTH;
+            while (j < n && PathChars.isSeparator(text.charAt(j))) {
+                j++;
+            }
+            if (j > i + FILE_HEAD_LENGTH) {
+                return j;
+            }
+            return j < n ? pathHeadEnd(text, j) : -1;
+        }
+
+        @Override
+        boolean isStartBoundary(String text, int i) {
+            return true;
+        }
+
+        @Override
+        int minSegments() {
+            return 1;
+        }
+
+        @Override
+        double confidence(int headLength, int segmentsCappedAt3) {
+            return CONFIDENCE_SURE;
+        }
+
+        @Override
+        String source() {
+            return "pfad-file-uri";
+        }
     };
 
     /**
@@ -850,6 +974,24 @@ enum PathForm {
         return pos < text.length() && PathChars.isSeparator(text.charAt(pos)) ? pos + 1 : -1;
     }
 
+    /** Schema der Form {@link #FILE_URI} (ASCII, Groß- und Kleinschreibung egal); der Kopf ist es plus {@code :}. */
+    private static final String FILE_SCHEME = "file";
+
+    /** Länge von {@code file:}. */
+    private static final int FILE_HEAD_LENGTH = FILE_SCHEME.length() + 1;
+
+    /**
+     * Ende des Kopfes der Formen LAUFWERK, RELATIV, HOME oder UMGEBUNG, der an {@code i} beginnt (Kopf von
+     * {@link #FILE_URI} ohne Trenner hinter {@code file:}), oder -1. Alle diese Köpfe enden mit einem Trenner. Liest
+     * höchstens 3 plus 3 plus 66 plus 265 Zeichen ab {@code i}.
+     */
+    private static int pathHeadEnd(String text, int i) {
+        int end = LAUFWERK.headEnd(text, i);
+        end = end >= 0 ? end : RELATIV.headEnd(text, i);
+        end = end >= 0 ? end : HOME.headEnd(text, i);
+        return end >= 0 ? end : UMGEBUNG.headEnd(text, i);
+    }
+
     /** Konfidenz "sicher" (Stufe SICHER). */
     private static final double CONFIDENCE_SURE = 0.95;
 
@@ -875,9 +1017,9 @@ enum PathForm {
 
     /**
      * Ob an Position {@code i} ein Kopf dieser Form beginnen darf. Standard ist die gemeinsame Startgrenze
-     * ({@link PathChars#isStartBoundary}); LAUFWERK, UNC, HOST_PFAD und UMGEBUNG haben keine (immer wahr), RELATIV,
-     * BENUTZER_WURZEL und WURZEL_ZWEI_SEGMENTE lassen zusätzlich {@code :} davor zu. Im Zitat-Pfad wird die Methode
-     * nicht für die erste Inhaltsposition gefragt (dort ist die Grenze durch das öffnende Zeichen erfüllt).
+     * ({@link PathChars#isStartBoundary}); LAUFWERK, UNC, HOST_PFAD, UMGEBUNG und FILE_URI haben keine (immer wahr),
+     * RELATIV, BENUTZER_WURZEL und WURZEL_ZWEI_SEGMENTE lassen zusätzlich {@code :} davor zu. Im Zitat-Pfad wird die
+     * Methode nicht für die erste Inhaltsposition gefragt (dort ist die Grenze durch das öffnende Zeichen erfüllt).
      */
     boolean isStartBoundary(String text, int i) {
         return PathChars.isStartBoundary(text, i);

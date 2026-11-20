@@ -168,9 +168,10 @@ class PathRecognizerHostTest {
     @Test
     void eigeneEntscheidungDoppelterSchraegstrichHinterDemDoppelpunktIstKeinHostKopf() {
         // "://" gehoert dem URL-Erkenner (bzw. T-16 fuer file:); sonst waeren die URL-Grenzen im Standard-Scanner
-        // veraendert. Der Laufwerkskopf s:/ deckt das Schema wie bisher ab dem letzten Buchstaben ab.
+        // veraendert. Der Laufwerkskopf s:/ deckt das Schema wie bisher ab dem letzten Buchstaben ab. Geaendert in
+        // T-16: file:///C:/x ist jetzt ein Fund der Form FILE_URI ueber den ganzen Ausdruck (vorher e:///C:/x).
         assertFund("https://example.invalid/a/b", "s://example.invalid/a/b", "pfad-laufwerk", 0.95);
-        assertFund("file:///C:/x", "e:///C:/x", "pfad-laufwerk", 0.95);
+        assertFund("file:///C:/x", "file:///C:/x", "pfad-file-uri", 0.95);
         assertFund("ftp://host.example/x", "p://host.example/x", "pfad-laufwerk", 0.95);
         assertKeinFund("host.example://");
         assertEquals(-1, PathForm.HOST_PFAD.headEnd("https://example.invalid/a/b", 0));
@@ -255,14 +256,14 @@ class PathRecognizerHostTest {
     }
 
     @Test
-    void standardScannerFileUriBleibtBisT16UnveraendertEinLaufwerksFundAbE() {
-        // Ist-Zustand bis T-16 (unveraendert gegenueber Durchlauf 1): "://" ist kein Host-Kopf, der Laufwerkskopf
-        // "e:/" von "file:" beginnt den Fund, "fil" bleibt sichtbar.
+    void standardScannerFileUriIstSeitT16EinFundUeberDenGanzenAusdruck() {
+        // Bis T-16 (dokumentierter Ist-Zustand): "://" ist kein Host-Kopf, der Laufwerkskopf "e:/" von "file:" begann
+        // den Fund, "fil" blieb sichtbar. Seit T-16: Fund der Form FILE_URI ab dem "f", "fil" ist nicht mehr sichtbar.
         List<Finding> s = scan("file:///C:/x");
         assertEquals(1, s.size());
         assertEquals(FindingType.PFAD, s.get(0).type());
-        assertEquals("pfad-laufwerk", s.get(0).source());
-        assertEquals("e:///C:/x", s.get(0).originalValue());
+        assertEquals("pfad-file-uri", s.get(0).source());
+        assertEquals("file:///C:/x", s.get(0).originalValue());
         assertEquals(0.95, s.get(0).confidence());
     }
 

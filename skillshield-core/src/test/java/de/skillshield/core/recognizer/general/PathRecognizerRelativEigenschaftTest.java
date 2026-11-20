@@ -14,11 +14,13 @@ import de.skillshield.core.recognizer.TextScanner;
 import de.skillshield.core.reidentify.ReidentificationResult;
 import de.skillshield.core.reidentify.Reidentifier;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -35,16 +37,19 @@ import org.junit.jupiter.api.Test;
  * (ohne Anfuehrungszeichen im Text muss es 0 sein; mit Anfuehrungszeichen hat jeder Fall die Ursache, dass ein Fund einer
  * neuen Form im Zitat-Durchlauf die niedrigere Konfidenz traegt) und bei groesseren Grenzen (Plan Nachtrag T-12 Punkt
  * 7a (ii), T-14 Nachtrag 5 (c)).
- * (2) Orakel: Je einzelne Form (alle zehn) deckt sich der Durchlauf mit einer unabhaengigen, naiven Referenz mit
- * eigenen, woertlich ausgeschriebenen Zeichenlisten (nicht {@code PathChars}, kein {@code PathForm.headEnd}),
- * einschliesslich Quelle und Konfidenz. Auf Gesamtebene (Durchlauf mit allen Formen) wird in beide Richtungen
- * geprueft: Jeder Fund wird von mindestens einem Orakelfund irgendeiner Form beruehrt, und jede Orakelposition ist
- * abgedeckt; Funde der Quellen {@code pfad-relativ} und {@code pfad-umgebung} sind nicht ausgenommen. Der Kopf von
- * UMGEBUNG im Orakel enthaelt die verzoegerte Expansion {@code !NAME!}; ein zusaetzlicher Test vergleicht gegen den
- * Kopf ohne sie (Durchlauf 1 von T-15, Obermenge).
+ * (2) Orakel: Je einzelne Form (alle elf, seit T-16 mit FILE_URI) deckt sich der Durchlauf mit einer unabhaengigen,
+ *     naiven Referenz mit eigenen, woertlich ausgeschriebenen Zeichenlisten (nicht {@code PathChars}, kein {@code
+ *     PathForm.headEnd}), einschliesslich Quelle und Konfidenz. Auf Gesamtebene (Durchlauf mit allen elf Formen) wird
+ *     in beide Richtungen geprueft: Jeder Fund wird von mindestens einem Orakelfund irgendeiner Form beruehrt, und
+ *     jede Orakelposition ist abgedeckt; Funde der Quellen {@code pfad-relativ} und {@code pfad-umgebung} sind nicht
+ *     ausgenommen. Der Kopf von UMGEBUNG im Orakel enthaelt die verzoegerte Expansion {@code !NAME!}; ein
+ *     zusaetzlicher Test vergleicht gegen den Kopf ohne sie (Durchlauf 1 von T-15, Obermenge).
  * (3) Ueber {@code TextScanner.standard()}, {@code Pseudonymizer} und {@code Reidentifier}: jeder erzeugte Pfad liegt
  * ganz in einem Fund, kein Name eines Pfads steht im pseudonymisierten Text, der Roundtrip ist zeichengleich; jede URL
  * ist genau ein URL-Fund.
+ * (4) T-16: Die Form FILE_URI steht im Orakel (eigene woertliche Regel {@code KOPF_FILE}) und im Gesamtorakel; der
+ * Host-Kopf des Orakels schliesst den Lauf {@code file} aus. Zwei Tests messen gegen den Stand T-15 (zehn Formen, Host
+ * ohne den Ausschluss): Obermenge und Konfidenz, getrennt fuer {@code file:/...}-Ausdruecke.
  */
 class PathRecognizerRelativEigenschaftTest {
 
@@ -62,7 +67,9 @@ class PathRecognizerRelativEigenschaftTest {
     private static final PathForm[] NEUE_FORMEN = {PathForm.RELATIV, PathForm.EINZEL_BACKSLASH,
             PathForm.BENUTZER_WURZEL, PathForm.WURZEL_ZWEI_SEGMENTE, PathForm.UMGEBUNG};
     private static final Set<String> QUELLEN = Set.of("pfad-laufwerk", "pfad-unc", "pfad-unix", "pfad-home",
-            "pfad-host", "pfad-relativ", "pfad-umgebung");
+            "pfad-host", "pfad-relativ", "pfad-umgebung", "pfad-file-uri");
+    /** Zeichen, die in der bekannten Grenze (Plan T-16 Punkt 6) aus dem Fund fallen duerfen. */
+    private static final String KUERZUNG_ODER_KLAMMER_ZU = ".,;:!?')]}";
     private static final Set<Double> KONFIDENZEN = Set.of(0.95, 0.90, 0.80, 0.75, 0.60);
 
     /** Die 13 Anfuehrungszeichen-Arten (woertliche Liste dieser Datei, Escapes). */
@@ -83,7 +90,19 @@ class PathRecognizerRelativEigenschaftTest {
             "$env:A\\", "${env:A}/", "${env:P(x)}\\", "%P(x)%/", "$ENV/", "$1/", "%1\\", "%d/", "%%/", "${}/",
             "%a%%b%%c%%d%%e%\\", "%~dpnxsatzf0/", "$env:", "${env:",
             // T-15 Nachtrag Punkt 6: verzoegerte Expansion
-            "!A!\\", "!a!/", "!a!!b!\\", "!!/", "!1!/", "!P(x)!\\", "%~dp0!a!/", "!a b!/"};
+            "!A!\\", "!a!/", "!a!!b!\\", "!!/", "!1!/", "!P(x)!\\", "%~dp0!a!/", "!a b!/",
+            // T-16 (file:): Koepfe mit und ohne Trenner, Gross-/Kleinschreibung, Woerter auf file, Pfadkoepfe dahinter
+            "file:", "file:/", "file://", "file:///", "FILE:///", "File:/", "file:\\\\", "file:C:\\", "file:./",
+            "file:..\\", "file:%a%/", "file:~/", "file:~erika/", "file:$HOME/", "file:/x", "file:///C:/", "profile:/",
+            "xfile:///", ".file:/", "file:foo", "file:(", "file:)", "?x=1", "#a", "%20", "file:!a!/", "file:%~dp0\\",
+            "file:file:/", "file:/file:/x"};
+    /**
+     * Zusaetzliche Tokens fuer die bekannte Grenze (Plan Nachtrag T-16 Punkt 6): fruehes FILE_URI mit schliessender
+     * Klammer, spaeteres {@code file:/} mit Klammerpaar am Ende. Nur der Test gegen den Stand T-15 verwendet sie
+     * (zusammen mit {@link #TOKEN}); die uebrigen Tests behalten ihren Token-Vorrat und damit ihre Zufallsfolgen.
+     */
+    private static final String[] TOKEN_KLAMMER = {"file:\\\\a)", "FILE:\\\\", "file:/a)", "file:/b(c)",
+        "file:/b(c).)", "file:/a].", "file:/a}", "file:/b(c)]", "file:/b(", "(c)", ")", "]", "}"};
 
     // ------------------------------------------------------------------ (1) Differenztest
 
@@ -282,6 +301,162 @@ class PathRecognizerRelativEigenschaftTest {
         }
     }
 
+    /** Die zehn Formen des Stands T-15 (alle ausser FILE_URI, T-16), mit dem Host-Kopf von T-16. */
+    private static final PathForm[] ZEHN_FORMEN = {PathForm.LAUFWERK, PathForm.UNC, PathForm.UNIX, PathForm.HOME,
+            PathForm.HOST_PFAD, PathForm.RELATIV, PathForm.EINZEL_BACKSLASH, PathForm.BENUTZER_WURZEL,
+            PathForm.WURZEL_ZWEI_SEGMENTE, PathForm.UMGEBUNG};
+
+    @Test
+    void differenzTestAlleFormenDeckenAbWasDieZehnFormenVonT15AbdeckenMitUndOhneAnfuehrungszeichen() {
+        for (int anteil : new int[] {0, 4}) {
+            long seed = SEED + 40 + anteil;
+            Random rnd = new Random(seed);
+            int echtGroesser = 0;
+            long absenkungen = 0;
+            for (int it = 0; it < ITERATIONEN_DIFFERENZ; it++) {
+                String text = zufallstext(rnd, 30, anteil);
+                String wo = ", Startwert " + seed + ", Iteration " + it;
+                List<Finding> neuFunde = R.detect(text);
+                List<Finding> altFunde = R.detect(text, ZEHN_FORMEN);
+                boolean[] neu = abdeckung(text.length(), neuFunde);
+                boolean[] alt = abdeckung(text.length(), altFunde);
+                boolean[] neuOhne = abdeckung(text.length(), R.detectWithoutQuotes(text));
+                boolean[] altOhne = abdeckung(text.length(), R.detectWithoutQuotes(text, ZEHN_FORMEN));
+                // Konfidenz gegenueber den zehn Formen (T-15): FILE_URI hat die hoechste Konfidenz (0.95). Ohne
+                // Anfuehrungszeichen im Text sinkt sie nirgends, auch nicht bei groesseren Grenzen (hart 0); mit
+                // Anfuehrungszeichen kann ein Zitat-Fund ab file: zwei bisher getrennte Funde verbinden, dann gilt
+                // die niedrigste Konfidenz der Beteiligten (Plan 7a (ii), wie bei jeder neuen Form seit T-12).
+                for (Finding f : altFunde) {
+                    Finding g = enthaltender(neuFunde, f);
+                    assertNotNull(g, "kein enthaltender Fund" + wo);
+                    boolean niedriger = g.confidence() < f.confidence();
+                    absenkungen += niedriger ? 1 : 0;
+                    assertTrue(anteil > 0 || !niedriger, "Konfidenz durch FILE_URI gesunken" + wo);
+                }
+                boolean groesser = false;
+                for (int i = 0; i < text.length(); i++) {
+                    assertTrue(!alt[i] || neu[i], "Position nicht mehr abgedeckt" + wo);
+                    assertTrue(!altOhne[i] || neuOhne[i], "Position ohne Zitatregel nicht mehr abgedeckt" + wo);
+                    groesser |= neu[i] && !alt[i];
+                }
+                echtGroesser += groesser ? 1 : 0;
+            }
+            System.out.println("T-16 Differenz gegen die zehn Formen (Startwert " + seed + ", Anfuehrungsanteil "
+                    + anteil + "): Texte " + ITERATIONEN_DIFFERENZ + ", Texte mit echter Vergroesserung "
+                    + echtGroesser + ", Funde mit gesunkener Konfidenz (Zitat-Verbindung) " + absenkungen);
+            assertTrue(echtGroesser > ITERATIONEN_DIFFERENZ / 100, "zu wenige echte Vergroesserungen: " + echtGroesser);
+        }
+    }
+
+    /**
+     * T-16: Obermengen-Garantie und Konfidenz gegenueber dem Stand T-15, gemessen am Orakel (die zehn Formen, der
+     * Host-Kopf ohne den Ausschluss des Laufs {@code file}): Jede Position, die ein Orakelfund des Stands T-15
+     * abdeckt, ist im Durchlauf mit allen elf Formen abgedeckt (mit und ohne Zitatregel; fuer HOST_PFAD ist das
+     * die Pruefung, dass {@code file:/...} jetzt von FILE_URI abgedeckt wird). Ohne Anfuehrungszeichen im Text darf
+     * die Konfidenz bei gleichen Grenzen nirgends sinken (auch nicht fuer {@code file:/...}-Ausdruecke, deren Quelle
+     * von pfad-host zu pfad-file-uri wechselt und deren Konfidenz auf 0.95 steigt). Einzige Ausnahme der
+     * Abdeckung (bekannte Grenze, Plan Nachtrag T-16 Punkt 6): In einem Text mit {@code file:} darf eine Position
+     * fehlen, wenn das Zeichen dort eine schliessende Klammer ({@code )}, {@code ]}, geschweifte Klammer zu) oder ein
+     * Kuerzungszeichen ({@code . , ; : ! ? '}) ist, etwa {@code FILE:\\a)file:/b(c)}; jeder Buchstabe, jede Ziffer
+     * und jeder Trenner ist ein Fehler. Gemessene Zahlen (auch die dieser Faelle) werden ausgegeben.
+     */
+    @Test
+    void obermengeUndKonfidenzGegenueberDemOrakelStandT15() {
+        for (int anteil : new int[] {0, 4}) {
+            long seed = SEED + 50 + anteil;
+            Random rnd = new Random(seed);
+            long referenz = 0;
+            long gleicheGrenzenNiedriger = 0;
+            long gleicheGrenzenGleich = 0;
+            long groesserNiedriger = 0;
+            long hostFile = 0;
+            long hostFileQuelleGeaendert = 0;
+            long hostFileKonfidenzHoeher = 0;
+            long hostFileNiedriger = 0;
+            long verlorenFunde = 0;
+            long verlorenPositionen = 0;
+            long verlorenTexte = 0;
+            String[] vorrat = Stream.concat(Arrays.stream(TOKEN), Arrays.stream(TOKEN_KLAMMER))
+                    .toArray(String[]::new);
+            for (int it = 0; it < ITERATIONEN_DIFFERENZ; it++) {
+                String text = zufallstext(rnd, 12, anteil, vorrat);
+                String wo = ", Startwert " + seed + ", Iteration " + it;
+                List<Finding> neu = R.detect(text);
+                boolean[] a = abdeckung(text.length(), neu);
+                boolean[] aOhne = abdeckung(text.length(), R.detectWithoutQuotes(text));
+                boolean mitFile = text.toLowerCase().contains("file:");
+                boolean[] verloren = new boolean[text.length()];
+                for (PathForm form : ZEHN_FORMEN) {
+                    for (Fund o : orakel(text, form, KOPF_UMGEBUNG, true)) {
+                        referenz++;
+                        boolean fundVerloren = false;
+                        for (int i = o.start(); i < o.ende(); i++) {
+                            if (!(a[i] && aOhne[i])) {
+                                // bekannte Grenze (Plan T-16 Punkt 6): nur in Texten mit file:, nur eine schliessende
+                                // Klammer oder ein Kuerzungszeichen; Buchstabe, Ziffer, Trenner: rot
+                                assertTrue(mitFile && KUERZUNG_ODER_KLAMMER_ZU.indexOf(text.charAt(i)) >= 0,
+                                        "Position von T-15 nicht mehr abgedeckt, Form " + form + ", Position " + i
+                                                + wo);
+                                verloren[i] = true;
+                                fundVerloren = true;
+                            }
+                        }
+                        if (fundVerloren) {
+                            verlorenFunde++;
+                            continue;
+                        }
+                        Finding g = null;
+                        for (Finding x : neu) {
+                            if (x.start() <= o.start() && x.end() >= o.ende()) {
+                                g = x;
+                            }
+                        }
+                        assertNotNull(g, "kein enthaltender Fund" + wo);
+                        boolean gleich = g.start() == o.start() && g.end() == o.ende();
+                        boolean hostMitFile = mitFile && form == PathForm.HOST_PFAD
+                                && text.substring(o.start(), o.ende()).toLowerCase().contains("file:");
+                        hostFile += hostMitFile ? 1 : 0;
+                        hostFileQuelleGeaendert += hostMitFile && !g.source().equals(o.quelle()) ? 1 : 0;
+                        hostFileKonfidenzHoeher += hostMitFile && g.confidence() > o.konfidenz() ? 1 : 0;
+                        hostFileNiedriger += hostMitFile && gleich && g.confidence() < o.konfidenz() ? 1 : 0;
+                        if (g.confidence() < o.konfidenz()) {
+                            if (gleich) {
+                                gleicheGrenzenNiedriger++;
+                            } else {
+                                groesserNiedriger++;
+                            }
+                        } else if (gleich) {
+                            gleicheGrenzenGleich++;
+                        }
+                    }
+                }
+                long positionen = 0;
+                for (boolean v : verloren) {
+                    positionen += v ? 1 : 0;
+                }
+                verlorenPositionen += positionen;
+                verlorenTexte += positionen > 0 ? 1 : 0;
+            }
+            System.out.println("T-16 Differenz gegen Orakel Stand T-15 (Startwert " + seed + ", Anfuehrungsanteil "
+                    + anteil + "): Texte " + ITERATIONEN_DIFFERENZ + ", Orakelfunde " + referenz
+                    + ", gleiche Grenzen/Konfidenz gleich oder hoeher " + gleicheGrenzenGleich
+                    + ", gleiche Grenzen/niedriger " + gleicheGrenzenNiedriger
+                    + ", groessere Grenzen/niedriger " + groesserNiedriger
+                    + ", Host-Funde mit file: " + hostFile + " (Quelle geaendert " + hostFileQuelleGeaendert
+                    + ", Konfidenz hoeher " + hostFileKonfidenzHoeher + ", bei gleichen Grenzen niedriger "
+                    + hostFileNiedriger + "); nicht mehr abgedeckt (bekannte Grenze, nur Klammer zu oder "
+                    + "Kuerzungszeichen): Texte " + verlorenTexte + ", Positionen " + verlorenPositionen
+                    + ", Orakelfunde " + verlorenFunde);
+            if (anteil == 0) {
+                assertEquals(0L, gleicheGrenzenNiedriger, "Konfidenz bei gleichen Grenzen gesunken");
+                assertEquals(0L, hostFileNiedriger, "Konfidenz eines file:/-Fundes gesunken");
+            }
+            assertTrue(hostFile > 300, "zu wenige Host-Funde mit file: im Orakel: " + hostFile);
+            assertTrue(verlorenTexte > 0, "die bekannte Grenze (Klammer zu hinter fruehem file:) wird nie erreicht");
+            assertTrue(hostFileQuelleGeaendert > 0, "kein file:/-Fund mit geaenderter Quelle");
+        }
+    }
+
     /**
      * Der Zitat-Pfad liest nie hinter das Zitat: Die Zitat-Funde eines Texts {@code Q inhalt Q tail} (tail ohne
      * Anfuehrungszeichen) sind dieselben wie die des Texts {@code Q inhalt Q} ohne tail.
@@ -347,6 +522,14 @@ class PathRecognizerRelativEigenschaftTest {
     private static final Pattern KOPF_UMGEBUNG = Pattern.compile(KOPF_UMGEBUNG_A_BIS_G + VERZOEGERT);
     /** Die Kopfvarianten (a) bis (g), also der Kopf der Form UMGEBUNG in Durchlauf 1 (ohne {@code !NAME!}). */
     private static final Pattern KOPF_UMGEBUNG_DURCHLAUF1 = Pattern.compile(KOPF_UMGEBUNG_A_BIS_G);
+    /**
+     * Kopf der Form FILE_URI (woertlich): {@code file:} in beliebiger Schreibung (ASCII), danach entweder mindestens
+     * ein Trenner (der Kopf endet hinter dem letzten Trenner des Laufs) oder, ohne Trenner, direkt ein Kopf der Formen
+     * LAUFWERK, RELATIV, HOME oder UMGEBUNG (dann endet der Kopf hinter dem Trenner dieses Kopfes).
+     */
+    private static final Pattern KOPF_FILE = Pattern.compile("[Ff][Ii][Ll][Ee]:(?:[/\\\\]+"
+            + "|(?:" + KOPF_LAUFWERK.pattern() + ")|(?:" + KOPF_RELATIV.pattern() + ")|(?:" + KOPF_HOME.pattern()
+            + ")|(?:" + KOPF_UMGEBUNG.pattern() + "))");
     private static final String ANFUEHRUNG_START = ANFUEHRUNG_ALLE;
     private static final String START_ZEICHEN = "([{<>=,;|";
     private static final String HOST_ZEICHEN = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-";
@@ -362,7 +545,7 @@ class PathRecognizerRelativEigenschaftTest {
 
     private static boolean ohneStartgrenze(PathForm form) {
         return form == PathForm.LAUFWERK || form == PathForm.UNC || form == PathForm.HOST_PFAD
-                || form == PathForm.UMGEBUNG;
+                || form == PathForm.UMGEBUNG || form == PathForm.FILE_URI;
     }
 
     private static boolean startgrenze(String text, int pos, PathForm form) {
@@ -382,6 +565,11 @@ class PathRecognizerRelativEigenschaftTest {
      * Durchlauf 1, {@link #KOPF_UMGEBUNG_DURCHLAUF1}).
      */
     private static int kopf(String text, int pos, PathForm form, Pattern umgebung) {
+        return kopf(text, pos, form, umgebung, false);
+    }
+
+    /** Wie oben; {@code hostT15} schaltet den Host-Kopf von T-15 ein (auch der Lauf {@code file} ist ein Kopf). */
+    private static int kopf(String text, int pos, PathForm form, Pattern umgebung, boolean hostT15) {
         int n = text.length();
         switch (form) {
             case LAUFWERK:
@@ -393,7 +581,9 @@ class PathRecognizerRelativEigenschaftTest {
             case HOME:
                 return regionKopf(KOPF_HOME, text, pos);
             case HOST_PFAD:
-                return kopfHost(text, pos);
+                return kopfHost(text, pos, hostT15);
+            case FILE_URI:
+                return regionKopf(KOPF_FILE, text, pos);
             case RELATIV:
                 return regionKopf(KOPF_RELATIV, text, pos);
             case EINZEL_BACKSLASH:
@@ -431,9 +621,10 @@ class PathRecognizerRelativEigenschaftTest {
 
     /**
      * HOST_PFAD: Lauf aus 2 bis 64 Host-Zeichen mit mindestens einem Buchstaben direkt vor {@code :/} (nicht
-     * {@code ://}), beginnend am Wortanfang oder, bei genau 64 Zeichen, mitten in einem laengeren Lauf.
+     * {@code ://}), beginnend am Wortanfang oder, bei genau 64 Zeichen, mitten in einem laengeren Lauf; seit T-16
+     * ist der Lauf genau {@code file} (Gross-/Kleinschreibung egal) kein Kopf (ausser fuer den Stand T-15).
      */
-    private static int kopfHost(String text, int pos) {
+    private static int kopfHost(String text, int pos, boolean hostT15) {
         Matcher m = KOPF_HOST.matcher(text).region(pos, text.length());
         if (!m.lookingAt()) {
             return -1;
@@ -441,6 +632,9 @@ class PathRecognizerRelativEigenschaftTest {
         String lauf = m.group(1);
         boolean wortanfang = pos == 0 || HOST_ZEICHEN.indexOf(text.charAt(pos - 1)) < 0;
         boolean buchstabe = lauf.chars().anyMatch(c -> (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'));
+        if (!hostT15 && lauf.equalsIgnoreCase("file")) {
+            return -1; // T-16: der Lauf genau "file" ist der Kopf der Form FILE_URI
+        }
         return buchstabe && (wortanfang || lauf.length() == 64) ? m.end() : -1;
     }
 
@@ -470,6 +664,7 @@ class PathRecognizerRelativEigenschaftTest {
     private static double konfidenz(PathForm form, String text, int pos, int segmente) {
         switch (form) {
             case LAUFWERK:
+            case FILE_URI:
                 return 0.95;
             case UNC:
                 return segmente >= 2 ? 0.95 : 0.60;
@@ -506,6 +701,8 @@ class PathRecognizerRelativEigenschaftTest {
                 return "pfad-host";
             case UMGEBUNG:
                 return "pfad-umgebung";
+            case FILE_URI:
+                return "pfad-file-uri";
             default:
                 return "pfad-relativ";
         }
@@ -518,6 +715,11 @@ class PathRecognizerRelativEigenschaftTest {
 
     /** Wie oben, mit wahlweise anderem Kopf-Muster fuer UMGEBUNG (siehe {@code kopf}). */
     private static List<Fund> orakel(String text, PathForm form, Pattern umgebung) {
+        return orakel(text, form, umgebung, false);
+    }
+
+    /** Wie oben; {@code hostT15} verwendet den Host-Kopf des Stands T-15 (siehe {@code kopf}). */
+    private static List<Fund> orakel(String text, PathForm form, Pattern umgebung, boolean hostT15) {
         List<Fund> r = new ArrayList<>();
         int n = text.length();
         int pos = 0;
@@ -530,7 +732,7 @@ class PathRecognizerRelativEigenschaftTest {
             while (laufEnde < n && !endzeichen(text.charAt(laufEnde))) {
                 laufEnde++;
             }
-            int kopf = startgrenze(text, pos, form) ? kopf(text, pos, form, umgebung) : -1;
+            int kopf = startgrenze(text, pos, form) ? kopf(text, pos, form, umgebung, hostT15) : -1;
             if (kopf >= 0) {
                 int ende = kuerze(text, pos, laufEnde, kopf);
                 int segmente = Math.min(3, segmente(text, kopf, ende));
@@ -763,17 +965,21 @@ class PathRecognizerRelativEigenschaftTest {
     // ------------------------------------------------------------------ Hilfen
 
     private static String zufallstext(Random rnd, int maxTokens, int anfuehrungsAnteil) {
+        return zufallstext(rnd, maxTokens, anfuehrungsAnteil, TOKEN);
+    }
+
+    private static String zufallstext(Random rnd, int maxTokens, int anfuehrungsAnteil, String[] vorrat) {
         StringBuilder sb = new StringBuilder();
         int tokens = 1 + rnd.nextInt(maxTokens);
         for (int k = 0; k < tokens; k++) {
             if (anfuehrungsAnteil > 0 && rnd.nextInt(anfuehrungsAnteil + 1) == 0) {
                 sb.append(ANFUEHRUNG[rnd.nextInt(ANFUEHRUNG.length)]);
             } else if (anfuehrungsAnteil == 0) {
-                String t = TOKEN[rnd.nextInt(TOKEN.length)];
+                String t = vorrat[rnd.nextInt(vorrat.length)];
                 // ohne Anfuehrungszeichen im Text: die beiden Tokens mit " und ' werden ersetzt
                 sb.append(t.equals("'") || t.equals("\"") ? "a" : t);
             } else {
-                sb.append(TOKEN[rnd.nextInt(TOKEN.length)]);
+                sb.append(vorrat[rnd.nextInt(vorrat.length)]);
             }
         }
         return sb.toString();
