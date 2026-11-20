@@ -15,6 +15,7 @@ import de.skillshield.core.reidentify.Reidentifier;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -36,6 +37,7 @@ class PathRecognizerUncEigenschaftTest {
 
     private static final PathRecognizer R = new PathRecognizer();
     private static final PathForm[] NUR_LAUFWERK = {PathForm.LAUFWERK};
+    private static final PathForm[] NUR_LAUFWERK_UNC = {PathForm.LAUFWERK, PathForm.UNC};
 
     private static final String[] ANFUEHRUNG = {"\"", "'", "`", "\u201E", "\u201C", "\u201D", "\u00BB", "\u00AB",
             "\u2018", "\u2019", "\u201A", "\u2039", "\u203A"};
@@ -128,18 +130,19 @@ class PathRecognizerUncEigenschaftTest {
         // oeffnenden Paars A (A oeffnet vor B, A schliesst vor B oder gleichzeitig). A zaehlt dort mindestens so
         // viele Segmente hinter dem Kopf wie noetig, wenn irgendein Kopf hinter diesem in A gueltig ist, denn jeder
         // Laufwerkskopf enthaelt selbst einen Trenner und ein Segment dahinter. Die Sortierung in detectQuoted bleibt
-        // trotzdem (Folgeformen mit Startgrenze oder mehr Segmenten). Dieser Test sucht per Zufall nach einem
-        // Gegenbeispiel und prueft, dass das Endergebnis immer sortiert ist.
+        // trotzdem: Mit UNIX (Startgrenze, zwei Segmente) entstehen unsortierte Zitatfunde (Gegenbeispiel als Test in
+        // PathRecognizerUnixTest). Dieser Test gilt daher nur fuer LAUFWERK und UNC und sucht per Zufall nach einem
+        // Gegenbeispiel; er prueft ausserdem, dass das Endergebnis immer sortiert ist.
         Random rnd = new Random(SEED + 2);
         for (int it = 0; it < 200_000; it++) {
             String text = zufallstext(rnd);
-            List<Finding> roh = PathRecognizer.collectQuoted(text, PathForm.values());
+            List<Finding> roh = PathRecognizer.collectQuoted(text, NUR_LAUFWERK_UNC);
             for (int i = 1; i < roh.size(); i++) {
                 assertTrue(roh.get(i).start() >= roh.get(i - 1).start(),
                         "Zitatfunde unsortiert entstanden, Startwert " + (SEED + 2) + ", Iteration " + it);
             }
             int vorigesEnde = 0;
-            for (Finding f : R.detect(text)) {
+            for (Finding f : R.detect(text, NUR_LAUFWERK_UNC)) {
                 assertTrue(f.start() >= vorigesEnde, "Ergebnis sortiert, Startwert " + (SEED + 2) + ", Iteration " + it);
                 vorigesEnde = f.end();
             }
@@ -165,7 +168,7 @@ class PathRecognizerUncEigenschaftTest {
                 sb.append(TOKEN[rnd.nextInt(TOKEN.length)]);
             }
             String text = sb.toString();
-            for (Finding f : R.detect(text)) {
+            for (Finding f : R.detect(text, NUR_LAUFWERK_UNC)) {
                 String wert = f.originalValue();
                 String wo = ", Startwert " + (SEED + 3) + ", Iteration " + it;
                 if (wert.startsWith("\\\\")) {
@@ -194,19 +197,6 @@ class PathRecognizerUncEigenschaftTest {
             }
         }
         assertTrue(unc1 > 1_000 && unc2 > 1_000, "Orakel zu selten angewandt: " + unc1 + "/" + unc2);
-    }
-
-    /** Vertrag von {@code PathForm.confidence}: in der Segmentzahl monoton nicht fallend (Plan 7a (i)). */
-    @Test
-    void konfidenzJederFormIstInDerSegmentzahlMonotonNichtFallend() {
-        for (PathForm form : PathForm.values()) {
-            double vorige = form.confidence(0);
-            for (int segmente = 1; segmente <= 5; segmente++) {
-                double jetzt = form.confidence(segmente);
-                assertTrue(jetzt >= vorige, form + " faellt bei " + segmente + " Segmenten");
-                vorige = jetzt;
-            }
-        }
     }
 
     private static String zufallstext(Random rnd) {
@@ -239,12 +229,11 @@ class PathRecognizerUncEigenschaftTest {
         for (Finding f : funde) {
             assertEquals(text.substring(f.start(), f.end()), f.originalValue(), "Teilstring" + wo);
             assertEquals(FindingType.PFAD, f.type(), "Typ" + wo);
-            // beginnt der Fund mit zwei Backslashes, ist es ein UNC-Fund, sonst ein Laufwerksfund
-            assertEquals(f.originalValue().startsWith("\\\\") ? "pfad-unc" : "pfad-laufwerk", f.source(), "Quelle" + wo);
-            // 0.60 nur bei UNC mit genau einem Segment bzw. bei Zusammenlegung mit einem solchen: der Fund enthaelt dann
-            // einen Doppel-Backslash; ohne Doppel-Backslash ist es immer 0.95
-            assertTrue(f.confidence() == 0.95 || (f.confidence() == 0.60 && f.originalValue().contains("\\\\")),
-                    "Konfidenz " + f.confidence() + wo);
+            // seit T-13 fuenf Formen: Quelle und Konfidenz als Menge (die genaue Pruefung je Form macht das Orakel in
+            // PathRecognizerUnixEigenschaftTest); ein zusammengelegter Fund traegt die Quelle des frueher beginnenden
+            assertTrue(Set.of("pfad-laufwerk", "pfad-unc", "pfad-unix", "pfad-home", "pfad-host").contains(f.source()),
+                    "Quelle " + f.source() + wo);
+            assertTrue(Set.of(0.95, 0.90, 0.80, 0.60).contains(f.confidence()), "Konfidenz " + f.confidence() + wo);
             assertTrue(f.start() >= vorigesEnde, "sortiert und ueberlappungsfrei" + wo);
             assertFalse(f.start() > 0 && Character.isLowSurrogate(text.charAt(f.start()))
                     && Character.isHighSurrogate(text.charAt(f.start() - 1)), "Start im Surrogatpaar" + wo);

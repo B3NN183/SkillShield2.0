@@ -14,32 +14,31 @@ import java.util.Objects;
  * Fund vom Typ {@link FindingType#PFAD} geliefert; Programm-, Benutzer-, Server- und Ordnernamen darin sind damit
  * mitgeschützt.
  *
- * <p>Stand dieses Tasks (T-12): Formen {@link PathForm#LAUFWERK} und {@link PathForm#UNC} mit
+ * <p>Stand dieses Tasks (T-13): Formen {@link PathForm#LAUFWERK}, {@link PathForm#UNC}, {@link PathForm#UNIX},
+ * {@link PathForm#HOME} (auch {@code ~name/}) und {@link PathForm#HOST_PFAD} ({@code host.example:/export/home}) mit
  * Anführungszeichenregel; die weiteren Formen folgen mit den Folgetasks, ohne dass sich Läufe, Ende und
- * Segmentzählung ändern. Für UNC-Pfade gilt wie für Laufwerkspfade keine Startgrenze (Text direkt davor verhindert
- * den Fund nicht, siehe {@link PathForm#UNC}).
+ * Segmentzählung ändern. Für Laufwerks-, UNC- und Host-Pfade gilt keine Startgrenze (Text direkt davor verhindert den
+ * Fund nicht). Unix- und Home-Pfade beginnen nur an einer Startgrenze ({@link PathChars#isStartBoundary}), weil
+ * {@code /} in gewöhnlichem Text häufig ist ({@code und/oder}, {@code km/h}, {@code 19/11/2026}).
  *
  * <p><b>Obermengen-Garantie je Form.</b> Der Durchlauf ohne Anführungszeichen liefert die Vereinigung aus dem
- * Durchlauf mit allen Formen und je einem Durchlauf mit nur einer Form ({@link #detectWithoutQuotes(String,
- * PathForm[])}); eine später hinzukommende Form macht den Fund einer bisherigen Form daher nie kleiner (ein Lauf
- * liefert sonst höchstens einen Fund, und der Fund einer früher beginnenden Form kann am Ende kürzer sein).
+ * Durchlauf mit allen Formen und je einem Durchlauf mit nur einer Form
+ * ({@link #detectWithoutQuotes(String, PathForm[])}); eine später hinzukommende Form macht den Fund einer bisherigen
+ * Form daher nie kleiner (ein Lauf liefert sonst höchstens einen Fund, und der Fund einer früher beginnenden Form
+ * kann am Ende kürzer sein).
  *
- * <p><b>Anführungszeichen (T-11).</b> Zusätzlich zum Durchlauf nach den folgenden Absätzen (Stand T-10, siehe
- * {@link #detectWithoutQuotes}) wird jedes Anführungszeichen ({@code "}, {@code '}, Backtick sowie die typografischen
- * Zeichen U+201E, U+201C, U+201D, U+00BB, U+00AB, U+2018, U+2019, U+201A, U+2039, U+203A) immer als öffnendes
- * probiert und mit dem nächsten schließenden Zeichen seiner Familie gepaart ({@link PathChars#closesQuote}). Die
- * Suche endet erfolglos an Steuerzeichen (Zeilenende, Tab), {@code <}, {@code >}, {@code |} und, außer bei der
- * doppelten Familie, am geraden {@code "}; Leerzeichen beenden sie nicht. Enthält der Inhalt eines Paars einen
- * Pfadkopf mit genügend Segmenten, ist der Fund der Inhalt ab dem ersten solchen Kopf bis zum schließenden Zeichen,
- * ohne Kürzung und auch mit Leerzeichen; die Anführungszeichen selbst gehören nicht zum Fund. Es wird kein Paar
- * verbraucht: Jedes Zeichen wird als öffnendes probiert, auch das schließende eines vorigen Paars. Ein unpaariges
- * Zeichen davor ({@code Monitor 24" an C:\Temp, Datei "D:\Mein Ordner\a.txt"}, {@code Peter's C:\Temp und
- * 'D:\Mein Ordner\a.txt'}) kann daher einen zusätzlichen, überflüssigen Fund über Text zwischen zwei Zeichen bilden
- * (zu groß, kein Leck), nimmt dem Pfad im richtigen Zitat aber nie sein öffnendes Zeichen. Alle Funde der Paare und
- * die des Durchlaufs ohne Anführungszeichen werden vereinigt (überlappende Funde werden zu einem): Der Fund ist nie
- * kleiner als ohne die Anführungszeichenregel (Obermengen-Garantie gegenüber T-10). Fehlt das schließende Zeichen
- * oder gibt es keinen Kopf im Inhalt, trägt das Paar nichts bei. Ein Apostroph kann so ein Paar bilden und einen
- * größeren Fund erzeugen als nötig (kein Leck). Die Funde grenzender Paare bleiben getrennt.
+ * <p><b>Anführungszeichen (T-11).</b> Zusätzlich zum Durchlauf nach den folgenden Absätzen wird jedes
+ * Anführungszeichen (die 13 Arten aus {@link PathChars#quoteKind}) immer als öffnendes probiert und mit dem nächsten
+ * schließenden Zeichen seiner Familie gepaart ({@link PathChars#closesQuote}). Die Suche endet erfolglos an
+ * Steuerzeichen (Zeilenende, Tab), {@code <}, {@code >}, {@code |} und, außer bei der doppelten Familie, am geraden
+ * {@code "}; Leerzeichen beenden sie nicht. Enthält der Inhalt eines Paars einen Pfadkopf mit genügend Segmenten, ist
+ * der Fund der Inhalt ab dem ersten solchen Kopf bis zum schließenden Zeichen, ohne Kürzung und auch mit
+ * Leerzeichen; die Anführungszeichen selbst gehören nicht zum Fund. Es wird kein Paar verbraucht: Jedes Zeichen wird
+ * als öffnendes probiert, auch das schließende eines vorigen Paars. Ein unpaariges Zeichen davor kann daher einen
+ * zusätzlichen, zu großen Fund bilden (kein Leck), nimmt dem Pfad im richtigen Zitat aber nie sein öffnendes
+ * Zeichen. Alle Funde der Paare und die des Durchlaufs ohne Anführungszeichen werden vereinigt (überlappende Funde
+ * werden zu einem): Der Fund ist nie kleiner als ohne die Anführungszeichenregel. Fehlt das schließende Zeichen
+ * oder gibt es keinen Kopf im Inhalt, trägt das Paar nichts bei. Die Funde grenzender Paare bleiben getrennt.
  *
  * <p><b>Läufe.</b> Der Text zerfällt in Läufe: maximale Folgen von Zeichen, die kein Endzeichen sind (Leerraum,
  * Steuerzeichen, {@code "}, Backtick, {@code <}, {@code >}, {@code |}; siehe {@link PathChars#isTerminator}). Ein Pfad
@@ -47,38 +46,52 @@ import java.util.Objects;
  * D-5): {@code C:\Mein Ordner\x} ergibt {@code C:\Mein}. Unsichtbare Formatzeichen (U+200B, U+FEFF, Bidi-Marken
  * u. a.) beenden den Pfad nicht.
  *
- * <p><b>Beginn.</b> An jeder Position eines Laufs wird der Kopf der Pfadform geprüft. Für Laufwerkspfade gilt keine
- * Startgrenze: {@code Pfad:C:\x}, {@code abcC:\x} und {@code .....C:\x} ergeben den Fund ab dem Laufwerksbuchstaben.
- * Der Fund reicht bis zum Laufende und wird dann am Ende gekürzt. Ein Lauf liefert höchstens einen Fund, auch wenn
- * er mehrere Pfade enthält ({@code C:\a;C:\b}: ein Fund).
+ * <p><b>Beginn.</b> An jeder Position eines Laufs wird der Kopf der Pfadform geprüft. Der Fund reicht bis zum
+ * Laufende und wird dann am Ende gekürzt. Ein Lauf liefert höchstens einen Fund, auch wenn er mehrere Pfade enthält
+ * ({@code C:\a;C:\b}: ein Fund). Bei Formen ohne Startgrenze beginnt der Fund am Kopf selbst: {@code Pfad:C:\x},
+ * {@code abcC:\x} und {@code .....C:\x} ergeben den Fund ab dem Laufwerksbuchstaben, {@code Pfad:/etc/hosts} ab dem
+ * Host-Lauf {@code Pfad} ({@link PathForm#HOST_PFAD}).
  *
  * <p><b>Kürzung am Ende.</b> Von hinten werden wiederholt entfernt: {@code . , ; : ! ?} und {@code '}; ferner
  * schließende runde, eckige und geschweifte Klammern nur, wenn der Fund (ab seinem Beginn gezählt) mehr schließende
  * als öffnende Klammern dieser Art enthält ({@code C:\Tools\Beispiel(x86)} bleibt ganz, {@code C:\Tools\a.exe)}
  * verliert die Klammer). {@code *} und ein abschließender Trenner bleiben im Fund.
  *
- * <p><b>Segmente.</b> Hinter dem Kopf muss nach der Kürzung mindestens ein Segment (nichtleere Folge von
- * Nicht-Trennern) stehen: {@code C:}, {@code C:\} und {@code C:\.} sind kein Fund. Die Konfidenz hängt nur von Form
- * und der auf 3 gedeckelten Segmentzahl ab, nie von Leerzeichen; UNC mit genau einem Segment (Server ohne Freigabe,
- * {@code \fileserver01}) ist ein Fund mit 0.60, ab zwei Segmenten 0.95 ({@link PathForm#UNC}).
+ * <p><b>Segmente und Konfidenz.</b> Hinter dem Kopf müssen nach der Kürzung mindestens so viele Segmente (nichtleere
+ * Folgen von Nicht-Trennern) stehen, wie die Form verlangt (Laufwerk, UNC, Home und Host: eines; Unix: zwei). Die
+ * Prüfung geschieht mit der Zahl NACH der Kürzung: Die vorab berechnete (pessimistische) Zahl ist höchstens um eines
+ * kleiner, denn hinter dem pessimistischen Ende stehen nur Satzzeichen und schließende Klammern, und davon bildet
+ * höchstens ein Block direkt hinter einem Trenner ein weiteres Segment ({@code /opt(/)} hat zwei Segmente,
+ * {@code opt(} und {@code )}). Fehlt der pessimistischen Zahl genau eines und kann eines hinzukommen
+ * (O(1)-Vorprüfung), wird die Kürzung gerechnet und danach entschieden; so geht kein Fund verloren. {@code C:},
+ * {@code C:\} und {@code C:\.} sind kein Fund. Die Konfidenz bestimmt die Form aus der Kopflänge und der auf 3
+ * gedeckelten Segmentzahl ({@link PathForm#confidence(int, int)}), nie aus Leerzeichen; die Werte je Form stehen im
+ * Javadoc der Form.
  *
  * <p><b>Laufzeit.</b> Jeder Lauf wird einmal ausgewertet (Ende, Segmentanfänge von hinten), jede Position wird in
  * (amortisiert) O(1) als Beginn geprüft, die Kürzung läuft einmal je Fund über dessen Lauf; danach springt der
- * Durchlauf ans Laufende. "Amortisiert": Der Kopf einer Form liest nur Zeichen unmittelbar ab der Position, nie
- * Servernamen, Freigabe oder Segmente (deren Anzahl liefern die Laufdaten bzw. {@code starts} in O(1)); der Kopf von
- * UNC liest den Backslash-Lauf, aber nur an dessen erstem Backslash, jede weitere Position darin endet nach einem
- * Zeichen. Die Summe aller Kopfprüfungen ist daher höchstens die Textlänge (bzw. die Länge des Zitatinhalts), auch für
- * sehr viele Köpfe ohne genug Segmente in einem Lauf und für sehr lange Servernamen. Die Suche nach dem
- * schließenden Anführungszeichen endet spätestens am nächsten Zeichen derselben Art
- * (jedes Zeichen schließt seine eigene Art, auch wenn es zusätzlich Zeichen anderer Arten derselben Familie
- * schließt). Je Art sind die Bereiche der Paare daher paarweise disjunkt, und die Inhaltsprüfung (Segmentanfänge,
- * Kopfsuche, je Position O(1)) liest jede Position je Art höchstens einmal: insgesamt O(n) (höchstens 13 Arten mal
- * n), keine Rekursion. Die Funde der Paare entstehen nicht unbedingt in Startreihenfolge (Paare verschiedener Arten
- * verschachteln sich, und der erste gültige Kopf hängt vom Ende des Paars ab) und werden deshalb einmal nach Start
- * sortiert (O(k log k), bei bereits sortierter Eingabe linear). Jede Position liegt in höchstens 13 Paar-Funden
- * (einer je Art), die Teilstrings der Paar-Funde summieren sich daher auf höchstens 13 mal n Zeichen. Die Vereinigung
- * ist ein einziger Durchlauf über beide nach Start sortierten Listen, führt nur Zahlen mit und baut je Ergebnis einen
- * Fund.
+ * Durchlauf ans Laufende. Der Kopf einer Form liest nur Zeichen unmittelbar ab der Position, nie Servernamen,
+ * Freigabe oder Segmente (deren Anzahl liefern die Laufdaten in O(1)). Die Belege je Form (UNC, HOME, HOST_PFAD)
+ * stehen im Javadoc der Form: UNIX und LAUFWERK prüfen nur wenige Zeichen, UNC liest den Backslash-Lauf nur an dessen
+ * erstem Backslash, HOME liest höchstens 66 Zeichen je Tilde in nicht überlappenden Abschnitten, HOST_PFAD liest
+ * höchstens 64 Zeichen je {@code :/}-Stelle (O(64 n)). Die Zählung nach der Kürzung (siehe Segmente) kostet
+ * O(Lauflänge) und läuft nur für Köpfe, deren pessimistische Zahl genau eines unter der Mindestzahl liegt und hinter
+ * denen ein Klammer-Segment möglich ist. Das sind je Lauf höchstens eine Handvoll Köpfe: Köpfe der Formen LAUFWERK,
+ * UNIX, HOME und HOST_PFAD enden mit einem Trenner, und der nächste Kopf beginnt mit einem Nicht-Trenner. Köpfe
+ * verschiedener Formen können dasselbe Kopfende haben (HOST_PFAD {@code ab:/} und LAUFWERK {@code b:/}); das
+ * vervielfacht die Zahl der Köpfe zwischen zwei Segmentanfängen nur um einen konstanten Faktor (höchstens die
+ * Formzahl). Daher hat jeder Kopf, hinter dem noch genügend weitere Köpfe liegen, mindestens zwei Segmente; der
+ * Gesamtaufwand bleibt O(n). Eine neue Form mit dichten Köpfen muss das erneut belegen. Die Suche nach dem
+ * schließenden Anführungszeichen endet spätestens am nächsten Zeichen derselben Art (jedes Zeichen schließt seine
+ * eigene Art). Je Art sind die Bereiche der Paare daher paarweise disjunkt, und die Inhaltsprüfung liest jede
+ * Position je Art höchstens einmal. Die Kopfprüfungen an diesen Positionen kosten je Art so viel, wie das
+ * Javadoc der jeweiligen Form belegt (HOST_PFAD bis zu 64 Zeichen je {@code :/}-Stelle in überlappenden Abschnitten,
+ * HOME bis zu 66 Zeichen je Tilde), insgesamt O(13 mal 64 mal n); keine Rekursion. Die Funde der Paare entstehen
+ * nicht unbedingt in Startreihenfolge (Paare verschiedener Arten verschachteln sich, und der erste gültige Kopf
+ * hängt vom Ende des Paars und von der Mindestsegmentzahl der Form ab) und werden deshalb einmal nach Start
+ * sortiert. Jede Position liegt in höchstens 13 Paar-Funden (einer je Art), die Teilstrings der Paar-Funde summieren
+ * sich daher auf höchstens 13 mal n Zeichen. Die Vereinigung ist ein einziger Durchlauf über beide nach Start
+ * sortierten Listen, führt nur Zahlen mit und baut je Ergebnis einen Fund.
  *
  * <p>Unicode: Alle Kopf-, Trenner-, Kürzungs- und Endzeichen sind BMP-Zeichen außerhalb der Surrogatbereiche; ein
  * Fund beginnt daher nie in einem Surrogatpaar und endet nie zwischen Grundzeichen und kombinierendem Zeichen.
@@ -185,8 +198,8 @@ public final class PathRecognizer implements Recognizer {
                 }
                 int segments = countFrom(starts, count, headEnd);
                 if (segments >= form.minSegments()) {
-                    return new Finding(FindingType.PFAD, text.substring(i, to), i, to, form.confidence(segments),
-                            form.source());
+                    return new Finding(FindingType.PFAD, text.substring(i, to), i, to,
+                            form.confidence(headEnd - i, segments), form.source());
                 }
             }
         }
@@ -302,11 +315,10 @@ public final class PathRecognizer implements Recognizer {
     /**
      * Durchlauf ohne Anführungszeichenregel mit den übergebenen Formen. Bei mehreren Formen wird zusätzlich je Form ein
      * Durchlauf mit nur dieser Form gemacht und alles vereinigt: Ein Lauf liefert höchstens einen Fund, und der Fund
-     * einer früher beginnenden Form (UNC vor einem Laufwerkskopf im selben Lauf) kann am Ende kürzer ausfallen,
-     * weil die
-     * Klammerzählung früher beginnt. Ohne die Vereinigung könnte so der Fund einer einzelnen Form durch eine andere
-     * Form kleiner werden. Der Aufwand sind (Formzahl + 1) lineare Durchläufe: einer mit allen Formen
-     * und je einer je Form.
+     * einer früher beginnenden Form (UNC vor einem Laufwerkskopf im selben Lauf) kann am Ende kürzer ausfallen, weil
+     * die Klammerzählung früher beginnt. Ohne die Vereinigung könnte so der Fund einer einzelnen Form durch eine
+     * andere Form kleiner werden. Der Aufwand sind (Formzahl + 1) lineare Durchläufe: einer mit allen Formen und je
+     * einer je Form (derzeit fünf Formen, also sechs Durchläufe).
      */
     List<Finding> detectWithoutQuotes(String text, PathForm[] forms) {
         Objects.requireNonNull(text, "text");
@@ -357,14 +369,24 @@ public final class PathRecognizer implements Recognizer {
             if (headEnd < 0) {
                 continue;
             }
-            // pessimistische Zählung genügt für "ist ein Fund": sie ist nie größer als die Zahl nach der Kürzung
-            if (run.segmentsFrom(headEnd) < form.minSegments()) {
+            // Die pessimistische Zählung (vor allen abschließenden Kürzungszeichen) ist höchstens um EINS kleiner als
+            // die Zahl nach der tatsächlichen Kürzung: Ein zusätzliches Segment entsteht nur, wenn hinter einem
+            // Trenner ausgeglichene Klammern stehen bleiben (/opt(/) hat tatsächlich zwei Segmente, pessimistisch
+            // eines). Reicht die pessimistische Zahl, ist es ein Fund; fehlt genau eines, entscheidet die Zählung nach
+            // der Kürzung (nur dann, wenn überhaupt ein Segment hinzukommen kann, O(1) Vorprüfung); sonst kein Fund.
+            int minSegments = form.minSegments();
+            int pessimistic = run.segmentsFrom(headEnd);
+            if (pessimistic < minSegments
+                    && (pessimistic + 1 < minSegments || !run.mayGainSegment(text, headEnd))) {
                 continue;
             }
             int end = trimEnd(text, pos, run.end, headEnd);
             int segments = run.segmentsTo(text, headEnd, end);
+            if (segments < minSegments) {
+                continue;
+            }
             return new Finding(FindingType.PFAD, text.substring(pos, end), pos, end,
-                    form.confidence(segments), form.source());
+                    form.confidence(headEnd - pos, segments), form.source());
         }
         return null;
     }
@@ -454,10 +476,19 @@ public final class PathRecognizer implements Recognizer {
          */
         int segmentsTo(String text, int from, int actualEnd) {
             int segments = segmentsFrom(from);
-            if (actualEnd > tail && tail >= from && tail > runStart && PathChars.isSeparator(text.charAt(tail - 1))) {
+            if (actualEnd > tail && mayGainSegment(text, from)) {
                 segments = Math.min(segments + 1, CAP);
             }
             return segments;
+        }
+
+        /**
+         * Ob hinter dem pessimistischen Ende ein weiteres Segment stehen kann (O(1)): Zwischen {@code tail} und dem
+         * Ende des Laufs stehen nur Satzzeichen und schließende Klammern; sie bilden ein eigenes Segment nur direkt
+         * hinter einem Trenner, und nur, wenn {@code tail} hinter dem Kopfende liegt.
+         */
+        boolean mayGainSegment(String text, int from) {
+            return tail < end && tail >= from && tail > runStart && PathChars.isSeparator(text.charAt(tail - 1));
         }
     }
 }

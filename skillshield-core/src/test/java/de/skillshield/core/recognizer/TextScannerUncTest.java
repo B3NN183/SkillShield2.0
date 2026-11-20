@@ -144,18 +144,25 @@ class TextScannerUncTest {
     }
 
     /**
-     * Bekannte Luecke (Plan Nachtrag T-12 Punkt 9, Folge-Feature "Zugangsdaten in Kommandozeilen"): nur der UNC-Pfad
-     * wird ersetzt. Passwort-Argument und {@code /user:DOMAENE und Benutzername} bleiben im Klartext. Dieser Test haelt den
+     * Bekannte Luecke (Plan Nachtrag T-12 Punkt 9, Folge-Feature "Zugangsdaten in Kommandozeilen"): Das Passwort-
+     * Argument bleibt im Klartext. Seit T-13 wird {@code /user:DOMAENE und Benutzername} zufaellig mitgeschuetzt, weil der
+     * Schalter mit dem Backslash als Trenner zwei Segmente hat und damit ein Unix-Fund (0.80) ist; das ist keine
+     * Zusage des Erkenners (ohne Backslash, z. B. {@code /user:erika}, bleibt der Name sichtbar). Der Test haelt den
      * Ist-Zustand fest und ist anzupassen, wenn das Folge-Feature kommt.
      */
     @Test
     void bekannteLueckeNetUseZugangsdatenBleibenImKlartext() {
         String text = bs("net use Z: ¦¦srv-beispiel¦freigabe geheim /user:praxis¦erika.mustermann");
         List<Finding> funde = scan(text);
-        assertEquals(1, funde.size());
+        assertEquals(2, funde.size());
         assertEquals(bs("¦¦srv-beispiel¦freigabe"), funde.get(0).originalValue());
+        assertEquals(bs("/user:praxis¦erika.mustermann"), funde.get(1).originalValue());
+        assertEquals("pfad-unix", funde.get(1).source());
+        assertEquals(0.80, funde.get(1).confidence());
         String aus = pseudonymisiert(text);
-        assertEquals(bs("net use Z: [[PFAD_1]] geheim /user:praxis¦erika.mustermann"), aus);
+        assertEquals("net use Z: [[PFAD_1]] geheim [[PFAD_2]]", aus);
+        // die Luecke bleibt: das Passwort-Argument und ein Benutzername ohne Backslash sind im Klartext
+        assertEquals(bs("net use Z: [[PFAD_1]] geheim /user:erika"), pseudonymisiert(bs("net use Z: ¦¦srv-beispiel¦freigabe geheim /user:erika")));
     }
 
     // ---- E-Mail und Benutzername im UNC-Pfad

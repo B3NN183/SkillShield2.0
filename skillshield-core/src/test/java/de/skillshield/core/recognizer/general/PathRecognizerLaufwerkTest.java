@@ -388,7 +388,7 @@ class PathRecognizerLaufwerkTest {
     @ParameterizedTest
     @ValueSource(strings = {"Starte tool.exe", "tool.exe", "BeispielTool.exe l\u00E4uft", "Datei konfig.yml",
             "Programm BeispielTool ist installiert", "ordner\\datei.txt", "ordner/datei.txt", "Files\\Mein",
-            "Tool\\tool.exe", "/opt/beispiel/a", "~/beispiel/konfig.yml",
+            "Tool\\tool.exe",
             ".\\tools\\tool.exe", "%APPDATA%\\x", "$HOME/x"})
     void ak21DateinameOhnePfadUndAndereFormenSindKeinFund(String text) {
         assertKeinFund(text);
@@ -427,13 +427,21 @@ class PathRecognizerLaufwerkTest {
         assertEquals(List.of(bs("C:¦a¦x"), bs("D:¦b¦y"), bs("E:¦c¦z")), werte(text));
     }
 
-    // ------------------------------------------------------------------ Schalter mit Pfadwert (T-13 passt an)
+    // ------------------------------------------------------------------ Schalter mit Pfadwert (seit T-13 UNIX)
 
     @Test
-    void logSchalterErgibtVorT13DenLaufwerksfund() {
-        // Vor T-13 (Unix-Form) ist der Fund nur der Laufwerkspfad; T-13 stellt den Test auf den ganzen
-        // Ausdruck /log=C:\Logs\a.log um.
-        assertEinFund(bs("tool.exe /log=C:¦Logs¦a.log"), bs("C:¦Logs¦a.log"));
+    void logSchalterErgibtSeitT13DenGanzenAusdruckAlsUnixFund() {
+        // Seit T-13 (Plan 2.4.2, bewusst umgestellt, vorher nur der Laufwerksfund ab "C:"): Der Schalter mit
+        // Pfadwert ist EIN Fund ueber den ganzen Ausdruck, weil der Backslash auch Trenner ist (drei Segmente:
+        // "log=C:", "Logs", "a.log"). Der Pfad ist vollstaendig geschuetzt, der Schaltername ist mitersetzt.
+        String text = bs("tool.exe /log=C:¦Logs¦a.log");
+        List<Finding> f = R.detect(text);
+        assertEquals(1, f.size());
+        assertEquals(bs("/log=C:¦Logs¦a.log"), f.get(0).originalValue());
+        assertEquals(9, f.get(0).start());
+        assertEquals("pfad-unix", f.get(0).source());
+        assertEquals(0.90, f.get(0).confidence());
+        assertEquals(FindingType.PFAD, f.get(0).type());
     }
 
     // ------------------------------------------------------------------ Unicode (AK-23)

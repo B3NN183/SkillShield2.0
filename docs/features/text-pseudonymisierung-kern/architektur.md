@@ -920,6 +920,42 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
   Segmente; Startgrenze (`a/opt/x` kein Fund, `=/opt/x`, `(/opt/x)` Fund); `//srv-beispiel/freigabe` nach N-2;
   bekannte Grenzen `und /oder/beides`, `/log=C:\Logs\a.log` als ein Fund festgehalten; `/a`×100 000 und `~/`×100 000
   < 2 s.
+- *(Nachtrag 20.11.2026 zu T-13 – Nutzerentscheidungen nach dem Bericht des engineer, Durchlauf 1; ergänzt die Zeilen
+  `UNIX` und `HOME` (2.4.2) und ersetzt OF-4, soweit sie widersprechen:*
+  1. *Die Startgrenze bleibt für UNIX und HOME bestehen (anders als bei LAUFWERK und UNC), damit gewöhnlicher Text
+     wie `und/oder`, `01/2026`, `km/h` kein Fund wird. Zusätzliche Startgrenzen für UNIX und HOME: `,` `;` `|`
+     (`Datei,/etc/hosts`, `a;/opt/x/y`, `cmd|/opt/x/y` → Fund ab dem `/`).*
+  2. *HOME eines anderen Benutzers: `~name/…` mit `name` = `[A-Za-z_][A-Za-z0-9._-]*` direkt hinter `~`, Startgrenze
+     wie HOME, mindestens ein Segment hinter dem `/` → Fund ab `~`, Quelle `pfad-home`, Konfidenz 0.80
+     (wahrscheinlich). `~erika/akte.pdf` → ein Fund. Weiterhin kein Fund: `~`, `~/`, `~name` ohne `/`, `~30/40`.*
+  3. *Rechner vor dem Pfad (neue Form `HOST_PFAD`, Quelle `pfad-host`): Steht direkt vor `:/` ein Lauf aus
+     `[A-Za-z0-9._-]` mit mindestens einem ASCII-Buchstaben (höchstens die letzten 64 Zeichen, nicht vor das
+     Laufende davor zurück), und folgt hinter `:/` mindestens ein Segment, ist der Fund der ganze Lauf plus `:` plus
+     Pfad. Keine Startgrenze. Konfidenz 0.80 bei einem Segment, 0.90 ab zwei. `host.example:/export/home` → ein
+     Fund ab `h`; `Pfad:/etc/hosts` → ein Fund ab `P` (bekannte Folge: das Wort vor dem Doppelpunkt wird
+     mitersetzt). Der Laufwerksfund (`e:/export/home`) liegt darin; bei gleicher Abdeckung gilt Regel 7a aus
+     T-12. Über den Standard-Scanner bleibt eine URL (`https://…`) genau ein URL-Fund, und
+     `nutzer@host.example:/pfad` bleibt vollständig abgedeckt (zusammengelegt).*
+  3a. *Präzisierungen zu `HOST_PFAD` (Umsetzung Durchlauf 2): (a) Kein Kopf, wenn hinter `:/` sofort ein weiteres
+     `/` folgt (`://`) – URLs und AK-7 (g) bleiben unverändert; `file:///C:/x` bleibt bis T-16 beim Laufwerksfund
+     ab `e:` („fil" sichtbar). (b) Ein Lauf aus genau einem Zeichen ist kein Host-Kopf (`C:/x` bleibt
+     `pfad-laufwerk`, 0.95). (c) Der Host-Lauf ist reines ASCII; `Verhältnis:/x` ergibt den Teilfund `ltnis:/x`.
+     (d) Bestehende Laufwerksfunde, deren Wort vor `:/` mehr als ein Zeichen hat, werden größer und tragen die
+     Konfidenz der Host-Form (0.80 bei einem Segment, 0.90 ab zwei; Regel 7a (ii)). (e) IP als Rechner
+     (`192.0.2.10:/export/home`) ist kein Host-Fund (kein Buchstabe); der Pfad dahinter bleibt ohne Fund –
+     bekannte Grenze. (f) Bekannte Fehltreffer (0.80): `Hinweis:/n`, `Montag:/Dienstag`, `http:/x`.*
+  3b. *(Nach security-Prüfung T-13, Durchlauf 2.) Startgrenze für UNIX und HOME sind ALLE 13 Anführungszeichen-Arten
+     aus T-11 (gerade und typografische), nicht nur `"`, `'`, Backtick – ein unpaariges oder über das Zeilenende
+     reichendes typografisches Zeichen ließ den Pfad sonst ganz im Klartext (U+201E + `/home/erika/a.pdf`).
+     Bekannte Folge von 3a (d) und 7a (ii): Die Konfidenz eines Funds kann gegenüber dem Stand vor T-13 sinken,
+     auch ohne dass seine Grenzen wachsen, wenn ein beteiligter späterer Fund jetzt ein Host-Fund ist
+     (`C:\Akten'Pfad:/x y'` → 0.80 statt 0.95); ersetzt wird in jedem Fall. Linearität von `HOST_PFAD`: je
+     `:/`-Stelle höchstens 64 gelesene Zeichen (nicht „jedes Zeichen höchstens zweimal").*
+  4. *Bekannte Grenzen (kein Fund): Buchstabe direkt vor `/` (`siehe/etc/hosts`), Kurzoption (`-I/usr/include`),
+     `host:~/dir`. Bekannte Fehltreffer (0.80): `und /oder/beides`, `rd /s/q`, `/impressum/kontakt`,
+     `//kommentar/zeile`. Zwei-Segment-Pfade wie `/etc/hosts`, `/tmp/a` haben 0.80.*
+  5. *Die Mindestsegment-Prüfung erfolgt nach der Kürzung mit der tatsächlichen Segmentzahl (reviewer-Auflage aus
+     T-12); Zitat-Funde können mit Formen mit Startgrenze unsortiert entstehen und werden sortiert.*
 
 ### T-14: Pfad-Erkenner – relative Pfade
 - **Dateien**: `PathForm.java` (`RELATIV`); Test `PathRecognizerRelativTest`.

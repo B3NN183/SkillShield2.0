@@ -56,13 +56,38 @@ class PathCharsTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {" ", "\t", "\n", "\r", "\u00A0", "\"", "'", "`", "(", "[", "{", "<", ">", "=", "\u0000"})
+    @ValueSource(strings = {" ", "\t", "\n", "\r", "\u00A0", "\"", "'", "`", "(", "[", "{", "<", ">", "=", ",", ";", "|",
+            "\u0000"})
     void startgrenzeNachLeerraumOderOeffnendemZeichen(String davor) {
         assertTrue(PathChars.isStartBoundary(davor + "x", 1), "Zeichen " + (int) davor.charAt(0));
     }
 
+    /** Plan Nachtrag Punkt 3b: alle 13 Anfuehrungszeichen aus T-11 sind Startgrenze, auch die typografischen. */
     @ParameterizedTest
-    @ValueSource(strings = {":", "/", "\\", "a", "Z", "5", ".", "-", "_", ")", "]", "}", ",", ";", "~", "\u0301",
+    @ValueSource(strings = {"\"", "\u201c", "\u201d", "\u201e", "\u00ab", "\u00bb", "'", "\u2018", "\u2019",
+            "\u201a", "\u2039", "\u203a", "`"})
+    void startgrenzeNachJedemDerDreizehnAnfuehrungszeichen(String davor) {
+        assertTrue(PathChars.isStartBoundary(davor + "/x", 1), "Zeichen " + (int) davor.charAt(0));
+        assertTrue(PathChars.quoteKind(davor.charAt(0)) >= 0);
+    }
+
+    @Test
+    void startgrenzeHatGenauDieDreizehnAnfuehrungszeichenPlusOeffnendeKlammernUndTrenner() {
+        String sonst = " \t\n\r\u00a0\u2028\u2029\u0000([{<>=,;|";
+        int erfuellt = 0;
+        for (char c = 0; c < 0x3000; c++) {
+            boolean erwartet = ALLE_ANFUEHRUNGSZEICHEN.indexOf(c) >= 0 || sonst.indexOf(c) >= 0
+                    || Character.isWhitespace(c) || Character.isSpaceChar(c) || Character.isISOControl(c);
+            assertEquals(erwartet, PathChars.isStartBoundary(c + "x", 1), "Zeichen " + (int) c);
+            if (erwartet) {
+                erfuellt++;
+            }
+        }
+        assertTrue(erfuellt > 13);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {":", "/", "\\", "a", "Z", "5", ".", "-", "_", ")", "]", "}", "~", "\u0301",
             "\u00E4", "\u200B", "\uFEFF", "%", "$", "@", "!", "?", "*", "+"})
     void keineStartgrenzeNachBuchstabeZifferPunktUndAnderen(String davor) {
         assertFalse(PathChars.isStartBoundary(davor + "x", 1), "Zeichen " + (int) davor.charAt(0));
@@ -75,6 +100,18 @@ class PathCharsTest {
         assertFalse(PathChars.isStartBoundary("12/2025", 2));
         assertFalse(PathChars.isStartBoundary("und/oder", 3));
         assertFalse(PathChars.isStartBoundary("file:///C:", 8));
+    }
+
+    @Test
+    void hostZeichenSindNurAsciiBuchstabenZiffernPunktUnterstrichUndMinus() {
+        for (char c = 0; c < 0x3000; c++) {
+            boolean erwartet = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.'
+                    || c == '_' || c == '-';
+            assertEquals(erwartet, PathChars.isHostChar(c), "Zeichen " + (int) c);
+            assertEquals((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'), PathChars.isAsciiLetter(c),
+                    "Zeichen " + (int) c);
+            assertFalse(PathChars.isHostChar(c) && PathChars.isTerminator(c), "Endzeichen " + (int) c);
+        }
     }
 
     @Test
@@ -125,12 +162,12 @@ class PathCharsTest {
         assertEquals(3, f.headEnd("C:\\", 0));
         assertEquals("pfad-laufwerk", f.source());
         assertEquals(1, f.minSegments());
-        assertEquals(0.95, f.confidence(1));
-        assertEquals(0.95, f.confidence(3));
+        assertEquals(0.95, f.confidence(3, 1));
+        assertEquals(0.95, f.confidence(3, 3));
         assertFalse(f.requiresStartBoundary());
     }
 
-    // ------------------------------------------------------------------ Anführungszeichen (T-11)
+    // ------------------------------------------------------------------ Anfuehrungszeichen (T-11)
 
     private static final String ALLE_ANFUEHRUNGSZEICHEN = "\"\u201C\u201D\u201E\u00AB\u00BB'\u2018\u2019\u201A\u2039\u203A`";
 

@@ -897,9 +897,9 @@ class PathRecognizerAnfuehrungTest {
 
     @Test
     void ak49SichUeberlappendeZitatFundeVerschiedenerArtenWerdenLinearVereinigt() {
-        // Je Baustein "»C:\a b : Das " paart mit dem " des nächsten Bausteins (Fund ab C:\ bis davor), das » mit dem
-        // » des nächsten (Fund ab C:\ bis davor). Beide Funde eines Bausteins überlappen sich und werden zu einem
-        // Fund [C:\ des Bausteins, » des nächsten); der nächste Fund beginnt erst hinter diesem » und ist durch das
+        // Je Baustein "U+00BBC:\a b : Das " paart mit dem " des nächsten Bausteins (Fund ab C:\ bis davor), das U+00BB mit dem
+        // U+00BB des nächsten (Fund ab C:\ bis davor). Beide Funde eines Bausteins überlappen sich und werden zu einem
+        // Fund [C:\ des Bausteins, U+00BB des nächsten); der nächste Fund beginnt erst hinter diesem U+00BB und ist durch das
         // Zeichen getrennt. Je Baustein außer dem letzten ein Fund, im letzten nur C:\a vom Durchlauf: n Funde.
         int n = 125_000;
         String text = bs("\"\u00BBC:¦a b ").repeat(n);

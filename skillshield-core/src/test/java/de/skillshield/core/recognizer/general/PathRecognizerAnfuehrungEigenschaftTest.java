@@ -15,6 +15,7 @@ import de.skillshield.core.reidentify.Reidentifier;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -148,12 +149,11 @@ class PathRecognizerAnfuehrungEigenschaftTest {
             String wo = ", Startwert " + SEED + ", Iteration " + it;
             assertEquals(text.substring(f.start(), f.end()), f.originalValue(), "Teilstring" + wo);
             assertEquals(FindingType.PFAD, f.type(), "Typ" + wo);
-            // seit T-12 liefert auch UNC (Backslash-Läufe der Zufallstexte) Funde: beginnt der Fund mit zwei
-            // Backslashes, ist die Quelle pfad-unc, sonst pfad-laufwerk; 0.60 gibt es nur bei UNC mit genau einem
-            // Segment bzw. bei Zusammenlegung mit einem solchen (der Fund enthaelt dann einen Doppel-Backslash)
-            assertEquals(f.originalValue().startsWith("\\\\") ? "pfad-unc" : "pfad-laufwerk", f.source(), "Quelle" + wo);
-            assertTrue(f.confidence() == 0.95 || (f.confidence() == 0.60 && f.originalValue().contains("\\\\")),
-                    "Konfidenz " + f.confidence() + wo);
+            // seit T-13 fuenf Formen: Quelle und Konfidenz als Menge (Orakel je Form: PathRecognizerUnixEigenschaftTest);
+            // ein zusammengelegter Fund traegt die Quelle des frueher beginnenden Fundes
+            assertTrue(Set.of("pfad-laufwerk", "pfad-unc", "pfad-unix", "pfad-home", "pfad-host").contains(f.source()),
+                    "Quelle " + f.source() + wo);
+            assertTrue(Set.of(0.95, 0.90, 0.80, 0.60).contains(f.confidence()), "Konfidenz " + f.confidence() + wo);
             assertTrue(f.start() >= vorigesEnde, "sortiert und überlappungsfrei" + wo);
             assertFalse(f.start() > 0 && Character.isLowSurrogate(text.charAt(f.start()))
                     && Character.isHighSurrogate(text.charAt(f.start() - 1)), "Start im Surrogatpaar" + wo);

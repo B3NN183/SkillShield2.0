@@ -33,10 +33,14 @@ final class PathChars {
     }
 
     /**
-     * Startgrenze vor Position {@code i}: Textanfang, Leerraum oder eines der Zeichen Anführungszeichen, Apostroph,
-     * Backtick, öffnende runde, eckige oder geschweifte Klammer, {@code <}, {@code >} und {@code =} direkt davor.
-     * Buchstaben, Ziffern, Punkt, Minus, Unterstrich, Doppelpunkt, Trenner und kombinierende Zeichen davor erfüllen
-     * die Grenze nicht.
+     * Startgrenze vor Position {@code i}: Textanfang, Leerraum oder eines der Zeichen direkt davor: jedes der 13
+     * Anführungszeichen aus T-11 ({@link #quoteKind}: {@code "}, {@code '}, Backtick und die typografischen Zeichen
+     * U+201C, U+201D, U+201E, U+00AB, U+00BB, U+2018, U+2019, U+201A, U+2039, U+203A; Nachtrag 20.11.2026 Punkt 3b),
+     * öffnende runde, eckige oder geschweifte Klammer, {@code <}, {@code >}, {@code =} sowie {@code ,}, {@code ;}
+     * und {@code |} (Nachtrag Punkt 1: {@code Datei,/etc/hosts}, {@code a;/opt/x/y}, {@code cmd|/opt/x/y}; {@code |}
+     * beendet zugleich einen Lauf, die Grenze gilt für den Lauf dahinter). Ein typografisches Zeichen zählt auch
+     * unpaarig oder über das Zeilenende hinaus; sonst bliebe der Pfad dahinter im Klartext. Buchstaben, Ziffern,
+     * Punkt, Minus, Unterstrich, Doppelpunkt, Trenner und kombinierende Zeichen davor erfüllen die Grenze nicht.
      *
      * @param text der Text
      * @param i    Position, {@code 0 <= i <= text.length()}
@@ -49,20 +53,37 @@ final class PathChars {
         if (isBlank(p)) {
             return true;
         }
+        if (quoteKind(p) >= 0) {
+            return true;
+        }
         switch (p) {
-            case '"':
-            case '\'':
-            case '`':
             case '(':
             case '[':
             case '{':
             case '<':
             case '>':
             case '=':
+            case ',':
+            case ';':
+            case '|':
                 return true;
             default:
                 return false;
         }
+    }
+
+    /** ASCII-Buchstabe {@code [A-Za-z]}. */
+    static boolean isAsciiLetter(char c) {
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+    }
+
+    /**
+     * Zeichen eines Rechner- oder Benutzernamens {@code [A-Za-z0-9._-]} (Formen {@code HOST_PFAD} und
+     * {@code HOME}); bewusst nur ASCII und kein Endzeichen, damit der Lauf nie über Leerraum reicht und kein
+     * Surrogat oder kombinierendes Zeichen enthält.
+     */
+    static boolean isHostChar(char c) {
+        return isAsciiLetter(c) || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-';
     }
 
     /** Anzahl der Arten öffnender Anführungszeichen, siehe {@link #quoteKind}. */
@@ -72,7 +93,7 @@ final class PathChars {
      * Art eines öffnenden Anführungszeichens (0 bis {@link #QUOTE_KINDS} - 1) oder -1. Doppelte Familie (0 bis 5):
      * {@code "}, U+201C, U+201D, U+201E, U+00AB, U+00BB. Einfache Familie (6 bis 11): {@code '}, U+2018, U+2019,
      * U+201A, U+2039, U+203A. Backtick: 12. Jedes Zeichen kann öffnen und schließen; ob ein Paar zustande kommt, regelt
-     * {@link #closesQuote}.
+     * {@link #closesQuote}. Dieselbe Menge ist die Startgrenze für UNIX und HOME ({@link #isStartBoundary}).
      */
     static int quoteKind(char c) {
         switch (c) {
@@ -157,7 +178,7 @@ final class PathChars {
         }
     }
 
-    /** Schließende runde, eckige oder geschweifte Klammer; am Ende nur gekürzt, wenn sie im Fund nicht geöffnet wurde. */
+    /** Schließende runde, eckige oder geschweifte Klammer; am Ende nur gekürzt, wenn im Fund nicht geöffnet. */
     static boolean isClosingBracket(char c) {
         return c == ')' || c == ']' || c == '}';
     }

@@ -62,6 +62,9 @@ class PathRecognizerUncTest {
             if (f.confidence() == 0.60) {
                 assertEquals(ConfidenceLevel.FRAGLICH, f.level());
                 assertTrue(f.originalValue().contains("\\\\"), "0.60 nur mit Doppel-Backslash");
+            } else if (quellen.contains("pfad-unix") && (f.confidence() == 0.80 || f.confidence() == 0.90)) {
+                // seit T-13: Unix-Fund (0.80 bei zwei, 0.90 ab drei Segmenten) bzw. Zusammenlegung damit (D-8)
+                assertTrue(f.level() == ConfidenceLevel.WAHRSCHEINLICH || f.level() == ConfidenceLevel.SICHER);
             } else {
                 assertEquals(0.95, f.confidence());
                 assertEquals(ConfidenceLevel.SICHER, f.level());
@@ -483,11 +486,25 @@ class PathRecognizerUncTest {
     // ---- Schraegstrich-UNC gehoert nach dem Plan zu UNIX (T-13)
 
     @Test
-    void schraegstrichUncIstAufgabeVonT13NurInvarianten() {
-        // Plan 2.4.2 / N-2: "//srv-beispiel/freigabe" gehoert zur Form UNIX (T-13), nicht zu UNC: bis dahin kein Fund
-        // (wird in T-13 bewusst angepasst). Die Backslash-Form wird dadurch nicht beeinflusst.
-        assertKeinFund("//srv-beispiel/freigabe/a.txt");
+    void schraegstrichUncIstSeitT13EinUnixFund() {
+        // Bewusst umgestellt (vorher: bis T-13 kein Fund). Plan 2.4.2 / N-2: "//srv-beispiel/freigabe" gehoert zur
+        // Form UNIX: "//" zaehlt wie ein Trenner, Server und Freigabe sind zwei Segmente (0.80), mit Datei drei (0.90).
+        // Der Fund ist die ganze Angabe, Server- und Freigabename sind mitgeschuetzt.
+        Set<String> unix = Set.of("pfad-unix");
+        List<Finding> drei = pruefe("//srv-beispiel/freigabe/a.txt", R.detect("//srv-beispiel/freigabe/a.txt"), unix);
+        assertEquals(1, drei.size());
+        assertEquals("//srv-beispiel/freigabe/a.txt", drei.get(0).originalValue());
+        assertEquals(0.90, drei.get(0).confidence());
+        assertEquals("pfad-unix", drei.get(0).source());
+        List<Finding> zwei = pruefe("//srv-beispiel/freigabe", R.detect("//srv-beispiel/freigabe"), unix);
+        assertEquals(1, zwei.size());
+        assertEquals("//srv-beispiel/freigabe", zwei.get(0).originalValue());
+        assertEquals(0.80, zwei.get(0).confidence());
+        // ein Segment allein ist kein Fund (OF-7 fuer die Schraegstrich-Form unveraendert)
+        assertEquals(List.of(), R.detect("//srv-beispiel"));
+        assertEquals(List.of(), R.detect("// Kommentar"));
         fundeGemischt("https://example.invalid/a/b");
+        // die Backslash-Form wird dadurch nicht beeinflusst
         assertEinFund(bs("Siehe ¦¦srv-beispiel/freigabe/a.txt ende"), bs("¦¦srv-beispiel/freigabe/a.txt"));
     }
 
@@ -610,7 +627,7 @@ class PathRecognizerUncTest {
     /** Erkenner und Standard-Scanner, Fundzahl wird geprueft ({@code erwartet < 0}: nur Zeit und Gueltigkeit). */
     private static void laufzeit(String text, int erwartet) {
         List<Finding> r = assertTimeoutPreemptively(LIMIT, () -> R.detect(text));
-        pruefe(text, r, Set.of("pfad-unc", "pfad-laufwerk"));
+        pruefe(text, r, Set.of("pfad-unc", "pfad-laufwerk", "pfad-unix"));
         List<Finding> s = assertTimeoutPreemptively(LIMIT, () -> SCANNER.scan(text));
         int vorigesEnde = 0;
         for (Finding f : s) {
@@ -684,8 +701,8 @@ class PathRecognizerUncTest {
 
     @Test
     void ak49SchraegstrichUncVielfachNurZeitUndGueltigkeit() {
-        // Schraegstrich-UNC gehoert zu T-13; hier nur Laufzeit und Gueltigkeit
-        laufzeit("//a/b ".repeat(170_000), -1);
+        // Schraegstrich-UNC ist seit T-13 die Form UNIX ("//a/b" = zwei Segmente): ein Fund je Wiederholung
+        laufzeit("//a/b ".repeat(170_000), 170_000);
     }
 
     @Test
