@@ -1136,6 +1136,10 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
   × 40 000 (jede URL enthält das schließende `'` des vorigen und das öffnende `'` des nächsten Pfad-Kandidaten in
   Anführungszeichen; ergibt eine Kette über fast den ganzen Text) durch alle drei Schritte je < 2 s, Roundtrip gleich,
   Schutzgarantie wie in T-18 (keine feste Fundzahl prüfen). Standard-Heap des Surefire-Laufs.
+- **Nachtrag 21.11.2026 (security, Schwere niedrig):** *Der Test enthält unter der 2-s-Grenze keinen Fall mit sehr
+  vielen VERSCHIEDENEN Fundwerten (große Zuordnung); überlineares Verhalten, das mit der Größe der Zuordnung wächst,
+  fiele erst spät auf. Das heutige Verhalten ist linear (eigene Messung von security: 100 000 bis 175 000
+  verschiedene Werte, alle Schritte unter 0,7 s). Die Lücke wird in T-20 geschlossen (T-20 Nachtrag Punkt 5).*
 
 ### T-20: Projektregeln (Netz, Dateisystem, Klartext, Testdaten)
 - **Dateien**: Tests `ArchitekturRegelnTest`, `KlartextFreiheitTest`, `TestdatenSynthetischTest` (Paket
@@ -1185,6 +1189,11 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
   4. *Die drei Tests müssen selbst Dateien lesen (`src/main/java`, `src/test/java`). Das ist Testcode und von den
      Verboten für den Produktivcode nicht betroffen. `TestdatenSynthetischTest` nimmt die eigene Datei und die
      Ausnahmeliste nicht von der Prüfung aus, außer für die Zeilen der Ausnahmeliste selbst.*
+  5. *Zusatz aus T-19 (security, niedrig): `GrenzlastTest` erhält in T-20 zwei weitere pathologische Fälle mit
+     mindestens 100 000 VERSCHIEDENEN Fundwerten – 100 000 verschiedene Pfade (`bs("C:¦d¦") + i + " "`) und
+     100 000 verschiedene E-Mail-Adressen (`"u" + i + "@e.invalid "`) –, je durch alle drei Schritte mit je < 2 s,
+     Roundtrip gleich; im Test wird geprüft, dass die Zuordnung mindestens 100 000 Einträge hat. Das ist neben
+     Punkt 2 die einzige zulässige Änderung an bestehenden Tests in T-20.*
 
 ### Zuordnung AK → Task
 
