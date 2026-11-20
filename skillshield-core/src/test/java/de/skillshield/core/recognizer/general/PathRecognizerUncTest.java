@@ -435,9 +435,19 @@ class PathRecognizerUncTest {
             assertEquals(n, pfad.indexOf('s'), "Backslashes vor dem Server");
             assertEinFund("Pfad " + pfad + " ok", pfad);
         }
-        // genau ein Backslash ist kein UNC-Pfad
-        assertKeinFund(bs("¦srv-beispiel¦freigabe¦a"));
-        assertKeinFund(bs("Ordner ¦srv¦freigabe¦a"));
+        // genau ein Backslash ist kein UNC-Pfad; seit T-14 (Nachtrag T-12 Punkt 8) aber ein Fund der Form
+        // EINZEL_BACKSLASH (pfad-relativ, 0.75, mindestens zwei Segmente), nicht der Form UNC (bisher: kein Fund)
+        assertEinzelBackslashFund(bs("¦srv-beispiel¦freigabe¦a"), bs("¦srv-beispiel¦freigabe¦a"));
+        assertEinzelBackslashFund(bs("Ordner ¦srv¦freigabe¦a"), bs("¦srv¦freigabe¦a"));
+    }
+
+    /** Genau ein Fund der Form EINZEL_BACKSLASH (T-14): Quelle pfad-relativ, Konfidenz 0.75 (WAHRSCHEINLICH). */
+    private static void assertEinzelBackslashFund(String text, String erwartet) {
+        List<Finding> f = R.detect(text);
+        assertEquals(List.of(erwartet), f.stream().map(Finding::originalValue).collect(Collectors.toList()));
+        assertEquals("pfad-relativ", f.get(0).source());
+        assertEquals(0.75, f.get(0).confidence());
+        assertEquals(ConfidenceLevel.WAHRSCHEINLICH, f.get(0).level());
     }
 
     @Test
@@ -616,10 +626,12 @@ class PathRecognizerUncTest {
     }
 
     @Test
-    void unsichtbaresZeichenImKopfVerhindertDenFundNurDort() {
+    void unsichtbaresZeichenZwischenBackslashesIstSeitT14EinzelBackslashFund() {
         // bekannte Grenze analog T-10 (3a a): ein unsichtbares Zeichen zwischen den Backslashes trennt den Kopf
-        assertKeinFund("\\\u200B\\srv-beispiel\\freigabe");
-        // der zweite Teil ist ein Backslash-Lauf der Laenge 1: kein UNC-Kopf
+        // Der zweite Teil ist ein Backslash-Lauf der Laenge 1: kein UNC-Kopf. Seit T-14 (Nachtrag T-12 Punkt 8) ist der
+        // ganze Text ein Fund der Form EINZEL_BACKSLASH (Kopf am ersten Backslash, das unsichtbare Zeichen ist das
+        // erste Segment): pfad-relativ, 0.75 statt wie bisher kein Fund.
+        assertEinzelBackslashFund("\\\u200B\\srv-beispiel\\freigabe", "\\\u200B\\srv-beispiel\\freigabe");
     }
 
     // ================================================================== (6) Grenzlast (AK-49), je < 2 s

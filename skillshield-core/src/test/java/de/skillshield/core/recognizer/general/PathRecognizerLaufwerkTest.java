@@ -388,8 +388,7 @@ class PathRecognizerLaufwerkTest {
     @ParameterizedTest
     @ValueSource(strings = {"Starte tool.exe", "tool.exe", "BeispielTool.exe l\u00E4uft", "Datei konfig.yml",
             "Programm BeispielTool ist installiert", "ordner\\datei.txt", "ordner/datei.txt", "Files\\Mein",
-            "Tool\\tool.exe",
-            ".\\tools\\tool.exe", "%APPDATA%\\x", "$HOME/x"})
+            "Tool\\tool.exe", "%APPDATA%\\x", "$HOME/x"})
     void ak21DateinameOhnePfadUndAndereFormenSindKeinFund(String text) {
         assertKeinFund(text);
     }

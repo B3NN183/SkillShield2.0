@@ -78,6 +78,25 @@ final class PathChars {
     }
 
     /**
+     * Ob ab {@code i} das Wort {@code lowerCaseWord} steht, ASCII-Buchstaben ohne Beachtung der Groß- und
+     * Kleinschreibung. Bewusst kein {@code regionMatches(true, ...)}: Das faltet auch Nicht-ASCII-Zeichen (etwa U+017F
+     * zu {@code s}). {@code lowerCaseWord} besteht nur aus ASCII-Kleinbuchstaben; die Prüfung liest nie über das
+     * Textende hinaus.
+     */
+    static boolean matchesAsciiIgnoreCase(String text, int i, String lowerCaseWord) {
+        int len = lowerCaseWord.length();
+        if (i < 0 || len > text.length() - i) {
+            return false;
+        }
+        for (int k = 0; k < len; k++) {
+            if ((text.charAt(i + k) | 0x20) != lowerCaseWord.charAt(k)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Zeichen eines Rechner- oder Benutzernamens {@code [A-Za-z0-9._-]} (Formen {@code HOST_PFAD} und
      * {@code HOME}); bewusst nur ASCII und kein Endzeichen, damit der Lauf nie über Leerraum reicht und kein
      * Surrogat oder kombinierendes Zeichen enthält.
@@ -92,8 +111,8 @@ final class PathChars {
     /**
      * Art eines öffnenden Anführungszeichens (0 bis {@link #QUOTE_KINDS} - 1) oder -1. Doppelte Familie (0 bis 5):
      * {@code "}, U+201C, U+201D, U+201E, U+00AB, U+00BB. Einfache Familie (6 bis 11): {@code '}, U+2018, U+2019,
-     * U+201A, U+2039, U+203A. Backtick: 12. Jedes Zeichen kann öffnen und schließen; ob ein Paar zustande kommt, regelt
-     * {@link #closesQuote}. Dieselbe Menge ist die Startgrenze für UNIX und HOME ({@link #isStartBoundary}).
+     * U+201A, U+2039, U+203A. Backtick: 12. Jedes Zeichen kann öffnen und schließen; ob ein Paar zustande kommt,
+     * regelt {@link #closesQuote}. Dieselbe Menge ist die Startgrenze für UNIX und HOME ({@link #isStartBoundary}).
      */
     static int quoteKind(char c) {
         switch (c) {

@@ -14,12 +14,18 @@ import java.util.Objects;
  * Fund vom Typ {@link FindingType#PFAD} geliefert; Programm-, Benutzer-, Server- und Ordnernamen darin sind damit
  * mitgeschützt.
  *
- * <p>Stand dieses Tasks (T-13): Formen {@link PathForm#LAUFWERK}, {@link PathForm#UNC}, {@link PathForm#UNIX},
- * {@link PathForm#HOME} (auch {@code ~name/}) und {@link PathForm#HOST_PFAD} ({@code host.example:/export/home}) mit
- * Anführungszeichenregel; die weiteren Formen folgen mit den Folgetasks, ohne dass sich Läufe, Ende und
- * Segmentzählung ändern. Für Laufwerks-, UNC- und Host-Pfade gilt keine Startgrenze (Text direkt davor verhindert den
- * Fund nicht). Unix- und Home-Pfade beginnen nur an einer Startgrenze ({@link PathChars#isStartBoundary}), weil
- * {@code /} in gewöhnlichem Text häufig ist ({@code und/oder}, {@code km/h}, {@code 19/11/2026}).
+ * <p>Stand dieses Tasks (T-14): neun Formen: {@link PathForm#LAUFWERK}, {@link PathForm#UNC},
+ * {@link PathForm#UNIX}, {@link PathForm#HOME} (auch {@code ~name/}), {@link PathForm#HOST_PFAD}
+ * ({@code host.example:/export/home}), {@link PathForm#RELATIV} ({@code ./a}, {@code ../a}),
+ * {@link PathForm#EINZEL_BACKSLASH} (ein führender Backslash, mindestens zwei Segmente),
+ * {@link PathForm#BENUTZER_WURZEL} ({@code Users\erika\x}, {@code Benutzer\erika}) und
+ * {@link PathForm#WURZEL_ZWEI_SEGMENTE} ({@code home/erika/x}, {@code Benutzer/erika/x}) mit Anführungszeichenregel;
+ * die weiteren Formen folgen mit den Folgetasks, ohne dass sich Läufe, Ende und Segmentzählung ändern. Für
+ * Laufwerks-, UNC- und Host-Pfade gilt keine Startgrenze (Text direkt davor verhindert den Fund nicht). Alle anderen
+ * Formen beginnen nur an einer Startgrenze ({@link PathForm#isStartBoundary(String, int)}, in der Regel
+ * {@link PathChars#isStartBoundary}; bei RELATIV und den beiden Wurzel-Formen zusätzlich nach {@code :}), weil
+ * {@code /}, {@code .} und der Backslash in gewöhnlichem Text häufig sind ({@code und/oder}, {@code km/h},
+ * {@code 19/11/2026}, {@code Ende../x}, {@code 1./2.}).
  *
  * <p><b>Obermengen-Garantie je Form.</b> Der Durchlauf ohne Anführungszeichen liefert die Vereinigung aus dem
  * Durchlauf mit allen Formen und je einem Durchlauf mit nur einer Form
@@ -58,31 +64,40 @@ import java.util.Objects;
  * verliert die Klammer). {@code *} und ein abschließender Trenner bleiben im Fund.
  *
  * <p><b>Segmente und Konfidenz.</b> Hinter dem Kopf müssen nach der Kürzung mindestens so viele Segmente (nichtleere
- * Folgen von Nicht-Trennern) stehen, wie die Form verlangt (Laufwerk, UNC, Home und Host: eines; Unix: zwei). Die
- * Prüfung geschieht mit der Zahl NACH der Kürzung: Die vorab berechnete (pessimistische) Zahl ist höchstens um eines
- * kleiner, denn hinter dem pessimistischen Ende stehen nur Satzzeichen und schließende Klammern, und davon bildet
- * höchstens ein Block direkt hinter einem Trenner ein weiteres Segment ({@code /opt(/)} hat zwei Segmente,
- * {@code opt(} und {@code )}). Fehlt der pessimistischen Zahl genau eines und kann eines hinzukommen
- * (O(1)-Vorprüfung), wird die Kürzung gerechnet und danach entschieden; so geht kein Fund verloren. {@code C:},
- * {@code C:\} und {@code C:\.} sind kein Fund. Die Konfidenz bestimmt die Form aus der Kopflänge und der auf 3
- * gedeckelten Segmentzahl ({@link PathForm#confidence(int, int)}), nie aus Leerzeichen; die Werte je Form stehen im
- * Javadoc der Form.
+ * Folgen von Nicht-Trennern) stehen, wie die Form verlangt (Laufwerk, UNC, Home, Host, relativ und Benutzer-Wurzel
+ * {@code Users\}, {@code Users/}, {@code Benutzer\}: eines; Unix, Einzel-Backslash, {@code home/} und
+ * {@code Benutzer/}: zwei). Die Prüfung geschieht mit der Zahl NACH der Kürzung: Die vorab berechnete
+ * (pessimistische) Zahl ist höchstens um eines kleiner, denn hinter dem pessimistischen Ende stehen nur Satzzeichen und
+ * schließende Klammern, und davon bildet höchstens ein Block direkt hinter einem Trenner ein weiteres Segment
+ * ({@code /opt(/)} hat zwei Segmente, {@code opt(} und {@code )}). Fehlt der pessimistischen Zahl genau eines und
+ * kann eines hinzukommen (O(1)-Vorprüfung), wird die Kürzung gerechnet und danach entschieden; so geht kein Fund
+ * verloren. {@code C:}, {@code C:\} und {@code C:\.} sind kein Fund. Die Konfidenz bestimmt die Form
+ * aus der Kopflänge und der auf 3 gedeckelten Segmentzahl ({@link PathForm#confidence(int, int)}), nie aus
+ * Leerzeichen; die Werte je Form stehen im Javadoc der Form.
  *
  * <p><b>Laufzeit.</b> Jeder Lauf wird einmal ausgewertet (Ende, Segmentanfänge von hinten), jede Position wird in
  * (amortisiert) O(1) als Beginn geprüft, die Kürzung läuft einmal je Fund über dessen Lauf; danach springt der
  * Durchlauf ans Laufende. Der Kopf einer Form liest nur Zeichen unmittelbar ab der Position, nie Servernamen,
  * Freigabe oder Segmente (deren Anzahl liefern die Laufdaten in O(1)). Die Belege je Form (UNC, HOME, HOST_PFAD)
- * stehen im Javadoc der Form: UNIX und LAUFWERK prüfen nur wenige Zeichen, UNC liest den Backslash-Lauf nur an dessen
+ * stehen im Javadoc der Form: UNIX, LAUFWERK, RELATIV, EINZEL_BACKSLASH, BENUTZER_WURZEL (höchstens 9 Zeichen) und
+ * WURZEL_ZWEI_SEGMENTE (höchstens 15 Zeichen) prüfen nur wenige Zeichen, UNC liest den Backslash-Lauf nur an dessen
  * erstem Backslash, HOME liest höchstens 66 Zeichen je Tilde in nicht überlappenden Abschnitten, HOST_PFAD liest
  * höchstens 64 Zeichen je {@code :/}-Stelle (O(64 n)). Die Zählung nach der Kürzung (siehe Segmente) kostet
  * O(Lauflänge) und läuft nur für Köpfe, deren pessimistische Zahl genau eines unter der Mindestzahl liegt und hinter
- * denen ein Klammer-Segment möglich ist. Das sind je Lauf höchstens eine Handvoll Köpfe: Köpfe der Formen LAUFWERK,
- * UNIX, HOME und HOST_PFAD enden mit einem Trenner, und der nächste Kopf beginnt mit einem Nicht-Trenner. Köpfe
- * verschiedener Formen können dasselbe Kopfende haben (HOST_PFAD {@code ab:/} und LAUFWERK {@code b:/}); das
- * vervielfacht die Zahl der Köpfe zwischen zwei Segmentanfängen nur um einen konstanten Faktor (höchstens die
- * Formzahl). Daher hat jeder Kopf, hinter dem noch genügend weitere Köpfe liegen, mindestens zwei Segmente; der
- * Gesamtaufwand bleibt O(n). Eine neue Form mit dichten Köpfen muss das erneut belegen. Die Suche nach dem
- * schließenden Anführungszeichen endet spätestens am nächsten Zeichen derselben Art (jedes Zeichen schließt seine
+ * denen ein Klammer-Segment möglich ist. Das sind je Lauf höchstens eine Handvoll Köpfe:
+ * Köpfe der Formen LAUFWERK, UNIX, HOME, HOST_PFAD, RELATIV, BENUTZER_WURZEL und WURZEL_ZWEI_SEGMENTE enden mit einem
+ * Trenner. Zwischen dem Kopfende und dem Beginn des nächsten Kopfes derselben Form liegt ein Segmentanfang: Der
+ * nächste Kopf beginnt mit einem Nicht-Trenner, bei UNIX steht wegen der Startgrenze vor seinem Trenner ein
+ * Nicht-Trenner. Bei EINZEL_BACKSLASH ist das Kopfende selbst ein Segmentanfang (das Zeichen hinter dem Backslash
+ * ist kein Trenner). Ein solcher Segmentanfang kann im abschließenden Satzzeichen-Bereich hinter {@code tail} liegen
+ * (bei EINZEL_BACKSLASH das Kopfende des letzten Kopfes, etwa bei {@code \a\.}) und ist dann in den Laufdaten nicht
+ * enthalten; ein Kopf selbst liegt aber immer vor {@code tail}. Deshalb haben nur die letzten zwei Köpfe je Lauf
+ * (Mindestzahl höchstens zwei) einen Segmentanfang weniger in den Laufdaten und werden nachgezählt; jeder Kopf mit
+ * mindestens zwei späteren Köpfen derselben Form hat die Mindestzahl an Segmenten und wird ohne Zählung angenommen.
+ * Köpfe verschiedener Formen können dasselbe Kopfende haben (HOST_PFAD {@code ab:/} und
+ * LAUFWERK {@code b:/}); das vervielfacht die Zahl der Köpfe nur um einen konstanten Faktor (höchstens die
+ * Formzahl). Der Gesamtaufwand bleibt O(n). Eine neue Form mit dichten Köpfen muss das erneut belegen. Die Suche nach
+ * dem schließenden Anführungszeichen endet spätestens am nächsten Zeichen derselben Art (jedes Zeichen schließt seine
  * eigene Art). Je Art sind die Bereiche der Paare daher paarweise disjunkt, und die Inhaltsprüfung liest jede
  * Position je Art höchstens einmal. Die Kopfprüfungen an diesen Positionen kosten je Art so viel, wie das
  * Javadoc der jeweiligen Form belegt (HOST_PFAD bis zu 64 Zeichen je {@code :/}-Stelle in überlappenden Abschnitten,
@@ -189,7 +204,7 @@ public final class PathRecognizer implements Recognizer {
         int count = contentSegmentStarts(text, from, to, starts);
         for (int i = from; i < to; i++) {
             for (PathForm form : forms) {
-                if (i != from && form.requiresStartBoundary() && !PathChars.isStartBoundary(text, i)) {
+                if (i != from && !form.isStartBoundary(text, i)) {
                     continue;
                 }
                 int headEnd = form.headEnd(text, i);
@@ -318,7 +333,7 @@ public final class PathRecognizer implements Recognizer {
      * einer früher beginnenden Form (UNC vor einem Laufwerkskopf im selben Lauf) kann am Ende kürzer ausfallen, weil
      * die Klammerzählung früher beginnt. Ohne die Vereinigung könnte so der Fund einer einzelnen Form durch eine
      * andere Form kleiner werden. Der Aufwand sind (Formzahl + 1) lineare Durchläufe: einer mit allen Formen und je
-     * einer je Form (derzeit fünf Formen, also sechs Durchläufe).
+     * einer je Form (derzeit neun Formen, also zehn Durchläufe).
      */
     List<Finding> detectWithoutQuotes(String text, PathForm[] forms) {
         Objects.requireNonNull(text, "text");
@@ -362,7 +377,7 @@ public final class PathRecognizer implements Recognizer {
     /** Liefert den Fund einer Pfadform, die an {@code pos} beginnt, oder {@code null}. */
     private static Finding tryForms(String text, int pos, Run run, PathForm[] forms) {
         for (PathForm form : forms) {
-            if (form.requiresStartBoundary() && !PathChars.isStartBoundary(text, pos)) {
+            if (!form.isStartBoundary(text, pos)) {
                 continue;
             }
             int headEnd = form.headEnd(text, pos);

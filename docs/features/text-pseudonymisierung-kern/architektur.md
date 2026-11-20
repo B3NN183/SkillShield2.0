@@ -962,6 +962,58 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
 - **AK**: AK-14.
 - **Tests**: Zeile `RELATIV` positiv/negativ; Stufe nicht `SICHER`; `..\..\x`; Satzpunkt davor ohne Leerzeichen
   (`Ende../x`) kein Fund.
+- *(Nachtrag 20.11.2026 zu T-14:*
+  1. *`RELATIV`: Kopf `./`, `.\`, `../`, `..\` mit Startgrenze (wie UNIX/HOME, inkl. `,` `;` `|` und aller 13
+     Anführungszeichen-Arten), mindestens ein Segment, Konfidenz konstant 0.80, Quelle `pfad-relativ`. Drei Punkte
+     sind kein Kopf. Pfade ohne Kopf (`Ordner\Datei.txt`, `ordner/datei.txt`) bleiben laut Nutzerentscheidung
+     ohne Fund.*
+  2. *Einzelner führender Backslash (T-12 Punkt 8), eigene Form `EINZEL_BACKSLASH`: Kopf genau ein Backslash (davor
+     kein Backslash, dahinter kein Trenner), MIT Startgrenze, mindestens zwei Segmente, Konfidenz 0.75, Quelle
+     `pfad-relativ`. Mit Startgrenze, weil sonst jeder Pfad ohne Kopf (`Ordner\Datei\x.txt`) und jeder
+     Registry-Schlüssel (`HKEY_LOCAL_MACHINE\SOFTWARE\x`) ab dem ersten Backslash zum Teilfund würde.*
+  3. *Bekannte Fehltreffer (0.75, zu viel ersetzt, kein Leck): Regex- und Escape-Schreibweisen mit Startgrenze
+     davor (`\d+\s`, `\d\w\s`, `\n\t`, `"\r\n"`), LaTeX (`\textbf{a}\cite{b}`, `\begin{document}\section{x}`).
+     Bekannte Folge nach 7a (ii): Ein bestehender Fund, der von einem früher beginnenden Fund der neuen Formen
+     verschluckt wird, trägt deren Konfidenz (0.75/0.80).*
+  4. *Bekannte Grenzen (kein Fund): `cd ..\..`, `./.` (die Kürzung entfernt das letzte Segment – `..` am Ende
+     besteht nur aus Kürzungszeichen und ist kein Segment; kein Name enthalten); scp-/SSH-Schreibweise mit
+     relativem Pfad (`git@host.example:erika/repo.git`, `host.example:akte.pdf`) – sehr selten, bleibt bekannte
+     Grenze; Domänenkonten `praxis\erika.mustermann` (Folge-Feature Zugangsdaten).*
+  5. *Entscheidung der Hauptsitzung am 20.11.2026 (der Nutzer hat am selben Tag festgelegt, dass Detailregeln der
+     Erkennung ohne Rückfrage in Richtung „möglichst viel schützen" entschieden werden), nach security-Hinweisen:*
+     *(a) `:` ist zusätzliche Startgrenze NUR für `RELATIV` (`Pfad:.\erika\akte.pdf`, `PATH=.:./bin:../erika/bin`
+     → Funde); nicht für UNIX, HOME, EINZEL_BACKSLASH.*
+     *(b) Neue Form `BENUTZER_WURZEL` (Quelle `pfad-relativ`, Konfidenz 0.60, Stufe fraglich) für abgeschnittene
+     Benutzerpfade ohne Laufwerk oder führenden Trenner, mit Startgrenze: Kopf `Users` oder `Benutzer` (Groß/klein
+     egal) + Trenner (`\` oder `/`) und mindestens ein Segment; Kopf `home/` (nur kleingeschrieben, nur `/`) und
+     mindestens zwei Segmente (`home/office` bleibt ohne Fund). Beispiele: `Users\erika.mustermann\Desktop\akte.pdf`,
+     `Benutzer\erika\Desktop`, `home/erika/akte.pdf`. Das ergänzt die Nutzerentscheidung „Pfade ohne Kopf sind kein
+     Fund" um diese drei Ordnernamen, weil dort fast immer ein Benutzername folgt.*
+     *Umsetzung (Durchlauf 2): zwei Formen `BENUTZER_WURZEL` (Users/Benutzer, mindestens ein Segment) und
+     `HOME_WURZEL` (`home/`, mindestens zwei Segmente); Namensvergleich nur ASCII. Ausnahme für das Gendern mit
+     Schrägstrich: `Benutzer/in`, `Benutzer/innen` (Groß/klein egal, gefolgt von Segmentende oder höchstens drei
+     Satz-/Klammerzeichen) sind kein Fund; `Benutzer\in`, `Benutzer/ina`, `Benutzer/in.pdf` sind Funde. Die
+     Startgrenze ist jetzt je Form definiert (`PathForm.isStartBoundary`). Bekannte Fehltreffer (0.60):
+     `Users/Groups`, `at home/work/x`; (0.80): `usw.:./x`, `12:./30`. Bekannte Folge: `Users\erika;C:\Tools\a`
+     ist ein Fund mit 0.60 über den ganzen Lauf.*
+     *Korrektur nach security-Prüfung Durchlauf 2 (häufige Fehltreffer in deutschen Texten: `Benutzer/Passwort`,
+     `Benutzer/Kennwort`, `Benutzer/Gruppen`, `Benutzer/-innen`, `„Benutzer/innen“`): Der Kopf `Benutzer` mit
+     SCHRÄGSTRICH verlangt mindestens ZWEI Segmente (`Benutzer/erika/Desktop` → Fund; `Benutzer/Passwort` → kein
+     Fund); mit Backslash bleibt es bei einem Segment (`Benutzer\erika` → Fund), ebenso `Users` mit beiden
+     Trennern. Die Gendern-Ausnahme vereinfacht sich: Ist das erste Segment hinter `Benutzer/` genau `in` oder
+     `innen` (Groß/klein egal), gibt es keinen Fund, gleich was folgt. Zusätzlich ist `:` Startgrenze auch für die
+     Wurzel-Formen (`Pfad:Users\erika\akte.pdf` → Fund ab `Users`). Bekannte Fehltreffer danach (0.60):
+     `Users/Groups`, `Users/Admins`, `Benutzer\Gruppen`, `Benutzer/Rollen/Rechte`. Umsetzung (Durchlauf 3): Die
+     Formen heißen `BENUTZER_WURZEL` (ein Segment: `Users` mit `\` oder `/`, `Benutzer` nur mit `\`) und
+     `WURZEL_ZWEI_SEGMENTE` (zwei Segmente: `home/`, `Benutzer/`); die Gendern-Ausnahme greift, wenn hinter
+     `in`/`innen` direkt ein Trenner folgt. Bekannte Folge: U+201E `Benutzer/innen` U+201C direkt gefolgt von
+     `/a/b` ist ein Fund (das typografische Zeichen ist im Lauf kein Segmentende) – zu viel ersetzt, kein Leck.
+     Bekannte Grenze der Zwei-Segment-Regel (security Durchlauf 3, als selten eingeschätzt, weil deutsches Windows
+     `Benutzer\…` mit Backslash zeigt): `Benutzer/erika`, `Pfad:Benutzer/erika` und `Benutzer/erika mustermann/…`
+     ohne Anführungszeichen ergeben keinen Fund; `Benutzer/IN/erika` ebenfalls nicht (Gendern-Ausnahme).*
+     *(c) Bekannte Folge nach 7a (ii) in beiden Richtungen: Ein Fund der neuen Formen kann einen bestehenden Fund
+     verschlucken ODER als später beginnender Fund verlängern; die Konfidenz des Ergebnisses ist die niedrigste
+     der Beteiligten, auch bei gleichen Grenzen. Kein Fund geht verloren.*
 
 ### T-15: Pfad-Erkenner – Umgebungsvariablen
 - **Dateien**: `PathForm.java` (`UMGEBUNG`); Test `PathRecognizerUmgebungTest`.

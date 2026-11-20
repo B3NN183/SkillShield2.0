@@ -255,12 +255,16 @@ class PathRecognizerUnixTest {
         assertEquals(0.80, PathForm.HOST_PFAD.confidence(6, 1));
         assertEquals(0.90, PathForm.HOST_PFAD.confidence(6, 2));
         assertEquals("pfad-host", PathForm.HOST_PFAD.source());
-        assertFalse(PathForm.HOST_PFAD.requiresStartBoundary());
+        assertTrue(PathForm.HOST_PFAD.isStartBoundary("ab:/x", 1));
         assertEquals(1, PathForm.HOST_PFAD.minSegments());
         assertEquals("pfad-unix", PathForm.UNIX.source());
         assertEquals("pfad-home", PathForm.HOME.source());
-        assertTrue(PathForm.UNIX.requiresStartBoundary());
-        assertTrue(PathForm.HOME.requiresStartBoundary());
+        assertFalse(PathForm.UNIX.isStartBoundary("a/b", 1));
+        assertTrue(PathForm.UNIX.isStartBoundary(" /b", 1));
+        assertFalse(PathForm.UNIX.isStartBoundary(":/b", 1));
+        assertFalse(PathForm.HOME.isStartBoundary("a~/b", 1));
+        assertFalse(PathForm.HOME.isStartBoundary(":~/b", 1));
+        assertTrue(PathForm.HOME.isStartBoundary(" ~/b", 1));
         assertEquals(2, PathForm.UNIX.minSegments());
         assertEquals(1, PathForm.HOME.minSegments());
     }

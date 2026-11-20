@@ -164,7 +164,7 @@ class PathCharsTest {
         assertEquals(1, f.minSegments());
         assertEquals(0.95, f.confidence(3, 1));
         assertEquals(0.95, f.confidence(3, 3));
-        assertFalse(f.requiresStartBoundary());
+        assertTrue(f.isStartBoundary("abC:\\x", 2));
     }
 
     // ------------------------------------------------------------------ Anfuehrungszeichen (T-11)
@@ -242,5 +242,63 @@ class PathCharsTest {
             assertFalse(PathChars.abortsQuoteSearch(kind, 'a'));
             assertEquals(kind > 5, PathChars.abortsQuoteSearch(kind, '"'), "Art " + kind);
         }
+    }
+
+    // ---- matchesAsciiIgnoreCase: ASCII-Vergleich ohne Beachtung der Gross-/Kleinschreibung, nie ueber das Textende
+
+    @Test
+    void asciiVergleichTrifftGrossKleinUndGemischt() {
+        assertTrue(PathChars.matchesAsciiIgnoreCase("users", 0, "users"));
+        assertTrue(PathChars.matchesAsciiIgnoreCase("USERS", 0, "users"));
+        assertTrue(PathChars.matchesAsciiIgnoreCase("uSeRs", 0, "users"));
+        assertTrue(PathChars.matchesAsciiIgnoreCase("x Benutzer/", 2, "benutzer"));
+        assertTrue(PathChars.matchesAsciiIgnoreCase("BENUTZERa", 0, "benutzer"));
+    }
+
+    @Test
+    void asciiVergleichLeeresWortPasstUeberallImBereich() {
+        assertTrue(PathChars.matchesAsciiIgnoreCase("abc", 0, ""));
+        assertTrue(PathChars.matchesAsciiIgnoreCase("abc", 3, ""));
+        assertTrue(PathChars.matchesAsciiIgnoreCase("", 0, ""));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("abc", 4, ""));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("abc", -1, ""));
+    }
+
+    @Test
+    void asciiVergleichLiestNieUeberDasTextendeHinaus() {
+        assertTrue(PathChars.matchesAsciiIgnoreCase("users", 0, "users"));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("user", 0, "users"));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("users", 1, "users"));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("", 0, "a"));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("ab", 1, "bc"));
+        assertTrue(PathChars.matchesAsciiIgnoreCase("ab", 1, "b"));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("ab", 2, "b"));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("ab", 99, "a"));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("ab", -1, "a"));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("ab", Integer.MAX_VALUE, "a"));
+    }
+
+    @Test
+    void asciiVergleichFaltetKeineNichtAsciiZeichen() {
+        // U+017F (langes s) faltet in String.regionMatches(true, ...) zu "s", hier nicht
+        assertFalse(PathChars.matchesAsciiIgnoreCase("\u017Fers", 0, "sers"));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("U\u017Fers", 0, "users"));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("\u017F", 0, "s"));
+        // U+0131 (i ohne Punkt) und U+0130 (I mit Punkt) sind nicht "i"
+        assertFalse(PathChars.matchesAsciiIgnoreCase("\u0131n", 0, "in"));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("\u0130n", 0, "in"));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("\u0131NNEN", 0, "innen"));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("benutzer".replace("e", "\u0435"), 0, "benutzer"));
+    }
+
+    @Test
+    void asciiVergleichUnterscheidetBuchstabenVonNachbarzeichen() {
+        // Zeichen, die sich nur im Bit 0x20 von einem Buchstaben unterscheiden, sind keine Buchstaben
+        assertFalse(PathChars.matchesAsciiIgnoreCase("{", 0, "a"));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("@", 0, "a"));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("`", 0, "a"));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("[", 0, "z"));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("\u0001", 0, "a"));
+        assertFalse(PathChars.matchesAsciiIgnoreCase("b", 0, "a"));
     }
 }

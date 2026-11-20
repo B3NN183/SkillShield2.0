@@ -4,8 +4,10 @@ package de.skillshield.core.recognizer.general;
  * Pfadformen des {@link PathRecognizer} (Architektur-Plan Kap. 2.4.2). Jede Form ist eine Konstante mit eigenem
  * Kopf, Mindestzahl an Segmenten, Konfidenz und Quelle; Laufzerlegung, Ende, Klammerregel und Segmentzählung sind
  * allen Formen gemeinsam und liegen im Erkenner. Bisher vorhanden: {@link #LAUFWERK}, {@link #UNC}, {@link #UNIX},
- * {@link #HOME} und {@link #HOST_PFAD}; die weiteren Formen (relativ, Umgebungsvariable, {@code file:}) kommen mit
- * den Folgetasks als zusätzliche Konstanten.
+ * {@link #HOME}, {@link #HOST_PFAD}, {@link #RELATIV}, {@link #EINZEL_BACKSLASH}, {@link #BENUTZER_WURZEL} und
+ * {@link #WURZEL_ZWEI_SEGMENTE}; die weiteren Formen (Umgebungsvariable, {@code file:}) kommen mit den Folgetasks
+ * als zusätzliche Konstanten. Welche Position als Beginn eines Kopfes zulässig ist, entscheidet je Form
+ * {@link #isStartBoundary(String, int)}.
  *
  * <p>Laufzeit: Der Erkenner prüft jede Position eines Laufs einmal als Beginn; im Zitat-Pfad ruft die Inhaltsprüfung
  * die Kopfprüfung an jeder Inhaltsposition je Art auf (siehe das Klassen-Javadoc von {@code PathRecognizer}). Den
@@ -40,8 +42,8 @@ enum PathForm {
         }
 
         @Override
-        boolean requiresStartBoundary() {
-            return false;
+        boolean isStartBoundary(String text, int i) {
+            return true;
         }
 
         @Override
@@ -105,8 +107,8 @@ enum PathForm {
         }
 
         @Override
-        boolean requiresStartBoundary() {
-            return false;
+        boolean isStartBoundary(String text, int i) {
+            return true;
         }
 
         @Override
@@ -309,8 +311,8 @@ enum PathForm {
         }
 
         @Override
-        boolean requiresStartBoundary() {
-            return false;
+        boolean isStartBoundary(String text, int i) {
+            return true;
         }
 
         @Override
@@ -327,6 +329,250 @@ enum PathForm {
         String source() {
             return "pfad-host";
         }
+    },
+
+    /**
+     * Relativer Pfad mit eindeutigem Kopf ({@code ./skript.sh}, {@code .\tools\tool.exe}, {@code ../konf/app.yml},
+     * {@code ..\..\daten\akte.pdf}; Plan 2.4.2 Zeile RELATIV, AK-14): ein Punkt oder zwei Punkte, direkt dahinter ein
+     * Trenner. Mindestens ein Segment hinter dem Kopf ({@code ./a}; {@code .\}, {@code ../} und {@code ..} allein sind
+     * kein Fund). {@code ..\..\x} ist ein Fund: das erste {@code ..} steht dort nicht am Ende. Dagegen ist bei
+     * {@code ..\..}, {@code ../..} und {@code cd ..\..} kein Fund: die Kürzung am Ende entfernt die abschließenden
+     * Punkte bis zum Kopfende, {@code ..} am Ende besteht nur aus Kürzungszeichen und ist kein Segment (bekannte
+     * Grenze, Plan Nachtrag T-14 Punkt 4). Konfidenz 0.80 (wahrscheinlich, nie sicher),
+     * Quelle {@code pfad-relativ}. Ohne Kopf gibt es keinen Fund ({@code ordner\datei.txt}, {@code ordner/datei.txt},
+     * {@code Files\Mein}, {@code Tool\tool.exe}; Nutzerentscheidung D-6).
+     *
+     * <p>Startgrenze erforderlich (Plan 2.4.2: "Die Startgrenze gilt für alle Formen";
+     * {@link PathChars#isStartBoundary}): Der Punkt ist in gewöhnlichem Text häufig, und {@code ./} oder {@code ../}
+     * entsteht dort durch Satzende oder Aufzählung ({@code Ende../x}, {@code siehe oben./unten}, {@code usw./etc.},
+     * {@code 1./2.}, {@code 1.0/2.0}). Wegen der Startgrenze ist das kein Fund; ebenso {@code ...\x} und
+     * {@code .../x} (drei Punkte sind kein Kopf, und der zweite Punkt hat den ersten davor).
+     *
+     * <p>Zusätzliche Startgrenze nur für diese Form (Plan Nachtrag T-14 Punkt 5 (a)): Auch ein {@code :} direkt vor
+     * dem Kopf genügt ({@code Pfad:.\erika\akte.pdf}, {@code host.example:./a/b}, {@code C:./a} ab {@code ./a},
+     * {@code PATH=.:./bin:../erika/bin} ab dem zweiten {@code .}). Bekannte Fehltreffer: {@code usw.:./x} und
+     * {@code 12:./30}. Der Doppelpunkt ist auch für {@link #BENUTZER_WURZEL} und {@link #WURZEL_ZWEI_SEGMENTE}
+     * Startgrenze, für {@link #UNIX}, {@link #HOME} und {@link #EINZEL_BACKSLASH} nicht.
+     *
+     * <p>Laufzeit des Kopfs: Die Prüfung liest höchstens drei Zeichen ab der Position (O(1) je Position);
+     * {@code headEnd} liest nichts vor der Position, {@code isStartBoundary} liest das Zeichen davor. Es gibt keine
+     * Auflösung gegen ein Arbeitsverzeichnis.
+     */
+    RELATIV {
+        @Override
+        int headEnd(String text, int i) {
+            int n = text.length();
+            if (i >= n || text.charAt(i) != '.') {
+                return -1;
+            }
+            int j = i + 1;
+            if (j < n && text.charAt(j) == '.') {
+                j++;
+            }
+            return j < n && PathChars.isSeparator(text.charAt(j)) ? j + 1 : -1;
+        }
+
+        @Override
+        boolean isStartBoundary(String text, int i) {
+            return startBoundaryOrColon(text, i);
+        }
+
+        @Override
+        int minSegments() {
+            return 1;
+        }
+
+        @Override
+        double confidence(int headLength, int segmentsCappedAt3) {
+            return CONFIDENCE_PROBABLE;
+        }
+
+        @Override
+        String source() {
+            return "pfad-relativ";
+        }
+    },
+
+    /**
+     * Einzelner führender Backslash ({@code \srv\freigabe\a.txt}, {@code \Users\erika.mustermann\Desktop\x};
+     * Nutzerentscheidung 20.11.2026, Plan Nachtrag T-12 Punkt 8: entsteht, wenn Chat oder Wiki aus {@code \\} ein
+     * {@code \} machen). Kopf ist genau ein Backslash: davor steht kein Backslash und dahinter kein Trenner (kein
+     * Kopf am zweiten Backslash eines Doppel-Backslashs; {@code \srv} gehört der Form {@link #UNC}). Mindestens zwei
+     * Segmente dahinter, Konfidenz 0.75 (wahrscheinlich), Quelle {@code pfad-relativ} (der Plan nennt keine eigene
+     * Quelle; die Form gehört zu T-14, Eigene Entscheidung). Die Konfidenz ist konstant und damit in der Segmentzahl
+     * nicht fallend.
+     *
+     * <p>Eigene Entscheidung (Plan-Regel "Die Startgrenze gilt für alle Formen"): Startgrenze erforderlich. "Führend"
+     * heißt am Wortanfang; sonst würde in {@code Ordner\Datei\x.txt} der Teil ab dem ersten Backslash zum Fund, ein
+     * Teilfund, der dem Nutzerentscheid "Pfade ohne Kopf sind kein Fund" widerspricht (AK-14, Registry-Schlüssel). Mit
+     * Startgrenze ergeben {@code x\Users\erika\a} und {@code HKEY_LOCAL_MACHINE\SOFTWARE\x} keinen Fund;
+     * {@code Pfad:\Users\erika} ist ein Laufwerksfund ab {@code d:}.
+     *
+     * <p>Bekannte Folge (Nutzerentscheidung): Jede Zeichenfolge mit führendem Backslash und zwei Segmenten ist ein
+     * Fund, auch wenn sie kein Pfad ist: {@code \d+\s}, {@code \textbf{a}\cite{b}},
+     * {@code \begin{document}\section{x}}, {@code "\r\n"} (im Zitat), {@code \n\t}. Ein einzelnes Escape
+     * ({@code \n}) hat nur ein Segment und ist kein Fund.
+     *
+     * <p>Laufzeit des Kopfs: höchstens zwei Zeichen ab der Position und das eine davor (O(1) je Position); es werden
+     * nie Segmente gelesen, deren Zahl liefern die Laufdaten.
+     */
+    EINZEL_BACKSLASH {
+        @Override
+        int headEnd(String text, int i) {
+            if (i + 1 >= text.length() || text.charAt(i) != '\\' || (i > 0 && text.charAt(i - 1) == '\\')) {
+                return -1;
+            }
+            return PathChars.isSeparator(text.charAt(i + 1)) ? -1 : i + 1;
+        }
+
+        @Override
+        int minSegments() {
+            return 2;
+        }
+
+        @Override
+        double confidence(int headLength, int segmentsCappedAt3) {
+            return CONFIDENCE_SINGLE_BACKSLASH;
+        }
+
+        @Override
+        String source() {
+            return "pfad-relativ";
+        }
+    },
+
+    /**
+     * Abgeschnittener Benutzerpfad mit einem Segment ohne Laufwerk und ohne führenden Trenner
+     * ({@code Users\erika.mustermann\Desktop}, {@code Benutzer\erika}, {@code users/erika}; Plan Nachtrag T-14
+     * Punkt 5 (b)): Kopf ist {@code Users} mit {@code \} oder {@code /} oder {@code Benutzer} mit {@code \} (nur ASCII,
+     * Groß- und Kleinschreibung egal), dahinter mindestens ein Segment. Der Fund beginnt am ersten Buchstaben des
+     * Wurzelnamens. Startgrenze erforderlich ({@link PathForm#isStartBoundary(String, int)}: die gemeinsame Grenze
+     * oder {@code :} davor), Konfidenz 0.60 (fraglich), Quelle {@code pfad-relativ}. {@code Benutzer} mit
+     * Schrägstrich ist kein Kopf dieser Form, sondern der Form {@link #WURZEL_ZWEI_SEGMENTE} (mindestens zwei
+     * Segmente).
+     *
+     * <p>Kein Fund: {@code Users}, {@code Users\} (kein Segment), {@code Users:\a} (kein Wurzel-Kopf; es bleibt der
+     * Laufwerksfund ab {@code s:\a}, 0.95), {@code xUsers\a} und {@code usersa\b} (kein Kopf), {@code C:\Users\erika\x}
+     * (die Startgrenze fehlt an {@code Users}; es bleibt der Laufwerksfund mit 0.95) und
+     * {@code \Users\erika\x} (ebenso; es bleibt {@link #EINZEL_BACKSLASH}, 0.75).
+     *
+     * <p>Entscheidung (Plan Nachtrag T-14 Punkt 5 (b)): Nach {@code Users} und {@code Benutzer\} folgt in Pfaden fast
+     * immer ein Benutzername; deshalb gilt schon ein Segment dahinter als Fund, obwohl das die Nutzerentscheidung
+     * "Pfade ohne Kopf sind kein Fund" um diese Ordnernamen ergänzt. Bekannte Fehltreffer (zu viel ersetzt, kein
+     * Leck): {@code Users/Groups}, {@code Users/Admins}, {@code Benutzer\Gruppen} und jedes andere Wort {@code Users}
+     * oder {@code Benutzer\} direkt vor einem Trenner. {@code Users and groups} ohne Trenner ist kein Fund.
+     *
+     * <p>Laufzeit des Kopfs: Die Prüfung liest höchstens neun Zeichen ab der Position ({@code benutzer\}), nichts
+     * davor und nie Segmente beliebiger Länge (O(1) je Position). Die Formzahl ändert die Laufzeit des Erkenners nur um
+     * einen konstanten Faktor.
+     */
+    BENUTZER_WURZEL {
+        @Override
+        int headEnd(String text, int i) {
+            boolean users = PathChars.matchesAsciiIgnoreCase(text, i, "users");
+            boolean benutzer = !users && PathChars.matchesAsciiIgnoreCase(text, i, "benutzer");
+            if (!users && !benutzer) {
+                return -1;
+            }
+            int sep = i + (users ? "users".length() : "benutzer".length());
+            if (sep >= text.length() || !PathChars.isSeparator(text.charAt(sep))) {
+                return -1;
+            }
+            if (benutzer && text.charAt(sep) == '/') {
+                return -1; // Schrägstrich-Variante: Form WURZEL_ZWEI_SEGMENTE
+            }
+            return sep + 1;
+        }
+
+        @Override
+        boolean isStartBoundary(String text, int i) {
+            return startBoundaryOrColon(text, i);
+        }
+
+        @Override
+        int minSegments() {
+            return 1;
+        }
+
+        @Override
+        double confidence(int headLength, int segmentsCappedAt3) {
+            return CONFIDENCE_QUESTIONABLE;
+        }
+
+        @Override
+        String source() {
+            return "pfad-relativ";
+        }
+    },
+
+    /**
+     * Abgeschnittener Pfad, dessen Kopf allein zu mehrdeutig ist und der deshalb mindestens zwei Segmente braucht
+     * ({@code home/erika/akte.pdf}, {@code Benutzer/erika/Desktop}; Plan Nachtrag T-14 Punkt 5 (b) und Korrektur nach
+     * der security-Prüfung Durchlauf 2). Zwei Kopfvarianten: {@code home/} (nur kleingeschrieben, nur mit
+     * {@code /}) und {@code Benutzer/} (nur ASCII, Groß- und Kleinschreibung egal, nur mit {@code /}). Startgrenze
+     * erforderlich ({@link PathForm#isStartBoundary(String, int)}: die gemeinsame Grenze oder {@code :} davor),
+     * Konfidenz 0.60 (fraglich), Quelle {@code pfad-relativ}. Kein Fund: {@code home/office} und
+     * {@code Benutzer/Passwort} (ein Segment), {@code home/} und {@code Benutzer/}, {@code Home/erika/x}
+     * (großgeschrieben), {@code homepage/a/b} (kein Kopf), {@code xhome/a/b} (keine Startgrenze) und
+     * {@code /home/erika/x} (davor steht {@code /}; der Fund gehört {@link #UNIX}).
+     *
+     * <p>Ausnahme Gendern (nur Kopf {@code Benutzer/}): Ist das erste Segment dahinter genau {@code in} oder
+     * {@code innen} (nur ASCII, Groß- und Kleinschreibung egal) und folgt direkt ein Trenner, ist es kein Kopf:
+     * {@code Benutzer/in/x}, {@code Benutzer/Innen/y} und {@code Benutzer/innen/erika/a} ergeben keinen Fund,
+     * {@code Benutzer/in-Konto/x} und {@code Benutzer/ina/x} dagegen schon. Steht hinter {@code in} oder {@code innen}
+     * das Textende oder das Zitatende ({@code Benutzer/in}, {@code Benutzer/innen}), hat der Kopf höchstens ein
+     * Segment und ist ohnehin kein Fund. Folgt ein anderes Zeichen als ein Trenner, gilt das erste Segment als
+     * längeres Wort; dann entscheidet allein die Segmentzahl ({@code Benutzer/ina} und {@code Benutzer/in.pdf} sind
+     * kein Fund, {@code Benutzer/ina/x} und {@code Benutzer/in.pdf/x} sind einer). Die Prüfung liest nur das eine
+     * Zeichen hinter {@code in} oder {@code innen}
+     * und nie über das Textende hinaus. Im Zitat-Pfad liest sie höchstens das Zeichen an der Stelle des Inhaltsendes,
+     * also das schließende Anführungszeichen; das ist weder Buchstabe noch Trenner, sodass das Ergebnis dasselbe ist,
+     * als stünde dort das Textende ({@code "Benutzer/in"/x} und {@code "Benutzer/innen"/a/b} haben im Zitat nur ein
+     * Segment). Der Text hinter dem Zitat ändert das Ergebnis daher nie.
+     *
+     * <p>Laufzeit des Kopfs: Die Prüfung liest höchstens 15 Zeichen ab der Position ({@code Benutzer/} 9, {@code innen}
+     * 5, ein Trenner), nichts davor und nie Segmente beliebiger Länge (O(1) je Position).
+     *
+     * <p>Modellierung: Die Mindestzahl der Segmente hängt von der Kopfvariante ab ({@code Users\}, {@code Users/},
+     * {@code Benutzer\}: 1; {@code home/}, {@code Benutzer/}: 2). Statt die Schnittstelle um eine
+     * Kopflängen-Abhängigkeit der Mindestzahl zu erweitern, gibt es zwei Formen: Die Kopfvarianten mit zwei Segmenten
+     * liegen hier, die mit einem Segment in {@link #BENUTZER_WURZEL}. Jede Form behält damit eine konstante
+     * Mindestzahl, der Kopf einer Form hat eine feste Konfidenz (konstant, also in der Segmentzahl monoton nicht
+     * fallend), und die Obermengen-Garantie je Form (ein Durchlauf je Form) trennt beide Varianten von selbst.
+     */
+    WURZEL_ZWEI_SEGMENTE {
+        @Override
+        int headEnd(String text, int i) {
+            if (text.startsWith("home/", i)) {
+                return i + "home/".length();
+            }
+            int sep = i + "benutzer".length();
+            if (PathChars.matchesAsciiIgnoreCase(text, i, "benutzer") && sep < text.length()
+                    && text.charAt(sep) == '/') {
+                return isGenderFirstSegment(text, sep + 1) ? -1 : sep + 1;
+            }
+            return -1;
+        }
+
+        @Override
+        boolean isStartBoundary(String text, int i) {
+            return startBoundaryOrColon(text, i);
+        }
+
+        @Override
+        int minSegments() {
+            return 2;
+        }
+
+        @Override
+        double confidence(int headLength, int segmentsCappedAt3) {
+            return CONFIDENCE_QUESTIONABLE;
+        }
+
+        @Override
+        String source() {
+            return "pfad-relativ";
+        }
     };
 
     /** Höchstlänge eines Benutzernamens ({@code ~name/}) und eines Host-Laufs vor {@code :/}. */
@@ -338,18 +584,54 @@ enum PathForm {
     /** Konfidenz "sicher" für Unix ab drei Segmenten, Home ({@code ~/}) und Host ab zwei Segmenten (Plan N-3). */
     private static final double CONFIDENCE_UNIX_SURE = 0.90;
 
-    /** Konfidenz "wahrscheinlich": Unix mit zwei Segmenten, {@code ~name/} und Host mit einem Segment. */
+    /** Konfidenz "wahrscheinlich": relativ, Unix mit zwei Segmenten, {@code ~name/} und Host mit einem Segment. */
     private static final double CONFIDENCE_PROBABLE = 0.80;
+
+    /** Konfidenz 0.75 (wahrscheinlich): einzelner führender Backslash (Plan Nachtrag T-12 Punkt 8). */
+    private static final double CONFIDENCE_SINGLE_BACKSLASH = 0.75;
 
     /** Konfidenz "fraglich" (Stufe FRAGLICH), z. B. UNC-Kopf mit nur einem Segment. */
     private static final double CONFIDENCE_QUESTIONABLE = 0.60;
 
     /**
-     * Ende des Kopfs (exklusiv) oder -1. Prüft nur Zeichen ab {@code i} (UNC liest zusätzlich das eine Zeichen davor,
-     * um nur am ersten Backslash eines Laufs zu prüfen) und liest nie über das Textende hinaus; die Startgrenze prüft
-     * der Aufrufer (falls {@link #requiresStartBoundary()}).
+     * Ende des Kopfs (exklusiv) oder -1. Prüft nur Zeichen ab {@code i} und liest nie über das Textende hinaus; UNC,
+     * EINZEL_BACKSLASH und HOST_PFAD lesen zusätzlich das Zeichen davor (UNC und EINZEL_BACKSLASH, um nur am ersten
+     * Backslash eines Laufs zu prüfen; HOST_PFAD, um Wortanfang und Wortmitte zu unterscheiden), HOST_PFAD sogar bis zu
+     * 64 Zeichen davor. Die Startgrenze prüft der Aufrufer ({@link #isStartBoundary(String, int)}).
      */
     abstract int headEnd(String text, int i);
+
+    /**
+     * Ob an Position {@code i} ein Kopf dieser Form beginnen darf. Standard ist die gemeinsame Startgrenze
+     * ({@link PathChars#isStartBoundary}); LAUFWERK, UNC und HOST_PFAD haben keine (immer wahr), RELATIV,
+     * BENUTZER_WURZEL und WURZEL_ZWEI_SEGMENTE lassen zusätzlich {@code :} davor zu. Im Zitat-Pfad wird die Methode
+     * nicht für die erste Inhaltsposition gefragt (dort ist die Grenze durch das öffnende Zeichen erfüllt).
+     */
+    boolean isStartBoundary(String text, int i) {
+        return PathChars.isStartBoundary(text, i);
+    }
+
+    /**
+     * Ob an {@code from} (direkt hinter {@code Benutzer/}) das erste Segment genau {@code in} oder {@code innen} ist
+     * (ASCII, Groß- und Kleinschreibung egal) und direkt dahinter ein Trenner steht (Gendern mit Schrägstrich). Liest
+     * höchstens sechs Zeichen ab {@code from} und nie über das Textende hinaus.
+     */
+    private static boolean isGenderFirstSegment(String text, int from) {
+        int end;
+        if (PathChars.matchesAsciiIgnoreCase(text, from, "innen")) {
+            end = from + "innen".length();
+        } else if (PathChars.matchesAsciiIgnoreCase(text, from, "in")) {
+            end = from + "in".length();
+        } else {
+            return false;
+        }
+        return end < text.length() && PathChars.isSeparator(text.charAt(end));
+    }
+
+    /** Gemeinsame Startgrenze oder {@code :} direkt davor (RELATIV, BENUTZER_WURZEL, WURZEL_ZWEI_SEGMENTE). */
+    private static boolean startBoundaryOrColon(String text, int i) {
+        return (i > 0 && text.charAt(i - 1) == ':') || PathChars.isStartBoundary(text, i);
+    }
 
     /** Mindestzahl der Segmente hinter dem Kopf (nach dem Kürzen am Ende). */
     abstract int minSegments();
@@ -366,9 +648,4 @@ enum PathForm {
 
     /** Quellname der Funde, Format {@code [a-z][a-z0-9-]{0,31}}. */
     abstract String source();
-
-    /** Ob der Kopf nur an einer Startgrenze ({@link PathChars#isStartBoundary}) beginnen darf. */
-    boolean requiresStartBoundary() {
-        return true;
-    }
 }

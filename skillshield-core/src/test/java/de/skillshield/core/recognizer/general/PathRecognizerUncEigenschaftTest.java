@@ -231,9 +231,10 @@ class PathRecognizerUncEigenschaftTest {
             assertEquals(FindingType.PFAD, f.type(), "Typ" + wo);
             // seit T-13 fuenf Formen: Quelle und Konfidenz als Menge (die genaue Pruefung je Form macht das Orakel in
             // PathRecognizerUnixEigenschaftTest); ein zusammengelegter Fund traegt die Quelle des frueher beginnenden
-            assertTrue(Set.of("pfad-laufwerk", "pfad-unc", "pfad-unix", "pfad-home", "pfad-host").contains(f.source()),
+            assertTrue(Set.of("pfad-laufwerk", "pfad-unc", "pfad-unix", "pfad-home", "pfad-host",
+                    "pfad-relativ").contains(f.source()),
                     "Quelle " + f.source() + wo);
-            assertTrue(Set.of(0.95, 0.90, 0.80, 0.60).contains(f.confidence()), "Konfidenz " + f.confidence() + wo);
+            assertTrue(Set.of(0.95, 0.90, 0.80, 0.75, 0.60).contains(f.confidence()), "Konfidenz " + f.confidence() + wo);
             assertTrue(f.start() >= vorigesEnde, "sortiert und ueberlappungsfrei" + wo);
             assertFalse(f.start() > 0 && Character.isLowSurrogate(text.charAt(f.start()))
                     && Character.isHighSurrogate(text.charAt(f.start() - 1)), "Start im Surrogatpaar" + wo);

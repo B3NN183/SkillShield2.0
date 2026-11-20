@@ -591,12 +591,14 @@ class PathRecognizerHostTest {
     }
 
     @Test
-    void bekannteGrenzeScpMitRelativemPfadBleibtBisT14Klartext() {
-        // "host:erika/repo.git" hat hinter dem Doppelpunkt keinen Schraegstrich: relativer Pfad, Form RELATIV (T-14)
+    void bekannteGrenzeScpMitRelativemPfadBleibtAuchNachT14Klartext() {
+        // "host:erika/repo.git" hat hinter dem Doppelpunkt keinen Schraegstrich und keinen Kopf "./" oder "../": Die Form
+        // RELATIV (T-14, AK-14) verlangt den Kopf, der Plan sieht fuer scp-Schreibweise mit relativem Pfad keine Form
+        // vor. Ist-Verhalten bleibt: kein Fund (offene Planfrage, siehe Bericht zu T-14).
         String text = "git@host.example:erika/repo.git";
         assertKeinFund(text);
         List<Finding> s = scan(text);
         assertTrue(s.stream().noneMatch(f -> f.type() == FindingType.PFAD), "kein Pfad-Fund");
-        assertTrue(pseudonymisiert(text).contains("erika/repo.git"), "relativer Pfadteil bleibt bis T-14 sichtbar");
+        assertTrue(pseudonymisiert(text).contains("erika/repo.git"), "relativer Pfadteil bleibt sichtbar (bekannte Grenze)");
     }
 }

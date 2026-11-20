@@ -45,7 +45,10 @@ class PathRecognizerUnixEigenschaftTest {
     private static final PathRecognizer R = new PathRecognizer();
     private static final PathForm[] ALT = {PathForm.LAUFWERK, PathForm.UNC};
     private static final PathForm[] DURCHLAUF1 = {PathForm.LAUFWERK, PathForm.UNC, PathForm.UNIX, PathForm.HOME};
-    private static final Set<String> QUELLEN = Set.of("pfad-laufwerk", "pfad-unc", "pfad-unix", "pfad-home",
+    /** Formen mit Orakel in dieser Datei (Stand T-13); RELATIV und EINZEL_BACKSLASH: PathRecognizerRelativEigenschaftTest. */
+    private static final PathForm[] ORAKEL_FORMEN = {PathForm.LAUFWERK, PathForm.UNC, PathForm.UNIX, PathForm.HOME,
+            PathForm.HOST_PFAD};
+    private static final Set<String> QUELLEN = Set.of("pfad-laufwerk", "pfad-unc", "pfad-unix", "pfad-home", "pfad-relativ",
             "pfad-host");
 
     private static final String[] ANFUEHRUNG = {"\"", "'", "`", "\u201E", "\u201C", "\u201D", "\u00BB", "\u00AB",
@@ -203,7 +206,8 @@ class PathRecognizerUnixEigenschaftTest {
             while (laufEnde < n && !PathChars.isTerminator(text.charAt(laufEnde))) {
                 laufEnde++;
             }
-            int kopf = (form.requiresStartBoundary() && !startgrenze(text, pos)) ? -1
+            boolean ohneGrenze = form == PathForm.LAUFWERK || form == PathForm.UNC || form == PathForm.HOST_PFAD;
+            int kopf = (!ohneGrenze && !startgrenze(text, pos)) ? -1
                     : kopf(text, pos, form);
             if (kopf >= 0) {
                 int ende = kuerze(text, pos, laufEnde, kopf);
@@ -367,7 +371,7 @@ class PathRecognizerUnixEigenschaftTest {
         int[] mitFund = new int[PathForm.values().length];
         for (int it = 0; it < ITERATIONEN_ORAKEL; it++) {
             String text = zufallstext(rnd, 1 + rnd.nextInt(10), 0);
-            for (PathForm form : PathForm.values()) {
+            for (PathForm form : ORAKEL_FORMEN) {
                 List<Fund> soll = orakel(text, form);
                 List<Finding> ist = R.detectWithoutQuotes(text, new PathForm[] {form});
                 String wo = ", Form " + form + ", Startwert " + (SEED + 3) + ", Iteration " + it;
@@ -383,7 +387,7 @@ class PathRecognizerUnixEigenschaftTest {
                 }
             }
         }
-        for (PathForm form : PathForm.values()) {
+        for (PathForm form : ORAKEL_FORMEN) {
             assertTrue(mitFund[form.ordinal()] > 5_000, form + ": Orakel zu selten angewandt: " + mitFund[form.ordinal()]);
         }
     }
@@ -406,7 +410,7 @@ class PathRecognizerUnixEigenschaftTest {
                 sb.append(teile[rnd.nextInt(teile.length)]);
             }
             String text = sb.toString();
-            for (PathForm form : PathForm.values()) {
+            for (PathForm form : ORAKEL_FORMEN) {
                 List<Fund> soll = orakel(text, form);
                 List<Finding> ist = R.detectWithoutQuotes(text, new PathForm[] {form});
                 String wo = ", Form " + form + ", Startwert " + (SEED + 4) + ", Iteration " + it;
@@ -440,22 +444,24 @@ class PathRecognizerUnixEigenschaftTest {
             List<Finding> alle = R.detectWithoutQuotes(text);
             for (Finding f : alle) {
                 assertTrue(QUELLEN.contains(f.source()), "Quelle" + wo);
-                assertTrue(Set.of(0.95, 0.90, 0.80, 0.60).contains(f.confidence()), "Konfidenz" + wo);
+                assertTrue(Set.of(0.95, 0.90, 0.80, 0.75, 0.60).contains(f.confidence()), "Konfidenz" + wo);
                 double max = f.source().equals("pfad-unc") || f.source().equals("pfad-laufwerk") ? 0.95 : 0.90;
                 assertTrue(f.confidence() <= max, "Konfidenz hoechstens Maximum der Quelle" + wo);
                 boolean beruehrt = false;
-                for (PathForm form : PathForm.values()) {
+                for (PathForm form : ORAKEL_FORMEN) {
                     for (Fund o : orakel(text, form)) {
                         if (o.start() < f.end() && f.start() < o.ende()) {
                             beruehrt = true;
                         }
                     }
                 }
-                assertTrue(beruehrt, "Fund ohne beruehrenden Orakelfund" + wo);
+                // Funde der Quelle pfad-relativ stammen aus Formen ohne Orakel in dieser Datei; ihre Pruefung ohne
+                // Ausnahme steht im Gesamtorakel von PathRecognizerRelativEigenschaftTest
+                assertTrue(beruehrt || f.source().equals("pfad-relativ"), "Fund ohne beruehrenden Orakelfund" + wo);
             }
             // jede Orakelposition ist abgedeckt
             boolean[] a = abdeckung(text.length(), alle);
-            for (PathForm form : PathForm.values()) {
+            for (PathForm form : ORAKEL_FORMEN) {
                 for (Fund o : orakel(text, form)) {
                     for (int i = o.start(); i < o.ende(); i++) {
                         assertTrue(a[i], form + ": Orakelposition nicht abgedeckt" + wo);
@@ -498,7 +504,7 @@ class PathRecognizerUnixEigenschaftTest {
             assertEquals(text.substring(f.start(), f.end()), f.originalValue(), "Teilstring" + wo);
             assertEquals(FindingType.PFAD, f.type(), "Typ" + wo);
             assertTrue(QUELLEN.contains(f.source()), "Quelle " + f.source() + wo);
-            assertTrue(Set.of(0.95, 0.90, 0.80, 0.60).contains(f.confidence()), "Konfidenz " + f.confidence() + wo);
+            assertTrue(Set.of(0.95, 0.90, 0.80, 0.75, 0.60).contains(f.confidence()), "Konfidenz " + f.confidence() + wo);
             assertTrue(f.start() >= vorigesEnde, "sortiert und ueberlappungsfrei" + wo);
             assertFalse(f.start() > 0 && Character.isLowSurrogate(text.charAt(f.start()))
                     && Character.isHighSurrogate(text.charAt(f.start() - 1)), "Start im Surrogatpaar" + wo);
