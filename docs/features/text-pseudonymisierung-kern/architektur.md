@@ -875,6 +875,43 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
 - **Tests**: Zeile `UNC` (2.4.2) positiv/negativ; `Ablage \\srv-beispiel\Mein Ordner\datei.txt` → `\\srv-beispiel\Mein`,
   Rest kein Fund; in Anführungszeichen ganz; `\\\\srv-beispiel\\freigabe\\x` mit geprüfter Backslash-Anzahl;
   `\\?\C:\Tools\a.exe` nach Entscheidung N-2; `\\`×100 000 < 2 s.
+- *(Nachtrag 19.11.2026 zu T-12 – Anwendung des Grundsatzes aus Kap. 2.3; ersetzt in Zeile `UNC` (2.4.2)
+  widersprechende Angaben:*
+  1. *Kopf: ein maximaler Lauf aus MINDESTENS zwei Backslashes, danach ein Nicht-Trenner (Plan bisher: genau 2 oder
+     4). Auch 3, 5, 6 … Backslashes ergeben einen Fund – ein beim Maskieren verlorener oder zusätzlicher Backslash
+     ließe den Pfad sonst im Klartext.*
+  2. *Keine Startgrenze für UNC (Entscheidung zu T-10 Punkt 4): `x=\\srv…`, `(\\srv…)`, `siehe\\srv…` → Fund ab den
+     Backslashes. `Pfad:\\srv…` → Fund ab dem Buchstaben vor `:\` (Laufwerksregel), der UNC-Pfad liegt ganz darin.
+     Bekannte Folge (zu große Funde): maskierte Texte wie `a\\nb\\nc` ergeben einen Fund.*
+  3. *`\\?\…` und `\\.\…` sind kein Sonderfall; `?` bzw. `.` zählt als erstes Segment (`\\?\C:\Tools\a.exe`,
+     `\\?\UNC\srv\freigabe\a.txt`, `\\.\pipe\name` → je ein Fund).*
+  4. *Obermengen-Garantie je Form: Das Ergebnis ohne Anführungszeichen ist die Vereinigung aus dem Durchlauf mit
+     allen Formen und je einem Durchlauf mit nur einer Form; keine neue Form kann den Fund einer anderen
+     verkleinern. Differenztest gegen den Durchlauf nur mit `LAUFWERK`.*
+  5. *Schrägstrich-Form `//srv/freigabe/…` gehört zur Form UNIX (T-13) und bleibt bis dahin ohne Fund.*
+  6. *Bekannte Grenze: unsichtbares Zeichen zwischen den führenden Backslashes → kein Fund (wie T-10 3a).*
+  7. *Nutzerentscheidung 20.11.2026 nach security-Hinweis (ersetzt OF-7 für UNC und das Negativbeispiel
+     `\\srv-beispiel`): Ein UNC-Kopf mit nur EINEM Segment (Server ohne Freigabe: `\\fileserver01`,
+     `\\fileserver01\`, „liegt auf \\fileserver01.") ist ein Fund vom Typ PFAD mit Konfidenz 0.60 (Stufe
+     fraglich), Quelle `pfad-unc`. Ab zwei Segmenten bleibt es bei 0.95. Weiterhin kein Fund: `\\`, `\\\\`
+     (kein Segment), `\\.`/`\\?` allein nach Kürzung ohne Segment. Beim Zusammenlegen gilt die niedrigste
+     Konfidenz der Beteiligten (D-8).*
+  7a. *(Präzisierung nach reviewer-Befund T-12, Durchlauf 2.) Beim Zusammenlegen überlappender Funde (Durchlauf mit
+     und ohne Anführungszeichen) gilt: (i) Beginnt der längere Fund am selben Start wie der bisherige Bereich, ist
+     der bisherige nur die kürzere Deutung desselben Kopfes (z. B. `\\srv` ohne Zitat, `"\\srv mit\freigabe"` mit
+     Zitat); es gilt die Konfidenz des längeren Fundes, gebildet mit seiner eigenen Segmentzahl. Voraussetzung:
+     Die Konfidenz jeder Form ist in der Segmentzahl nicht fallend (Vertrag von `PathForm.confidence`, auch für
+     die Formen aus T-13 bis T-16). (ii) Verlängert ein Fund mit späterem Start den Bereich, gilt die niedrigste
+     Konfidenz der Beteiligten (D-8). (iii) Ein Fund, der vollständig im Bereich liegt, ändert dessen Konfidenz
+     nicht. `\\?\` und `\\.\` ohne weiteres Segment sind Funde mit 0.60 (`?` bzw. `.` ist das erste Segment,
+     Punkt 3); `\\?` und `\\.` ohne Trenner bleiben kein Fund, weil die Kürzung das Segment entfernt.*
+  8. *Nutzerentscheidung 20.11.2026, umzusetzen in T-14 (relative Pfade): Ein einzelner führender Backslash mit
+     mindestens zwei Segmenten (`\srv\freigabe\a.txt`, `\Users\erika.mustermann\Desktop\x`) wird ein Fund mit
+     Konfidenz 0.75 (Stufe wahrscheinlich). Entsteht, wenn Chat oder Wiki aus `\\` ein `\` machen.*
+  9. *Folge-Feature (Nutzerentscheidung 20.11.2026, nicht Teil dieses Features): Erkenner für Zugangsdaten in
+     Kommandozeilen (`/user:…`, `DOMÄNE\benutzer`, Passwort-Argument in `net use`, `-p`/`--password`,
+     `password=`). Bis dahin bekannte Lücke: In `net use Z: \\srv\freigabe geheim /user:praxis\erika.mustermann`
+     wird nur der Pfad ersetzt.*
 
 ### T-13: Pfad-Erkenner – Unix und Home
 - **Dateien**: `PathForm.java` (`UNIX`, `HOME`); Test `PathRecognizerUnixTest`.

@@ -14,8 +14,15 @@ import java.util.Objects;
  * Fund vom Typ {@link FindingType#PFAD} geliefert; Programm-, Benutzer-, Server- und Ordnernamen darin sind damit
  * mitgeschützt.
  *
- * <p>Stand dieses Tasks (T-11): Form {@link PathForm#LAUFWERK} mit Anführungszeichenregel; die weiteren Formen
- * folgen mit den Folgetasks, ohne dass sich Läufe, Ende und Segmentzählung ändern.
+ * <p>Stand dieses Tasks (T-12): Formen {@link PathForm#LAUFWERK} und {@link PathForm#UNC} mit
+ * Anführungszeichenregel; die weiteren Formen folgen mit den Folgetasks, ohne dass sich Läufe, Ende und
+ * Segmentzählung ändern. Für UNC-Pfade gilt wie für Laufwerkspfade keine Startgrenze (Text direkt davor verhindert
+ * den Fund nicht, siehe {@link PathForm#UNC}).
+ *
+ * <p><b>Obermengen-Garantie je Form.</b> Der Durchlauf ohne Anführungszeichen liefert die Vereinigung aus dem
+ * Durchlauf mit allen Formen und je einem Durchlauf mit nur einer Form ({@link #detectWithoutQuotes(String,
+ * PathForm[])}); eine später hinzukommende Form macht den Fund einer bisherigen Form daher nie kleiner (ein Lauf
+ * liefert sonst höchstens einen Fund, und der Fund einer früher beginnenden Form kann am Ende kürzer sein).
  *
  * <p><b>Anführungszeichen (T-11).</b> Zusätzlich zum Durchlauf nach den folgenden Absätzen (Stand T-10, siehe
  * {@link #detectWithoutQuotes}) wird jedes Anführungszeichen ({@code "}, {@code '}, Backtick sowie die typografischen
@@ -52,11 +59,17 @@ import java.util.Objects;
  *
  * <p><b>Segmente.</b> Hinter dem Kopf muss nach der Kürzung mindestens ein Segment (nichtleere Folge von
  * Nicht-Trennern) stehen: {@code C:}, {@code C:\} und {@code C:\.} sind kein Fund. Die Konfidenz hängt nur von Form
- * und der auf 3 gedeckelten Segmentzahl ab, nie von Leerzeichen.
+ * und der auf 3 gedeckelten Segmentzahl ab, nie von Leerzeichen; UNC mit genau einem Segment (Server ohne Freigabe,
+ * {@code \fileserver01}) ist ein Fund mit 0.60, ab zwei Segmenten 0.95 ({@link PathForm#UNC}).
  *
  * <p><b>Laufzeit.</b> Jeder Lauf wird einmal ausgewertet (Ende, Segmentanfänge von hinten), jede Position wird in
- * O(1) als Beginn geprüft, die Kürzung läuft einmal je Fund über dessen Lauf; danach springt der Durchlauf ans
- * Laufende. Die Suche nach dem schließenden Anführungszeichen endet spätestens am nächsten Zeichen derselben Art
+ * (amortisiert) O(1) als Beginn geprüft, die Kürzung läuft einmal je Fund über dessen Lauf; danach springt der
+ * Durchlauf ans Laufende. "Amortisiert": Der Kopf einer Form liest nur Zeichen unmittelbar ab der Position, nie
+ * Servernamen, Freigabe oder Segmente (deren Anzahl liefern die Laufdaten bzw. {@code starts} in O(1)); der Kopf von
+ * UNC liest den Backslash-Lauf, aber nur an dessen erstem Backslash, jede weitere Position darin endet nach einem
+ * Zeichen. Die Summe aller Kopfprüfungen ist daher höchstens die Textlänge (bzw. die Länge des Zitatinhalts), auch für
+ * sehr viele Köpfe ohne genug Segmente in einem Lauf und für sehr lange Servernamen. Die Suche nach dem
+ * schließenden Anführungszeichen endet spätestens am nächsten Zeichen derselben Art
  * (jedes Zeichen schließt seine eigene Art, auch wenn es zusätzlich Zeichen anderer Arten derselben Familie
  * schließt). Je Art sind die Bereiche der Paare daher paarweise disjunkt, und die Inhaltsprüfung (Segmentanfänge,
  * Kopfsuche, je Position O(1)) liest jede Position je Art höchstens einmal: insgesamt O(n) (höchstens 13 Arten mal
@@ -79,9 +92,17 @@ public final class PathRecognizer implements Recognizer {
 
     @Override
     public List<Finding> detect(String text) {
+        return detect(text, FORMS);
+    }
+
+    /**
+     * Wie {@link #detect(String)}, aber nur mit den übergebenen Formen. Paketprivat: Tests prüfen damit, dass eine
+     * hinzukommende Form die Funde der bisherigen Formen nicht verkleinert (Obermengen-Garantie).
+     */
+    List<Finding> detect(String text, PathForm[] forms) {
         Objects.requireNonNull(text, "text");
-        List<Finding> base = detectWithoutQuotes(text);
-        List<Finding> quoted = detectQuoted(text);
+        List<Finding> base = detectWithoutQuotes(text, forms);
+        List<Finding> quoted = detectQuoted(text, forms);
         if (quoted.isEmpty()) {
             return base;
         }
@@ -96,7 +117,18 @@ public final class PathRecognizer implements Recognizer {
      * öffnende Zeichen eines späteren Zitats nicht wegnehmen. Das Ergebnis ist nach Start sortiert, kann sich aber
      * überlappen (Paare verschiedener Arten); {@link #union} führt überlappende Funde zusammen.
      */
-    private static List<Finding> detectQuoted(String text) {
+    private static List<Finding> detectQuoted(String text, PathForm[] forms) {
+        List<Finding> result = collectQuoted(text, forms);
+        // Der erste gültige Kopf hängt vom Ende des Paars ab; Paare verschiedener Arten können einander verschachteln.
+        result.sort(Comparator.comparingInt(Finding::start));
+        return result;
+    }
+
+    /**
+     * Die Funde der Paare in der Reihenfolge der öffnenden Zeichen (nicht unbedingt nach Start sortiert). Nur für Tests
+     * paketprivat; der Produktivpfad ist {@link #detectQuoted}.
+     */
+    static List<Finding> collectQuoted(String text, PathForm[] forms) {
         List<Finding> result = new ArrayList<>();
         int n = text.length();
         int[] starts = new int[CAP];
@@ -106,13 +138,11 @@ public final class PathRecognizer implements Recognizer {
                 continue;
             }
             int close = findClosingQuote(text, pos, kind);
-            Finding f = close < 0 ? null : quotedFinding(text, pos + 1, close, starts);
+            Finding f = close < 0 ? null : quotedFinding(text, pos + 1, close, starts, forms);
             if (f != null) {
                 result.add(f);
             }
         }
-        // Der erste gültige Kopf hängt vom Ende des Paars ab; Paare verschiedener Arten können einander verschachteln.
-        result.sort(Comparator.comparingInt(Finding::start));
         return result;
     }
 
@@ -139,13 +169,13 @@ public final class PathRecognizer implements Recognizer {
      * Fund im Inhalt {@code [from, to)} eines Anführungszeichenpaars: ab dem ersten Kopf, hinter dem genügend Segmente
      * stehen, bis {@code to}; sonst {@code null}. Direkt hinter dem öffnenden Zeichen ist die Startgrenze erfüllt.
      */
-    private static Finding quotedFinding(String text, int from, int to, int[] starts) {
+    private static Finding quotedFinding(String text, int from, int to, int[] starts, PathForm[] forms) {
         if (from >= to) {
             return null;
         }
         int count = contentSegmentStarts(text, from, to, starts);
         for (int i = from; i < to; i++) {
-            for (PathForm form : FORMS) {
+            for (PathForm form : forms) {
                 if (i != from && form.requiresStartBoundary() && !PathChars.isStartBoundary(text, i)) {
                     continue;
                 }
@@ -200,12 +230,14 @@ public final class PathRecognizer implements Recognizer {
 
     /**
      * Vereinigung beider Fundlisten (je nach Start sortiert, innerhalb einer Liste dürfen sich Funde überlappen):
-     * überlappende Funde werden zu einem Fund über den gesamten Bereich, Konfidenz = kleinere, Quelle des früher
-     * beginnenden Fundes (bei gleichem Start der aus {@code a}). Jede Position, die in einer der Listen abgedeckt
-     * ist, bleibt abgedeckt (Obermenge); aneinandergrenzende Funde bleiben getrennt. Der Durchlauf nimmt immer den
-     * Fund mit dem kleineren Start aus beiden Listen und kennt daher nur einen offenen Bereich. Während der
-     * Verlängerung werden nur Start, Ende, Konfidenz und Quelle geführt; Teilstring und Fund entstehen einmal je
-     * Ergebnis beim Abschluss (Gesamtaufwand linear).
+     * Überlappende Funde werden zu einem Fund über den gesamten Bereich mit der Quelle des früher beginnenden Fundes
+     * (bei gleichem Start der aus {@code a}); aneinandergrenzende Funde bleiben getrennt, jede abgedeckte Position
+     * bleibt abgedeckt (Obermenge). Die Konfidenz folgt Plan 7a: (i) Beginnt ein längerer Fund am selben Start wie der
+     * bisherige Bereich, gilt seine Konfidenz (der Bereich war nur die kürzere Deutung desselben Kopfes; das setzt
+     * voraus, dass {@link PathForm#confidence} in der Segmentzahl nicht fällt); (ii) verlängert ein Fund mit späterem
+     * Start den Bereich, gilt die niedrigste Konfidenz der Beteiligten (D-8); (iii) ein Fund, der ganz im Bereich
+     * liegt, ändert die Konfidenz nicht. Der Durchlauf nimmt immer den Fund mit dem kleineren Start aus beiden Listen
+     * und führt nur Start, Ende, Konfidenz und Quelle; Teilstring und Fund entstehen einmal je Ergebnis (linear).
      */
     private static List<Finding> union(String text, List<Finding> a, List<Finding> b) {
         List<Finding> result = new ArrayList<>(a.size() + b.size());
@@ -234,7 +266,13 @@ public final class PathRecognizer implements Recognizer {
                 end = next.end();
                 confidence = next.confidence();
             } else if (next.end() > end) {
+                // Beginnt der längere Fund an derselben Stelle, ist der bisherige nur eine kürzere Deutung desselben
+                // Kopfes (z. B. UNC-Server allein, 0.60, gegenüber dem Zitat mit Freigabe, 0.95): es gilt die
+                // Konfidenz des längeren, der mit seiner eigenen Segmentzahl gebildet wurde. Beginnt er später,
+                // gilt die niedrigste Konfidenz der Beteiligten (D-8).
+                confidence = next.start() == start ? next.confidence() : Math.min(confidence, next.confidence());
                 end = next.end();
+            } else if (next.start() == start && next.end() == end) {
                 confidence = Math.min(confidence, next.confidence());
             }
         }
@@ -258,7 +296,34 @@ public final class PathRecognizer implements Recognizer {
      * jede hier abgedeckte Position ebenfalls ab.
      */
     List<Finding> detectWithoutQuotes(String text) {
+        return detectWithoutQuotes(text, FORMS);
+    }
+
+    /**
+     * Durchlauf ohne Anführungszeichenregel mit den übergebenen Formen. Bei mehreren Formen wird zusätzlich je Form ein
+     * Durchlauf mit nur dieser Form gemacht und alles vereinigt: Ein Lauf liefert höchstens einen Fund, und der Fund
+     * einer früher beginnenden Form (UNC vor einem Laufwerkskopf im selben Lauf) kann am Ende kürzer ausfallen,
+     * weil die
+     * Klammerzählung früher beginnt. Ohne die Vereinigung könnte so der Fund einer einzelnen Form durch eine andere
+     * Form kleiner werden. Der Aufwand sind (Formzahl + 1) lineare Durchläufe: einer mit allen Formen
+     * und je einer je Form.
+     */
+    List<Finding> detectWithoutQuotes(String text, PathForm[] forms) {
         Objects.requireNonNull(text, "text");
+        List<Finding> result = scan(text, forms);
+        if (forms.length > 1) {
+            for (PathForm form : forms) {
+                List<Finding> single = scan(text, new PathForm[] {form});
+                if (!single.isEmpty()) {
+                    result = union(text, result, single);
+                }
+            }
+        }
+        return result;
+    }
+
+    /** Ein Durchlauf (Läufe, Beginn, Kürzung) mit den übergebenen Formen; je Beginn gewinnt die erste passende Form. */
+    private static List<Finding> scan(String text, PathForm[] forms) {
         List<Finding> result = new ArrayList<>();
         int n = text.length();
         Run run = new Run();
@@ -271,7 +336,7 @@ public final class PathRecognizer implements Recognizer {
             if (pos >= run.end) {
                 run.load(text, pos);
             }
-            Finding f = tryForms(text, pos, run);
+            Finding f = tryForms(text, pos, run, forms);
             if (f != null) {
                 result.add(f);
                 pos = run.end; // Rest des Laufs gehört zum Fund oder ist abgeschnittenes Satzzeichen
@@ -283,8 +348,8 @@ public final class PathRecognizer implements Recognizer {
     }
 
     /** Liefert den Fund einer Pfadform, die an {@code pos} beginnt, oder {@code null}. */
-    private static Finding tryForms(String text, int pos, Run run) {
-        for (PathForm form : FORMS) {
+    private static Finding tryForms(String text, int pos, Run run, PathForm[] forms) {
+        for (PathForm form : forms) {
             if (form.requiresStartBoundary() && !PathChars.isStartBoundary(text, pos)) {
                 continue;
             }
@@ -292,11 +357,12 @@ public final class PathRecognizer implements Recognizer {
             if (headEnd < 0) {
                 continue;
             }
-            int segments = run.segmentsFrom(headEnd);
-            if (segments < form.minSegments()) {
+            // pessimistische Zählung genügt für "ist ein Fund": sie ist nie größer als die Zahl nach der Kürzung
+            if (run.segmentsFrom(headEnd) < form.minSegments()) {
                 continue;
             }
             int end = trimEnd(text, pos, run.end, headEnd);
+            int segments = run.segmentsTo(text, headEnd, end);
             return new Finding(FindingType.PFAD, text.substring(pos, end), pos, end,
                     form.confidence(segments), form.source());
         }
@@ -347,6 +413,8 @@ public final class PathRecognizer implements Recognizer {
      */
     private static final class Run {
         int end;
+        private int runStart;
+        private int tail; // pessimistisches Ende: hinter dem letzten Zeichen, das weder Satzzeichen noch Klammer zu ist
         private final int[] starts = new int[CAP]; // absteigend: letzter Segmentanfang zuerst
         private int count;
 
@@ -357,11 +425,13 @@ public final class PathRecognizer implements Recognizer {
                 e++;
             }
             end = e;
+            runStart = start;
             int t = e;
             while (t > start && (PathChars.isTrailingPunctuation(text.charAt(t - 1))
                     || PathChars.isClosingBracket(text.charAt(t - 1)))) {
                 t--;
             }
+            tail = t;
             count = 0;
             for (int j = t - 1; j >= start && count < CAP; j--) {
                 if (!PathChars.isSeparator(text.charAt(j))
@@ -374,6 +444,20 @@ public final class PathRecognizer implements Recognizer {
         /** Anzahl der Segmente ab {@code from} vor dem pessimistischen Ende, gedeckelt bei 3. */
         int segmentsFrom(int from) {
             return countFrom(starts, count, from);
+        }
+
+        /**
+         * Anzahl der Segmente ab {@code from} bis zum tatsächlichen Ende {@code actualEnd} (nach der Kürzung),
+         * gedeckelt bei 3. Das tatsächliche Ende liegt nie vor {@code tail}; zwischen {@code tail} und dem Ende stehen
+         * nur Satzzeichen und schließende Klammern, also keine Trenner. Ein Segment kommt daher nur hinzu, wenn dort
+         * (ausgeglichene) Klammern stehen, die ein eigenes Segment bilden: direkt hinter einem Trenner. O(1).
+         */
+        int segmentsTo(String text, int from, int actualEnd) {
+            int segments = segmentsFrom(from);
+            if (actualEnd > tail && tail >= from && tail > runStart && PathChars.isSeparator(text.charAt(tail - 1))) {
+                segments = Math.min(segments + 1, CAP);
+            }
+            return segments;
         }
     }
 }

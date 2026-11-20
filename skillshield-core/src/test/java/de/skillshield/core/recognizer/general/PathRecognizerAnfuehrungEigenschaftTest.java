@@ -148,8 +148,12 @@ class PathRecognizerAnfuehrungEigenschaftTest {
             String wo = ", Startwert " + SEED + ", Iteration " + it;
             assertEquals(text.substring(f.start(), f.end()), f.originalValue(), "Teilstring" + wo);
             assertEquals(FindingType.PFAD, f.type(), "Typ" + wo);
-            assertEquals("pfad-laufwerk", f.source(), "Quelle" + wo);
-            assertEquals(0.95, f.confidence(), "Konfidenz" + wo);
+            // seit T-12 liefert auch UNC (Backslash-Läufe der Zufallstexte) Funde: beginnt der Fund mit zwei
+            // Backslashes, ist die Quelle pfad-unc, sonst pfad-laufwerk; 0.60 gibt es nur bei UNC mit genau einem
+            // Segment bzw. bei Zusammenlegung mit einem solchen (der Fund enthaelt dann einen Doppel-Backslash)
+            assertEquals(f.originalValue().startsWith("\\\\") ? "pfad-unc" : "pfad-laufwerk", f.source(), "Quelle" + wo);
+            assertTrue(f.confidence() == 0.95 || (f.confidence() == 0.60 && f.originalValue().contains("\\\\")),
+                    "Konfidenz " + f.confidence() + wo);
             assertTrue(f.start() >= vorigesEnde, "sortiert und überlappungsfrei" + wo);
             assertFalse(f.start() > 0 && Character.isLowSurrogate(text.charAt(f.start()))
                     && Character.isHighSurrogate(text.charAt(f.start() - 1)), "Start im Surrogatpaar" + wo);
