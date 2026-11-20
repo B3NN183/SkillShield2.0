@@ -1121,6 +1121,11 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
   Standard-Erkenners einzeln (`new EmailRecognizer().detect(text)` usw.) gegen `TextScanner.standard().scan(text)`:
   abgedeckte Positionen des Scans = Vereinigung der Kandidatenpositionen. Teil 2: 1 000 Zufallseingaben an `restore`
   mit fester Zuordnung → keine Ausnahme. Fehlermeldung nennt Startwert und Iteration, keine Texte.
+- **Nachtrag 21.11.2026 (security, Schwere niedrig, Folgepunkt):** *Die Erkennerliste der Schutzgarantie-Prüfung
+  steht fest im Test (E-Mail, IPv4, URL, Pfad) und entspricht heute `TextScanner.standard()`. Kommt ein
+  Standard-Erkenner hinzu (z. B. IK/LANR), muss die Liste in `RoundtripFuzzTest` ergänzt werden, sonst prüft die
+  Schutzgarantie dessen Kandidaten nicht. Folgepunkt für das nächste Erkenner-Feature: Liste paketprivat verfügbar
+  machen oder einen Abgleichtest ergänzen.*
 
 ### T-19: Grenzlast
 - **Dateien**: Test `GrenzlastTest`.
@@ -1150,6 +1155,36 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
     umgeleitete `System.out`/`System.err`.
   - `TestdatenSynthetischTest`: liest `src/test/java/**/*.java`; jede E-Mail-ähnliche Zeichenfolge endet auf
     `example.invalid|example.org|example.net`; jede gültige IPv4 liegt in den RFC-5737-Bereichen; Pfade per Durchsicht.
+- **Nachtrag 21.11.2026 (vor der Umsetzung, nach Sichtung des Bestands; Detailregeln ohne Rückfrage entschieden,
+  siehe T-14 Punkt 5; geht dem Wortlaut oben vor):**
+  1. *`TestdatenSynthetischTest`, E-Mail: Eine E-Mail-ähnliche Zeichenfolge ist ein `@`, direkt gefolgt von einem
+     Domain-Lauf aus Labels (Buchstaben, Ziffern, `-`, `_`) mit mindestens einem Punkt. Abschließende Punkte und
+     Bindestriche des Laufs zählen nicht; Groß/klein ist egal. Zulässig ist die Zeichenfolge, wenn (a) die Domain
+     auf einen reservierten Namen endet – letztes Label `example`, `invalid`, `test` oder `localhost` (RFC 2606,
+     RFC 6761) oder Endung `example.com`, `example.org`, `example.net` –, oder (b) das letzte Label kürzer als
+     zwei Zeichen ist (Kunstproben der Erkenner-Tests wie `a@b.c`; keine echte Endung ist einbuchstabig), oder
+     (c) sie in einer geschlossenen Ausnahmeliste im Test steht: exakte Zeichenfolge, je mit Begründung, nur für
+     Grenzfallproben der Erkennerregeln, die erkennbar künstlich sind (z. B. `a@b.invalidC`,
+     `…@example.invalid.erika`, `…@praxis.example.max`, überlange Labels). Jede andere Zeichenfolge macht den Test
+     rot. Begründung der Erweiterung gegenüber `example.invalid|example.org|example.net`: Der abgenommene
+     Testbestand nutzt reservierte `*.example`-/`*.invalid`-Domains und Kunstproben; alle sind garantiert nicht
+     vergeben und als synthetisch erkennbar (Zweck von AK-53). Ein Umschreiben von rund 60 abgenommenen
+     Testliteralen (darunter Laufzeitproben mit exakten Fundzahlen) wäre ein Risiko ohne Nutzen.*
+  2. *`TestdatenSynthetischTest`, IPv4: Geprüft wird jede alleinstehende gültige IPv4 – eine maximale Kette aus
+     Ziffern und Punkten mit genau vier Blöcken, jeder numerisch 0–255 (führende Nullen erlaubt). Sie muss
+     numerisch in 192.0.2.0/24, 198.51.100.0/24 oder 203.0.113.0/24 liegen. Ketten mit mehr oder weniger Blöcken
+     oder mit einem Block über 255 sind keine alleinstehende gültige Adresse (Kettenproben des IPv4-Erkenners,
+     Versionsnummern) und werden nicht geprüft. Der Bestand enthält genau eine Verletzung:
+     `PathRecognizerHostTest` verwendet `1.2.3.4:/x`; das Literal wird in T-20 auf `192.0.2.4:/x` umgestellt
+     (Erwartung des Tests unverändert). Deckt der neue Test weitere Verletzungen auf, werden sie gleichartig auf
+     einen Dokumentationsbereich umgestellt und im Bericht einzeln genannt.*
+  3. *`ArchitekturRegelnTest`: Im Bestand steht genau ein verbotenes Wort, im Javadoc von `PathForm` (Form
+     RELATIV, Beispiel `Files\Mein` als Rest von `Program Files`). Der Kommentar wird in T-20 umformuliert
+     (z. B. `Dateien\Mein`). Das ist die einzige zulässige Änderung an Produktivcode in T-20 und betrifft nur
+     Kommentartext; der ausführbare Code bleibt unverändert (security belegt das per Bytecode-Vergleich).*
+  4. *Die drei Tests müssen selbst Dateien lesen (`src/main/java`, `src/test/java`). Das ist Testcode und von den
+     Verboten für den Produktivcode nicht betroffen. `TestdatenSynthetischTest` nimmt die eigene Datei und die
+     Ausnahmeliste nicht von der Prüfung aus, außer für die Zeilen der Ausnahmeliste selbst.*
 
 ### Zuordnung AK → Task
 
