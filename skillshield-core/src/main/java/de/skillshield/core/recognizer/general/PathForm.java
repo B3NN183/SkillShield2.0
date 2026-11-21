@@ -358,7 +358,7 @@ enum PathForm {
      * Punkte bis zum Kopfende, {@code ..} am Ende besteht nur aus Kürzungszeichen und ist kein Segment (bekannte
      * Grenze, Plan Nachtrag T-14 Punkt 4). Konfidenz 0.80 (wahrscheinlich, nie sicher),
      * Quelle {@code pfad-relativ}. Ohne Kopf gibt es keinen Fund ({@code ordner\datei.txt}, {@code ordner/datei.txt},
-     * {@code Files\Mein}, {@code Tool\tool.exe}; Nutzerentscheidung D-6).
+     * {@code Dateien\Mein}, {@code Tool\tool.exe}; Nutzerentscheidung D-6).
      *
      * <p>Startgrenze erforderlich (Plan 2.4.2: "Die Startgrenze gilt für alle Formen";
      * {@link PathChars#isStartBoundary}): Der Punkt ist in gewöhnlichem Text häufig, und {@code ./} oder {@code ../}

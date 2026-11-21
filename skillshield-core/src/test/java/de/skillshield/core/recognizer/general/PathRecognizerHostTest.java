@@ -145,7 +145,7 @@ class PathRecognizerHostTest {
     void planNegativOhneBuchstabeOhneSegmentOhneSchraegstrich() {
         assertKeinFund("Uhrzeit 12:/30");
         assertKeinFund("12:/30");
-        assertKeinFund("1.2.3.4:/x");
+        assertKeinFund("192.0.2.4:/x");
         // IP-Adresse: kein Buchstabe im Lauf (die Adresse erkennt der IP-Erkenner)
         assertKeinFund("192.0.2.10:/export/home");
         assertKeinFund("-:/x");

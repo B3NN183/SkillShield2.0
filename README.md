@@ -33,8 +33,8 @@ mvn verify
 mvn clean verify
 ```
 
-Baut alle Module und führt die JUnit-5-Tests aus (derzeit 25 Tests, 5 je Modul). Der OWASP-Dependency-Check läuft dabei
-**bewusst nicht** mit (kein Netzzugriff nötig).
+Baut alle Module und führt die JUnit-5-Tests aus (jedes Modul bringt eigene Tests mit).
+Der OWASP-Dependency-Check läuft dabei **bewusst nicht** mit (kein Netzzugriff nötig).
 
 ## Module und Abhängigkeitsrichtung
 

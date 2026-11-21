@@ -225,6 +225,32 @@ class GrenzlastTest {
         pruefeRoundtrip(text, d);
     }
 
+    // ------------------------------------------------------------------ Große Zuordnung (T-20, Nachtrag Punkt 5)
+
+    @Test
+    void ak49_hunderttausendVerschiedenePfade_grosseZuordnung_dreiSchritteJeUnterZweiSekunden() {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < WIEDERHOLUNGEN; i++) {
+            sb.append(bs("C:¦d¦")).append(i).append(' ');
+        }
+        String text = sb.toString();
+        Durchlauf d = drei(text, GRENZE_PATHOLOGISCH);
+        assertTrue(d.pseudo().mapping().size() >= WIEDERHOLUNGEN, "Zuordnung: " + d.pseudo().mapping().size());
+        pruefeRoundtrip(text, d);
+    }
+
+    @Test
+    void ak49_hunderttausendVerschiedeneEmails_grosseZuordnung_dreiSchritteJeUnterZweiSekunden() {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < WIEDERHOLUNGEN; i++) {
+            sb.append("u").append(i).append("@e.invalid ");
+        }
+        String text = sb.toString();
+        Durchlauf d = drei(text, GRENZE_PATHOLOGISCH);
+        assertTrue(d.pseudo().mapping().size() >= WIEDERHOLUNGEN, "Zuordnung: " + d.pseudo().mapping().size());
+        pruefeRoundtrip(text, d);
+    }
+
     // ------------------------------------------------------------------ Lange Kette mit echten Erkennern
 
     @Test

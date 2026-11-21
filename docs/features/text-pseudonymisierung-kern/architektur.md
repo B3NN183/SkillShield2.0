@@ -1194,6 +1194,20 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
      100 000 verschiedene E-Mail-Adressen (`"u" + i + "@e.invalid "`) –, je durch alle drei Schritte mit je < 2 s,
      Roundtrip gleich; im Test wird geprüft, dass die Zuordnung mindestens 100 000 Einträge hat. Das ist neben
      Punkt 2 die einzige zulässige Änderung an bestehenden Tests in T-20.*
+  6. *(Nach der Prüfung; security, drei Punkte der Schwere niedrig, alle als Folgepunkte, heute ohne Risiko.)
+     (a) `ArchitekturRegelnTest` vergleicht Quelltext mit der Wortliste des Plans; nicht erkannt würden
+     Unicode-Escapes im Quelltext, per Reflection zusammengesetzte Klassennamen und Zugänge außerhalb der Liste
+     (z. B. `java.util.prefs`, JNDI, `java.sql`, `java.rmi`, `java.awt.Desktop`, `ServiceLoader`,
+     Umgebungsvariablen). Stand heute laut `jdeps`: Der Kern nutzt nur `java.lang`, `java.lang.invoke`,
+     `java.lang.runtime`, `java.util`, `java.util.function`, `java.util.regex`. Folgepunkt: Positivliste auf
+     Bytecode-Ebene ergänzen. (b) `TestdatenSynthetischTest` liest nur den Testbaum von `skillshield-core` und nur
+     zusammenhängende Literale; sobald die anderen Module echte Tests bekommen, die Prüfung auf alle Testbäume
+     ausdehnen. (c) `TextScanner` kapselt `RuntimeException` eines Erkenners, nicht aber `Error` (bewusste
+     Entscheidung, TE-20); ein `Error` mit Klartext in der Meldung käme unverändert beim Aufrufer an. Die
+     Standard-Erkenner werfen keine solchen Fehler. Vorgabe für die Oberfläche: Meldungen von `Throwable` nie
+     ungefiltert anzeigen oder protokollieren. Ausnahmeliste des `TestdatenSynthetischTest` (neun Einträge) ist
+     von reviewer, security und qa als erkennbar künstlich bestätigt; die Durchsicht der Server-, Benutzer- und
+     Programmnamen in Pfad-Literalen (AK-53) hat security vorgenommen: alle erfunden oder generisch.*
 
 ### Zuordnung AK → Task
 
