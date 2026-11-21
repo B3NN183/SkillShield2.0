@@ -405,6 +405,39 @@ reviewer und security. Verbindlich ab Durchlauf 2:
   Kontextwort. Laufzeit mit exakter Fundzahl: `LANR` + Wörter ohne Satzende, `LANR` + Zeilenumbrüche, gültige LANR +
   ` (LANR) ` wiederholt.
 
+- **Nachtrag der Hauptsitzung (21.11.2026, nach Prüfung von T-3):**
+  - T-5 **darf und soll** die Tests anpassen, die das vorläufige Verhalten von T-3 festhalten (jedes Füllwort, jeder
+    Zeilenumbruch und jedes ausgegebene Segment beendet den Kontext). Das sind in `LanrRecognizerTest` alle Tests mit
+    Präfix `t3Uebergang_` und in `KvNumberScannerKettenTest` mindestens `kette_buchstabeAmKettenanfang…`,
+    `kette_erstesBlockUeber12Ziffern…`, `kette_mehrAls12ZiffernAusBloeckenOhneFittendesPraefix…`,
+    `kette_zweiNeunerSegmenteHintereinander…`, `ereignisse_zeilenumbruchCrLfZaehltAlsEiner…`,
+    `ereignisse_buchstabenAusserhalbDesBmp…` sowie die Fundzahl-Formeln der Laufzeittests aus T-3. Jede angepasste
+    Erwartung wird im Bericht einzeln genannt und mit der Regel aus Kap. 3.3 begründet; Kap. 8 Regel 10 gilt für
+    diese Stellen als erfüllt.
+  - Der in T-3 angelegte, dort unerreichbare Zweig „Konfidenz 0.80“ und der Körper von `punkt()` werden in T-5
+    erreichbar und müssen dort getestet werden.
+  - Für `offen` (nachgestellter Kontext) muss auch die neutrale Verzweigung des Durchlaufs angepasst werden, nicht
+    nur die Ereignismethoden.
+  - Fehlende Randfälle aus T-3 mit aufnehmen: Vorwort `Arzt` + Zeilenumbruch + `Nr`; Nachsatzwort mit einem
+    Buchstaben außerhalb der BMP.
+  - **Erweiterungen der Erkennung aus der Sicherheitsprüfung von T-3** (Entscheidung der Hauptsitzung, Richtung
+    „mehr schützen“; ergänzen Kap. 3.1 und werden in T-5 umgesetzt und je Fall getestet, für LANR und IK):
+    1. Gruppentrenner zusätzlich: U+2009 (schmales Leerzeichen) und U+202F (schmales geschütztes Leerzeichen), da
+       als Zifferngruppentrenner verbreitet. Tab bleibt kein Gruppentrenner (Spaltentrenner in Tabellen). Der Test
+       `kette_andereLeerraumzeichenSindKeineTrenner` wird entsprechend angepasst.
+    2. Zwischen Vorwort und Nachsatzwort (`Arzt-Nr`) zusätzlich erlaubt: U+2011 (geschützter Bindestrich) und
+       U+2013 (Halbgeviertstrich).
+    3. Unsichtbare Zeichen im und am Kontextwort werden beim Wortvergleich übergangen: Formatzeichen
+       (`Character.FORMAT`, z. B. U+00AD, U+200B, U+200C, U+200D, U+FEFF) und Variantenwähler (U+FE00–U+FE0F). Damit
+       sind `LA` + U+00AD + `NR` und `LANR` + U+FE0F Kontextwörter. Die Linearität (Kap. 3.4) bleibt zu belegen.
+    4. Ein alleinstehendes Kombinationszeichen (ohne Basisbuchstaben) zählt nicht als Füllwort.
+    5. Unverändert bekannte Grenze 7: Nullbreitenzeichen **in der Nummer** (Fund nur über den ersten Teil).
+    6. `ak21_laufzeit_lanrGefolgtVonEineMillionZiffern_keinFund` nutzt Nullen statt Einsen.
+- **Nachtrag für alle Laufzeittests (T-3 bis T-8):** Neun gleiche Ziffern sind nach dem LANR-Verfahren immer
+  rechnerisch gültig (Summe 39·x, Prüfziffer x). Wo der Plan `1 ` wiederholt nennt, wird `0 ` wiederholt verwendet
+  (neun Nullen beginnen mit `00`); allgemein darf kein Laufzeittext ein Neuner-Segment ohne Präfix `00` erzeugen, das
+  nach einem der Verfahren gültig ist (Nachtrag T-1 Punkt 10).
+
 ### T-6: Einbindung in den Standard-Scanner, Abgrenzung, Abgleich der Erkennerliste
 - **Dateien**: `recognizer/TextScanner.java` (2.2); Tests `recognizer/TextScannerKvTest.java` (neu),
   `recognizer/TextScannerTest.java` (Abgleichtest ergänzt); **angepasst**: `RoundtripFuzzTest` und `GrenzlastTest`
