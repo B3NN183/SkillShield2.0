@@ -433,6 +433,17 @@ reviewer und security. Verbindlich ab Durchlauf 2:
     4. Ein alleinstehendes Kombinationszeichen (ohne Basisbuchstaben) zählt nicht als Füllwort.
     5. Unverändert bekannte Grenze 7: Nullbreitenzeichen **in der Nummer** (Fund nur über den ersten Teil).
     6. `ak21_laufzeit_lanrGefolgtVonEineMillionZiffern_keinFund` nutzt Nullen statt Einsen.
+  - **Aus der Prüfung von T-4 (in T-5 miterledigen):**
+    1. Veraltete Kommentare berichtigen: `KvArt.java` („Erkenner folgt in einem eigenen Task“) und
+       `KvNumberScanner.java` („LANR, spaeter IK“). `KvArt.java` darf dafür in T-5 geändert werden (nur Kommentar
+       und, falls für die Erweiterungen nötig, die Trennerlisten).
+    2. `IkRecognizerTest`: je ein Test, dass `İ`/`ı` und das Kelvin-Zeichen (U+212A) im Kontextwort keinen Kontext
+       ergeben (bisher nur über den Scanner-Test belegt).
+    3. Bekannte Grenze (neu, Nr. 8 zu Kap. 3.5, als Test `bekannteGrenze8…`): Ein Kombinationszeichen direkt am
+       Kontextwort (`IK` + U+0301) ergibt ein anderes Wort und damit keinen Kontext. Das bleibt so, weil ein
+       Kombinationszeichen den Buchstaben verändert (anders als ein unsichtbares Formatzeichen).
+    4. Bekannte Fehltreffer-Art (kein Schutzverlust, in Kap. 3.5 als Nr. 9 festhalten und testen): `ik` als eigenes
+       Wort hinter `.` oder `-` gilt als Kontextwort (`datei.ik`, `Mus-ik` mit folgender Zahl von 6 bis 12 Ziffern).
 - **Nachtrag für alle Laufzeittests (T-3 bis T-8):** Neun gleiche Ziffern sind nach dem LANR-Verfahren immer
   rechnerisch gültig (Summe 39·x, Prüfziffer x). Wo der Plan `1 ` wiederholt nennt, wird `0 ` wiederholt verwendet
   (neun Nullen beginnen mit `00`); allgemein darf kein Laufzeittext ein Neuner-Segment ohne Präfix `00` erzeugen, das
