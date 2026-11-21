@@ -1209,6 +1209,32 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
      von reviewer, security und qa als erkennbar künstlich bestätigt; die Durchsicht der Server-, Benutzer- und
      Programmnamen in Pfad-Literalen (AK-53) hat security vorgenommen: alle erfunden oder generisch.*
 
+### T-21: Nachweislücken aus der Abschlussprüfung (Nachtrag 22.11.2026, vom Nutzer freigegeben)
+- **Anlass**: Die Abschlussprüfung aller 54 AK (Leseprüfung mit Gegenprüfung) fand vier Lücken im Nachweis, keinen
+  Produktfehler: AK-2, AK-31, AK-52, AK-53. T-21 ist ein reiner Test-Task; kein Produktivcode, keine pom.xml.
+- **Dateien**: `EmailRecognizerTest`, `RoundtripKorpusTest`, `ArchitekturRegelnTest` (jeweils nur Ergänzungen).
+- **AK**: AK-2, AK-31, AK-52 (dazu AK-51/AK-54 als Verstärkung), AK-53 (Durchsicht).
+- **Tests**:
+  1. AK-2: Für genau den Text `Kontakt: erika.beispiel@example.invalid` wird zusätzlich der Typ `EMAIL` geprüft –
+     im Erkenner-Test und im Test über `TextScanner.standard()`.
+  2. AK-31 (dritte Teilaussage): Der nach D-5 abgeschnittene Rest wird als manueller Fund übergeben. Text
+     `Starte C:\Program Files\Mein Tool\tool.exe jetzt`: Scan liefert `C:\Program`; der Rest
+     `Files\Mein Tool\tool.exe` wird als manueller Fund (Quelle „manuell") ergänzt → beide werden ersetzt, kein
+     Pfadbestandteil steht im Ausgabetext, Roundtrip zeichengleich, keine Meldung. Dasselbe für die UNC-Variante
+     (`\\srv-beispiel\Mein Ordner\datei.txt`: Scan-Fund bis zum Leerzeichen, Rest manuell). Erwarteter
+     pseudonymisierter Text und Fundtypen stehen fest im Test.
+  3. AK-52: Ein Test liest `pom.xml` des Moduls `skillshield-core` und das Parent-POM und stellt fest, dass der Kern
+     keine Abhängigkeit außerhalb des Test-Scopes hat (jede `<dependency>` außerhalb von `dependencyManagement`
+     trägt `<scope>test</scope>`; das Modul-POM deklariert keine eigene Abhängigkeit). Selbsttest der Prüffunktion
+     auf Beispiel-POM-Texten (mit und ohne Verstoß).
+  4. AK-51/AK-54 (Verstärkung, Folgepunkt T-20 Punkt 6 (a) teilweise): Positivliste der JDK-Pakete im Quelltext des
+     Kerns – jede `import`-Zeile nennt `java.util…` oder `de.skillshield.core…`, und jede Stelle `java.<paket>` bzw.
+     `javax.<paket>` im Quelltext (auch voll qualifiziert, auch in Kommentaren) nennt nur `java.lang` oder
+     `java.util`. Selbsttests mit erlaubten und unerlaubten Beispielen. Unicode-Escapes und Reflection bleiben
+     als bekannte Grenze der Textprüfung bestehen.
+  5. AK-53: Durchsicht aller personenartigen Namen im Testbaum (auch außerhalb von Pfaden) durch reviewer und
+     security; das Ergebnis wird hier nachgetragen.
+
 ### Zuordnung AK → Task
 
 | AK | Task | AK | Task | AK | Task |
