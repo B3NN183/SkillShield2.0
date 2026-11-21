@@ -1234,6 +1234,24 @@ pathologischer Eingabe und Schritt `assertTimeoutPreemptively(2 s)` (TE-4).
      als bekannte Grenze der Textprüfung bestehen.
   5. AK-53: Durchsicht aller personenartigen Namen im Testbaum (auch außerhalb von Pfaden) durch reviewer und
      security; das Ergebnis wird hier nachgetragen.
+- **Ergebnis (22.11.2026; reviewer PASS, security PASS, qa PASS; 2377 Tests im Kernmodul):**
+  - *Punkte 1 bis 4 umgesetzt. Die Positivliste lautet `java.lang`, `java.util`, `java.util.regex` (`java.util.regex`
+    ist nötig, weil der E-Mail-Erkenner es importiert); jedes weitere Paket, auch `java.util.function` oder
+    `java.util.stream`, verlangt künftig einen bewussten Eintrag.*
+  - *Punkt 5, Durchsicht AK-53 (reviewer und security unabhängig, per Suche nach Anreden, Titeln, Firmenwörtern,
+    E-Mail-Lokalteilen, großgeschriebenen Wörtern in Literalen und Kommentaren, Benutzer- und Servernamen sowie
+    Abgleich mit häufigen Namen): Alle Namen sind erfunden oder generisch – Erika/Max Mustermann, Erika und Anna
+    Beispiel, O'Mustermann, konstruierte Reihen (`anna@praxis-eins` bis `emma@praxis-fuenf`), Allerweltsnamen für
+    Sonderzeichen-Proben (`jürgen.müller`, `o'brien`, `d'angelo`) und einzelne Vornamen ohne Nachnamen (Peter,
+    Paul). Keine Anreden, keine Patientenbezüge, keine echten Praxis-, Firmen- oder Kassennamen. Die echten
+    Domains `gmail.com` und `firma.de` stehen nur zerlegt in den Selbsttests des `TestdatenSynthetischTest` als
+    Beispiel für UNZULÄSSIGE Daten, ohne Personenbezug.*
+  - *Bekannte Grenzen der Positivliste (security, Schwere niedrig; betrifft nur die Prüfung, nicht das Produkt):
+    Sie arbeitet zeilenweise auf dem Quelltext. Nicht erkannt werden Namen mit Leerraum, Kommentar oder
+    Zeilenumbruch zwischen den Teilen (`java.util. prefs.Preferences`), voll qualifizierte Namen außerhalb von
+    `java.`/`javax.` ohne Import (`jdk.…`, `sun.…`, `com.sun.…`, `org.…`), Unicode-Escapes im Code, Reflection
+    sowie Zugänge innerhalb der erlaubten Pakete (`Thread`, Umgebungsvariablen, `ServiceLoader`). Der Folgepunkt
+    aus T-20 Punkt 6 (a) – Positivliste auf Bytecode-Ebene – bleibt deshalb bestehen.*
 
 ### Zuordnung AK → Task
 

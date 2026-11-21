@@ -97,6 +97,7 @@ class EmailRecognizerTest {
         assertEquals("erika.beispiel@example.invalid", r.get(0).originalValue());
         assertEquals(9, r.get(0).start());
         assertEquals(text.length(), r.get(0).end());
+        assertEquals(FindingType.EMAIL, r.get(0).type());
     }
 
     @Test
@@ -929,5 +930,6 @@ class EmailRecognizerTest {
         List<Finding> r = TextScanner.standard().scan("Kontakt: erika.beispiel@example.invalid");
         assertEquals(1, r.size());
         assertEquals("erika.beispiel@example.invalid", r.get(0).originalValue());
+        assertEquals(FindingType.EMAIL, r.get(0).type());
     }
 }

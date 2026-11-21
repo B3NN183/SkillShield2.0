@@ -397,6 +397,27 @@ class RoundtripKorpusTest {
     }
 
     @Test
+    void ak31ak17Laufwerk_abgeschnittenerRestAlsManuellerFund() {
+        // D-5: Der Scan endet am ersten Leerzeichen (C:\Program); der Rest wird manuell uebergeben (AK-31, AK-17).
+        String text = bs("Starte C:¦Program Files¦Mein Tool¦tool.exe jetzt");
+        assertEquals("PFAD", typen(SCANNER.scan(text)), "Scan: nur der Fund bis zum ersten Leerzeichen");
+        assertEquals(bs("C:¦Program"), SCANNER.scan(text).get(0).originalValue(), "Scan: Wert des Fundes");
+        List<Finding> manuell = List.of(manuell("PFAD", text, bs("Files¦Mein Tool¦tool.exe"), 0));
+        roundtrip("ak31ak17-laufwerk-rest-manuell", text, manuell, "Starte [[PFAD_1]] [[PFAD_2]] jetzt", "PFAD,PFAD",
+                "Program", "Files", "Mein", "Tool", "tool.exe", "C:");
+    }
+
+    @Test
+    void ak31ak17Unc_abgeschnittenerRestAlsManuellerFund() {
+        String text = bs("Ablage ¦¦srv-beispiel¦Mein Ordner¦datei.txt hier");
+        assertEquals("PFAD", typen(SCANNER.scan(text)), "Scan: nur der Fund bis zum ersten Leerzeichen");
+        assertEquals(bs("¦¦srv-beispiel¦Mein"), SCANNER.scan(text).get(0).originalValue(), "Scan: Wert des Fundes");
+        List<Finding> manuell = List.of(manuell("PFAD", text, bs("Ordner¦datei.txt"), 0));
+        roundtrip("ak31ak17-unc-rest-manuell", text, manuell, "Ablage [[PFAD_1]] [[PFAD_2]] hier", "PFAD,PFAD",
+                "srv-beispiel", "Mein", "Ordner", "datei");
+    }
+
+    @Test
     void ak37AlleFormenInEinemText() {
         String text = String.join("\n",
                 bs("Laufwerk C:¦Tools¦BeispielTool¦tool.exe"),
