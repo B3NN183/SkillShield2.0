@@ -2,18 +2,28 @@ package de.skillshield.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -45,18 +55,65 @@ import org.junit.jupiter.api.Test;
  * Ausnahmen). Diese Datei prüft sich selbst mit; nur die Zeilen der Ausnahmeliste (zwischen den beiden
  * Markierungszeilen) sind ausgenommen, denn dort stehen die Einträge im Wortlaut. Beispiele für unzulässige
  * Zeichenfolgen stehen in den Selbsttests nur verkettet, nie als zusammenhängendes Literal.
+ *
+ * <p><b>Ziffernketten</b> (Feature kv-nummern-erkennung, AK-28). Gepruefte Quellen dieser Regel: der Baum
+ * {@code src/test/java} dieses Moduls, {@code src/test/resources} dieses Moduls (alle Textdateien) und die Testbaeume
+ * {@code src/test} der Module io, vault, ui und app; ohne Projektwurzel oder ohne Testbaum eines dieser Module ist der
+ * Test rot (Ausnahme: {@code src/test/resources} dieses Moduls darf fehlen). Es werden nur normale Dateien gelesen
+ * (Symlinks werden nicht verfolgt); eine Datei ueber 5 MB ist ein Testfehler. Dateien, die kein gueltiges UTF-8 sind,
+ * werden als ISO-8859-1 gelesen. Je Zeile werden vor der Kettenpruefung
+ * Unicode-Escapes (Backslash, ein oder mehrere {@code u}, vier Hexziffern) und Oktal-Escapes aufgeloest, die ein
+ * druckbares ASCII-Zeichen oder das geschuetzte Leerzeichen ergeben, ebenso die Escapes fuer Tab und Leerzeichen.
+ * Spalten in Meldungen beziehen sich auf die aufgeloeste Zeile. E-Mail- und
+ * IPv4-Regel gelten nur im Baum {@code src/test/java} dieses Moduls.
+ *
+ * <p>Eine Kette besteht aus Ziffernbloecken (ASCII-Ziffern), die durch je genau einen Trenner verbunden sind:
+ * Leerzeichen, Tab, geschuetztes Leerzeichen, {@code -}, {@code .}, {@code /} oder ein Unterstrich zwischen zwei
+ * Ziffern; zwei Trenner hintereinander beenden die Kette. Verstoss ist eine Kette (1) mit insgesamt genau neun
+ * Ziffern, (2) mit einem Block aus genau neun Ziffern, (3) mit irgendeiner Folge aufeinanderfolgender Bloecke, die
+ * zusammen genau neun Ziffern haben (gleitende Neunerfolge), wobei die Kette zuerst an den Punkten in punktfreie
+ * Teilketten zerlegt wird und jede Teilkette einzeln gleitend geprueft wird; Teilketten, deren Trenner alle
+ * Unterstriche sind (Java-Zahlenliteral), werden nicht gleitend geprueft. Ein Unicode-Escape, das einen
+ * Rueckwaertsstrich ergibt (Backslash, ein oder mehrere {@code u}, 005C in beliebiger Schreibweise), ist ein eigener
+ * Verstoss, weil er die Escape-Aufloesung umgehen koennte; im Bestand kommt das Muster nicht vor, es gibt keine
+ * Ausnahme dafuer. Zulaessig ist
+ * sie, wenn (a) sie Teil eines Platzhalters ist: ein einzelner Ziffernblock, unmittelbar davor {@code [[}, ein
+ * Typname ({@code [A-Z][A-Z0-9]{0,31}}) und {@code _}, unmittelbar danach {@code ]]}; (b) sie selbst eine gueltige
+ * IPv4 im Dokumentationsbereich ist; (c) sie in der Datei {@code SynthetischeKvNummern.java} steht und jede ihrer
+ * neunstelligen Ziffernfolgen (Gesamtzahl neun oder Block aus neun) mit {@code 00} beginnt; oder (d) sie in der
+ * geschlossenen Ausnahmeliste {@code AUSNAHMEN_ZIFFERN} steht. Ein Eintrag gilt nur fuer genau eine benannte Datei
+ * (Dateiname) und genau diese Kette; ein Eintrag, der in dieser Datei nicht mehr als Verstoss vorkommt, macht den
+ * Test rot. Meldungen nennen Datei, Zeile, Spalte und die Art des Verstosses, nie die Ziffern.
+ *
+ * <p><b>Verbleibende Grenzen der Ziffernketten-Regel.</b> Nicht erkannt werden: verkettete Literale (Teilstuecke, die
+ * erst zur Laufzeit eine Neunerfolge ergeben), reine Zahlenliterale mit Unterstrichen (nur Gesamtzahl und Block,
+ * nicht gleitend), {@code char}-Arrays, Neunerfolgen, die ueber Zeilen oder Textbloecke
+ * verteilt sind, Trenner ausserhalb der genannten Liste sowie Dateien ausserhalb der geprueften Baeume
+ * (zum Beispiel {@code docs/} und {@code profiles/}), UTF-16-Dateien und Binaerformate. Ebenfalls nicht erkannt
+ * wird eine Neunerfolge, die nur ueber Punkte hinweg als Praefix einer laengeren Kette entsteht (die ersten Bloecke
+ * einer Kette mit Punkt ergeben zusammen neun Ziffern, danach folgen weitere Bloecke, zum Beispiel
+ * IP-Adressketten wie 300.300.192.0.2.10): eine solche Regel schlaegt im Bestand an 17 Stellen in
+ * {@code Ipv4RecognizerTest} an (zu viele fuer Einzelausnahmen), deshalb gilt sie nicht. Diese Faelle werden durch
+ * die Durchsicht von reviewer und security gedeckt.
  */
 class TestdatenSynthetischTest {
 
     private static final Path QUELLE = Path.of("src", "test", "java");
     private static final String EIGENE_DATEI = "de/skillshield/core/TestdatenSynthetischTest.java";
+    private static final String ZENTRALE_DATEI = "de/skillshield/core/SynthetischeKvNummern.java";
     private static final String LISTE_ANFANG = "// AUSNAHMELISTE-BEGIN";
     private static final String LISTE_ENDE = "// AUSNAHMELISTE-ENDE";
 
-    /** Untergrenzen (etwas unterhalb der gemessenen Werte), damit die Prüfung nicht ins Leere läuft. */
-    private static final int MIN_DATEIEN = 45;
-    private static final int MIN_EMAILS = 380;
-    private static final int MIN_IPV4 = 300;
+    /**
+     * Untergrenzen, damit die Pruefung nicht ins Leere laeuft. Sie liegen nahe am Istwert und sind bei einem
+     * Abbau von Tests bewusst anzupassen.
+     */
+    private static final int MIN_DATEIEN = 50;
+    private static final int MIN_EMAILS = 405;
+    private static final int MIN_IPV4 = 315;
+    private static final int MIN_KETTEN = 12300;
+    private static final int MIN_NEUNER_KETTEN = 92;
+    private static final char NBSP = 0xA0;
 
     private static final Set<String> RESERVIERTE_LABELS = Set.of("example", "invalid", "test", "localhost");
     private static final List<String> RESERVIERTE_ENDUNGEN = List.of("example.com", "example.org", "example.net");
@@ -83,22 +140,342 @@ class TestdatenSynthetischTest {
             "Grenzfallprobe: Benutzerteil vor IP-Adresse im Dokumentationsbereich 192.0.2.0/24 (RFC 5737)"),
         Map.entry("geheim@192.0.2.10",
             "Grenzfallprobe: Userinfo vor IP-Adresse im Dokumentationsbereich 192.0.2.0/24 (RFC 5737)"));
+
+    /**
+     * Ausnahmen der Regel "Ziffernketten": je Eintrag genau eine Datei (Dateiname) und genau die Kette, so wie sie nach
+     * dem Aufloesen der Escapes im Quelltext steht, mit Begruendung.
+     */
+    private static final Map<ZiffernAusnahme, String> AUSNAHMEN_ZIFFERN = Map.ofEntries(
+        Map.entry(new ZiffernAusnahme("PlaceholderMappingTest.java", "123456789"),
+            "Zaehlfolge als Argument von PlaceholderSyntax.format, keine KV-Nummer, "
+                + "nach beiden Pruefziffernverfahren ungueltig"),
+        Map.entry(new ZiffernAusnahme("Ipv4RecognizerTest.java", "110.0.0.1234"),
+            "Kettenprobe: Block ueber 255, keine gueltige IPv4 und keine KV-Nummer"),
+        Map.entry(new ZiffernAusnahme("Ipv4RecognizerTest.java", "192.0.2.10.5.7"),
+            "Kettenprobe: Dokumentationsadresse mit angehaengten Bloecken, keine KV-Nummer"),
+        Map.entry(new ZiffernAusnahme("Ipv4RecognizerTest.java", "192.0.2.10/24"),
+            "Probe: Dokumentationsadresse mit Praefixlaenge (CIDR), keine KV-Nummer"),
+        Map.entry(new ZiffernAusnahme("Ipv4RecognizerTest.java", "192.0.2.1234"),
+            "Probe: Dokumentationsadresse mit Block ueber 255, keine KV-Nummer"),
+        Map.entry(new ZiffernAusnahme("PlaceholderSyntaxTest.java", "999_999_999"),
+            "Grenzwert fuer Platzhalternummern (Zahlenliteral), keine KV-Nummer; nach dem IK-Verfahren ungueltig, "
+                + "nach dem LANR-Verfahren zufaellig rechnerisch gueltig (Summe 351 + 9 = 360)"));
     // AUSNAHMELISTE-ENDE
 
-    /** Ergebnis der Prüfung eines oder mehrerer Texte. */
-    record Ergebnis(List<String> verstoesse, Set<String> benutzteAusnahmen, int emails, int ipv4) {
+    /** Art eines Verstosses der Regel "Ziffernketten". Die Beschreibung nennt nie die Ziffern selbst. */
+    enum Art {
+        NEUN_ZIFFERN_GESAMT("Kette mit insgesamt neun Ziffern"),
+        NEUN_ZIFFERN_BLOCK("Kette mit einem Block aus neun Ziffern"),
+        NEUN_ZIFFERN_GLEITEND("Kette mit aufeinanderfolgenden Bloecken aus zusammen neun Ziffern"),
+        BACKSLASH_ESCAPE("Unicode-Escape fuer den Rueckwaertsstrich (Escape-Aufloesung waere umgehbar)"),
+        ZENTRALE_OHNE_PRAEFIX_00("neunstellige Folge ohne fuehrende Doppelnull in der zentralen Klasse");
+
+        private final String beschreibung;
+
+        Art(String beschreibung) {
+            this.beschreibung = beschreibung;
+        }
+
+        String beschreibung() {
+            return beschreibung;
+        }
+    }
+
+    /** Ein Verstoss der Regel "Ziffernketten": Fundstelle (Spalte in der aufgeloesten Zeile) und Art. */
+    record KettenVerstoss(String datei, int zeile, int spalte, Art art) {
+
+        /** Meldung mit Datei, Zeile, Spalte und Art; die Ziffern der Kette stehen nicht darin. */
+        String meldung() {
+            return datei + ":" + zeile + ":" + spalte + ": Ziffernkette, " + art.beschreibung();
+        }
+    }
+
+    /** Schluessel einer Ausnahme der Regel "Ziffernketten": genau eine Datei (Dateiname) und genau eine Kette. */
+    record ZiffernAusnahme(String datei, String kette) {
+    }
+
+    /** Ergebnis der Pruefung eines oder mehrerer Texte. */
+    record Ergebnis(List<String> verstoesse, List<KettenVerstoss> kettenVerstoesse, Set<String> benutzteAusnahmen,
+            Set<ZiffernAusnahme> benutzteZiffernAusnahmen, int emails, int ipv4, int ketten, int neunerKetten) {
 
         Ergebnis() {
-            this(new ArrayList<>(), new LinkedHashSet<>(), 0, 0);
+            this(new ArrayList<>(), new ArrayList<>(), new LinkedHashSet<>(), new LinkedHashSet<>(), 0, 0, 0, 0);
         }
 
         Ergebnis plus(Ergebnis o) {
             List<String> v = new ArrayList<>(verstoesse);
             v.addAll(o.verstoesse);
+            List<KettenVerstoss> kv = new ArrayList<>(kettenVerstoesse);
+            kv.addAll(o.kettenVerstoesse);
             Set<String> b = new LinkedHashSet<>(benutzteAusnahmen);
             b.addAll(o.benutzteAusnahmen);
-            return new Ergebnis(v, b, emails + o.emails, ipv4 + o.ipv4);
+            Set<ZiffernAusnahme> bz = new LinkedHashSet<>(benutzteZiffernAusnahmen);
+            bz.addAll(o.benutzteZiffernAusnahmen);
+            return new Ergebnis(v, kv, b, bz, emails + o.emails, ipv4 + o.ipv4, ketten + o.ketten,
+                    neunerKetten + o.neunerKetten);
         }
+    }
+
+    // ------------------------------------------------------------------ Ziffernketten
+
+    /**
+     * Eine Kette aus Ziffernbloecken, die durch je genau einen Trenner verbunden sind.
+     *
+     * @param start Position des ersten Zeichens in der (aufgeloesten) Zeile
+     * @param text die Kette so, wie sie in der aufgeloesten Zeile steht (samt Trennern)
+     * @param bloecke die Ziffernbloecke ohne Trenner
+     * @param trenner die Trenner zwischen den Bloecken; Zeichen {@code i} steht zwischen Block {@code i} und
+     *        {@code i + 1}
+     * @param platzhalter ob die Kette Teil eines Platzhalters ist: ein einzelner Ziffernblock, davor Klammerpaar,
+     *        Typname und Unterstrich, danach zwei schliessende eckige Klammern
+     */
+    record Kette(int start, String text, List<String> bloecke, String trenner, boolean platzhalter) {
+
+        int ziffern() {
+            return bloecke.stream().mapToInt(String::length).sum();
+        }
+
+        /** Ist mindestens ein Trenner ein Punkt? Dann wird die Kette an den Punkten in Teilketten zerlegt. */
+        boolean mitPunkt() {
+            return trenner.indexOf('.') >= 0;
+        }
+
+        /** Sind alle Trenner Unterstriche (oder gibt es keinen)? Reines Zahlenliteral, nicht gleitend geprueft. */
+        boolean nurUnterstriche() {
+            return trenner.chars().allMatch(c -> c == '_');
+        }
+
+        /** Neunstellige Ziffernfolgen der Kette: die ganze Kette bei genau neun Ziffern, sonst Bloecke mit neun. */
+        List<String> neunerFolgen() {
+            if (ziffern() == 9) {
+                return List.of(String.join("", bloecke));
+            }
+            return bloecke.stream().filter(b -> b.length() == 9).toList();
+        }
+
+        /** Art des Verstosses der Regel "Ziffernketten" (ohne Ausnahmen) oder {@code null}, wenn keiner vorliegt. */
+        Art verstossArt() {
+            if (ziffern() == 9) {
+                return Art.NEUN_ZIFFERN_GESAMT;
+            }
+            if (bloecke.stream().anyMatch(b -> b.length() == 9)) {
+                return Art.NEUN_ZIFFERN_BLOCK;
+            }
+            if (hatGleitendeNeunerfolgeInTeilketten()) {
+                return Art.NEUN_ZIFFERN_GLEITEND;
+            }
+            return null;
+        }
+
+        /**
+         * Gibt es in einer Teilkette (maximale Folge von Bloecken ohne Punkt als Trenner) aufeinanderfolgende
+         * Bloecke mit zusammen genau neun Ziffern? Teilketten, deren Trenner alle Unterstriche sind (Zahlenliteral),
+         * zaehlen nicht. Linear.
+         */
+        private boolean hatGleitendeNeunerfolgeInTeilketten() {
+            int von = 0;
+            for (int i = 0; i <= trenner.length(); i++) {
+                if (i == trenner.length() || trenner.charAt(i) == '.') {
+                    boolean literal = trenner.substring(von, i).chars().allMatch(c -> c == '_');
+                    if (!literal && hatGleitendeNeunerfolge(bloecke.subList(von, i + 1))) {
+                        return true;
+                    }
+                    von = i + 1;
+                }
+            }
+            return false;
+        }
+
+        /** Gibt es aufeinanderfolgende Bloecke mit zusammen genau neun Ziffern? Linear (Fenster ueber Bloecke). */
+        private static boolean hatGleitendeNeunerfolge(List<String> bloecke) {
+            int summe = 0;
+            int von = 0;
+            for (int bis = 0; bis < bloecke.size(); bis++) {
+                summe += bloecke.get(bis).length();
+                while (summe > 9 && von <= bis) {
+                    summe -= bloecke.get(von).length();
+                    von++;
+                }
+                if (summe == 9) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    /** Anfang eines Platzhalters: Klammerpaar, Typname, Unterstrich. */
+    private static final Pattern PLATZHALTER_ANFANG = Pattern.compile("\\[\\[[A-Z][A-Z0-9]{0,31}_");
+
+    private static boolean istZiffer(char c) {
+        return c >= '0' && c <= '9';
+    }
+
+    /** Trenner innerhalb einer Kette (der Aufrufer prueft Ziffern auf beiden Seiten, auch beim Unterstrich). */
+    private static boolean istTrenner(char c) {
+        return c == ' ' || c == '\t' || c == NBSP || c == '-' || c == '.' || c == '/' || c == '_';
+    }
+
+    /** Darf ein Escape zu diesem Zeichen aufgeloest werden? Druckbares ASCII (ohne Backslash), Tab, NBSP. */
+    private static boolean istAufloesbar(int zeichen) {
+        return (zeichen >= 0x20 && zeichen <= 0x7E && zeichen != '\\') || zeichen == '\t' || zeichen == NBSP;
+    }
+
+    private static int hexWert(String z, int von) {
+        int wert = 0;
+        for (int k = von; k < von + 4; k++) {
+            int d = Character.digit(z.charAt(k), 16);
+            if (d < 0 || z.charAt(k) > 'f') {
+                return -1;
+            }
+            wert = wert * 16 + d;
+        }
+        return wert;
+    }
+
+    private static boolean istOktal(String z, int i) {
+        return i < z.length() && z.charAt(i) >= '0' && z.charAt(i) <= '7';
+    }
+
+    /**
+     * Loest in einer Quelltextzeile die Escapes auf, die ein druckbares ASCII-Zeichen, Tab oder NBSP ergeben:
+     * Unicode-Escapes (Backslash, ein oder mehrere {@code u}, vier Hexziffern), Oktal-Escapes (eine bis drei Ziffern
+     * nach der Java-Regel) und die Escapes fuer Tab und Leerzeichen. Ein doppelter Backslash ist ein Backslash und
+     * leitet kein Escape ein. Alles andere bleibt unveraendert.
+     */
+    static String loeseEscapesAuf(String z) {
+        StringBuilder sb = new StringBuilder(z.length());
+        int n = z.length();
+        int i = 0;
+        while (i < n) {
+            char c = z.charAt(i);
+            if (c != '\\' || i + 1 >= n) {
+                sb.append(c);
+                i++;
+                continue;
+            }
+            char naechstes = z.charAt(i + 1);
+            if (naechstes == '\\') {
+                sb.append("\\\\");
+                i += 2;
+            } else if (naechstes == 'u') {
+                int j = i + 1;
+                while (j < n && z.charAt(j) == 'u') {
+                    j++;
+                }
+                int wert = j + 4 <= n ? hexWert(z, j) : -1;
+                if (wert >= 0 && istAufloesbar(wert)) {
+                    sb.append((char) wert);
+                    i = j + 4;
+                } else {
+                    sb.append(c);
+                    i++;
+                }
+            } else if (naechstes == 't' || naechstes == 's') {
+                sb.append(naechstes == 't' ? '\t' : ' ');
+                i += 2;
+            } else if (istOktal(z, i + 1)) {
+                int ende = i + 2;
+                int maxEnde = naechstes <= '3' ? i + 4 : i + 3;
+                while (ende < maxEnde && istOktal(z, ende)) {
+                    ende++;
+                }
+                int wert = Integer.parseInt(z.substring(i + 1, ende), 8);
+                if (istAufloesbar(wert)) {
+                    sb.append((char) wert);
+                    i = ende;
+                } else {
+                    sb.append(c);
+                    i++;
+                }
+            } else {
+                sb.append(c);
+                i++;
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Position (ab 0) des ersten Unicode-Escapes der (nicht aufgeloesten) Zeile, das einen Rueckwaertsstrich ergibt
+     * (Backslash, ein oder mehrere {@code u}, Hexziffern 005C in beliebiger Gross- und Kleinschreibung), sonst -1.
+     * Ein doppelter Backslash leitet kein Escape ein. Solche Escapes sind verboten, weil sie die Escape-Aufloesung
+     * umgehen koennten.
+     */
+    static int backslashEscapePosition(String z) {
+        int n = z.length();
+        int i = 0;
+        while (i < n) {
+            if (z.charAt(i) != '\\') {
+                i++;
+            } else if (i + 1 < n && z.charAt(i + 1) == '\\') {
+                i += 2;
+            } else if (i + 1 < n && z.charAt(i + 1) == 'u') {
+                int j = i + 1;
+                while (j < n && z.charAt(j) == 'u') {
+                    j++;
+                }
+                if (j + 4 <= n && hexWert(z, j) == '\\') {
+                    return i;
+                }
+                i++;
+            } else {
+                i++;
+            }
+        }
+        return -1;
+    }
+
+    /** Alle Ziffernketten einer (aufgeloesten) Zeile, von links nach rechts, ohne Ueberlappung. */
+    static List<Kette> ziffernKetten(String zeile) {
+        char[] z = zeile.toCharArray();
+        // Platzhalteranfaenge maskieren: Ziffern im Typnamen (zum Beispiel X1) bilden keine Kette
+        Set<Integer> platzhalterEnden = new HashSet<>();
+        Matcher m = PLATZHALTER_ANFANG.matcher(zeile);
+        while (m.find()) {
+            Arrays.fill(z, m.start(), m.end(), '#');
+            platzhalterEnden.add(m.end());
+        }
+        List<Kette> ketten = new ArrayList<>();
+        int n = z.length;
+        int i = 0;
+        while (i < n) {
+            if (!istZiffer(z[i])) {
+                i++;
+                continue;
+            }
+            int start = i;
+            List<String> bloecke = new ArrayList<>();
+            StringBuilder trenner = new StringBuilder();
+            while (true) {
+                int blockAnfang = i;
+                while (i < n && istZiffer(z[i])) {
+                    i++;
+                }
+                bloecke.add(zeile.substring(blockAnfang, i));
+                if (i + 1 < n && istTrenner(z[i]) && istZiffer(z[i + 1])) {
+                    trenner.append(z[i]);
+                    i++;
+                } else {
+                    break;
+                }
+            }
+            boolean platzhalter = bloecke.size() == 1 && platzhalterEnden.contains(start)
+                    && zeile.startsWith("]]", i);
+            ketten.add(new Kette(start, zeile.substring(start, i), bloecke, trenner.toString(), platzhalter));
+        }
+        return ketten;
+    }
+
+    /** Dateiname ohne Verzeichnisanteil (letzter Teil hinter dem Schraegstrich). */
+    static String dateiname(String datei) {
+        return datei.substring(datei.lastIndexOf('/') + 1);
+    }
+
+    /** Ist die Kette selbst eine alleinstehende gueltige IPv4 im Dokumentationsbereich (Regel b)? */
+    private static boolean istDokuIpv4(String kette) {
+        List<String> a = ipv4Adressen(kette);
+        return a.size() == 1 && a.get(0).equals(kette) && ipv4InDokumentationsbereich(kette);
     }
 
     // ------------------------------------------------------------------ E-Mail
@@ -206,10 +583,21 @@ class TestdatenSynthetischTest {
     // ------------------------------------------------------------------ Prüfung eines Textes
 
     /**
-     * Prüft einen Quelltext zeilenweise. In der eigenen Datei sind die Zeilen zwischen den Markierungszeilen der
+     * Prueft einen Quelltext zeilenweise. In der eigenen Datei sind die Zeilen zwischen den Markierungszeilen der
      * Ausnahmeliste ausgenommen.
      */
     static Ergebnis pruefe(String datei, String text, Set<String> ausnahmen) {
+        return pruefe(datei, text, ausnahmen, Set.of());
+    }
+
+    /** Wie {@link #pruefe(String, String, Set)}, mit der Ausnahmeliste der Regel "Ziffernketten". */
+    static Ergebnis pruefe(String datei, String text, Set<String> ausnahmen, Set<ZiffernAusnahme> ziffernAusnahmen) {
+        return pruefe(datei, text, ausnahmen, ziffernAusnahmen, false);
+    }
+
+    /** Wie oben; bei {@code nurKetten} gilt nur die Regel "Ziffernketten" (E-Mail und IPv4 werden nicht geprueft). */
+    static Ergebnis pruefe(String datei, String text, Set<String> ausnahmen, Set<ZiffernAusnahme> ziffernAusnahmen,
+            boolean nurKetten) {
         String[] zeilen = text.split("\\R", -1);
         boolean ausgenommen = false;
         Ergebnis erg = new Ergebnis();
@@ -230,42 +618,108 @@ class TestdatenSynthetischTest {
             }
             String ort = datei + ":" + (i + 1) + ": ";
             int emails = 0;
-            for (String kandidat : emailKandidaten(zeile)) {
-                emails++;
-                if (emailZulaessigOhneListe(kandidat)) {
-                    continue;
-                }
-                if (ausnahmen.contains(kandidat)) {
-                    erg.benutzteAusnahmen().add(kandidat);
-                } else {
-                    erg.verstoesse().add(ort + "E-Mail-aehnlich, nicht zulaessig: " + kandidat);
-                }
-            }
             int ips = 0;
-            for (String ip : ipv4Adressen(zeile)) {
-                ips++;
-                if (!ipv4InDokumentationsbereich(ip)) {
-                    erg.verstoesse().add(ort + "IPv4 ausserhalb der Dokumentationsbereiche: " + ip);
+            if (!nurKetten) {
+                for (String kandidat : emailKandidaten(zeile)) {
+                    emails++;
+                    if (emailZulaessigOhneListe(kandidat)) {
+                        continue;
+                    }
+                    if (ausnahmen.contains(kandidat)) {
+                        erg.benutzteAusnahmen().add(kandidat);
+                    } else {
+                        erg.verstoesse().add(ort + "E-Mail-aehnlich, nicht zulaessig: " + kandidat);
+                    }
+                }
+                for (String ip : ipv4Adressen(zeile)) {
+                    ips++;
+                    if (!ipv4InDokumentationsbereich(ip)) {
+                        erg.verstoesse().add(ort + "IPv4 ausserhalb der Dokumentationsbereiche: " + ip);
+                    }
                 }
             }
-            erg = erg.plus(new Ergebnis(new ArrayList<>(), new LinkedHashSet<>(), emails, ips));
+            Ergebnis ketten = pruefeKetten(datei, i + 1, loeseEscapesAuf(zeile), ziffernAusnahmen);
+            int escapePosition = backslashEscapePosition(zeile);
+            if (escapePosition >= 0) {
+                KettenVerstoss v = new KettenVerstoss(datei, i + 1, escapePosition + 1, Art.BACKSLASH_ESCAPE);
+                ketten.kettenVerstoesse().add(v);
+                ketten.verstoesse().add(v.meldung());
+            }
+            erg = erg.plus(new Ergebnis(new ArrayList<>(), new ArrayList<>(), new LinkedHashSet<>(),
+                    new LinkedHashSet<>(), emails, ips, 0, 0)).plus(ketten);
         }
         return erg;
     }
 
+    /**
+     * Regel "Ziffernketten" fuer eine aufgeloeste Zeile. In der zentralen Klasse gilt die Praefixregel (jede
+     * neunstellige Folge nach Gesamtzahl oder Block beginnt mit {@code 00}), dort ohne gleitende Neunerfolge und ohne
+     * Ausnahmeliste; in allen anderen Dateien gilt die volle Regel samt Ausnahmeliste.
+     */
+    private static Ergebnis pruefeKetten(String datei, int zeilenNummer, String zeile,
+            Set<ZiffernAusnahme> ziffernAusnahmen) {
+        boolean zentral = datei.equals(ZENTRALE_DATEI);
+        List<KettenVerstoss> verstoesse = new ArrayList<>();
+        Set<ZiffernAusnahme> benutzt = new LinkedHashSet<>();
+        int ketten = 0;
+        int neuner = 0;
+        for (Kette kette : ziffernKetten(zeile)) {
+            ketten++;
+            List<String> folgen = kette.neunerFolgen();
+            if (!folgen.isEmpty()) {
+                neuner++;
+            }
+            boolean verdaechtig = zentral ? !folgen.isEmpty() : kette.verstossArt() != null;
+            if (!verdaechtig || kette.platzhalter() || istDokuIpv4(kette.text())) {
+                continue;
+            }
+            int spalte = kette.start() + 1;
+            if (zentral) {
+                if (!folgen.stream().allMatch(f -> f.startsWith("00"))) {
+                    verstoesse.add(new KettenVerstoss(datei, zeilenNummer, spalte, Art.ZENTRALE_OHNE_PRAEFIX_00));
+                }
+                continue;
+            }
+            ZiffernAusnahme schluessel = new ZiffernAusnahme(dateiname(datei), kette.text());
+            if (ziffernAusnahmen.contains(schluessel)) {
+                benutzt.add(schluessel);
+            } else {
+                verstoesse.add(new KettenVerstoss(datei, zeilenNummer, spalte, kette.verstossArt()));
+            }
+        }
+        List<String> meldungen = new ArrayList<>();
+        verstoesse.forEach(v -> meldungen.add(v.meldung()));
+        return new Ergebnis(meldungen, verstoesse, new LinkedHashSet<>(), benutzt, 0, 0, ketten, neuner);
+    }
+
     /** Ausnahmen, die im Quelltext nicht (mehr) als nicht zulässige Zeichenfolge vorkommen. */
-    static Set<String> verwaiste(Set<String> ausnahmen, Set<String> benutzt) {
-        Set<String> v = new LinkedHashSet<>(ausnahmen);
+    static <T> Set<T> verwaiste(Set<T> ausnahmen, Set<T> benutzt) {
+        Set<T> v = new LinkedHashSet<>(ausnahmen);
         v.removeAll(benutzt);
         return v;
     }
 
     // ------------------------------------------------------------------ Lesen der Quellen
 
+    /** Obergrenze der Dateigroesse; eine groessere Datei ist ein Testfehler, kein stilles Ueberspringen. */
+    private static final long MAX_DATEIGROESSE = 5L * 1024 * 1024;
+
+    private static boolean istNormaleDatei(Path p) {
+        return Files.isRegularFile(p, LinkOption.NOFOLLOW_LINKS);
+    }
+
+    private static byte[] liesBytes(Path datei, String name) throws IOException {
+        long groesse = Files.size(datei);
+        if (groesse > MAX_DATEIGROESSE) {
+            fail("Datei zu gross fuer die Pruefung (Obergrenze " + MAX_DATEIGROESSE + " Bytes): " + name);
+        }
+        return Files.readAllBytes(datei);
+    }
+
     private static List<Path> testdateien() {
         assertTrue(Files.isDirectory(QUELLE), "Testquellverzeichnis fehlt: " + QUELLE.toAbsolutePath());
         try (Stream<Path> s = Files.walk(QUELLE)) {
-            return s.filter(p -> Files.isRegularFile(p) && p.getFileName().toString().endsWith(".java")).sorted()
+            return s.filter(p -> istNormaleDatei(p) && p.getFileName().toString().endsWith(".java")).sorted()
                     .toList();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -277,8 +731,71 @@ class TestdatenSynthetischTest {
     }
 
     private static String lies(Path datei) {
+        return liesTextDatei(datei, relativ(datei));
+    }
+
+    /** Zusaetzliche Quelle der Regel "Ziffernketten": Datei und Name (Praefix, relativer Pfad). */
+    record Quelle(Path pfad, String name) {
+    }
+
+    private static final List<String> NACHBARMODULE = List.of("skillshield-io", "skillshield-vault", "skillshield-ui",
+            "skillshield-app");
+
+    /** Wurzelverzeichnis des Projekts: erstes uebergeordnetes Verzeichnis von {@code QUELLE} mit dem Modul. */
+    private static Optional<Path> projektWurzel() {
+        for (Path p = QUELLE.toAbsolutePath().normalize(); p != null; p = p.getParent()) {
+            if (Files.isDirectory(p.resolve("skillshield-core").resolve("src"))) {
+                return Optional.of(p);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static void sammle(Path basis, String praefix, List<Quelle> ziel) {
+        if (!Files.isDirectory(basis)) {
+            return;
+        }
+        try (Stream<Path> s = Files.walk(basis)) {
+            s.filter(TestdatenSynthetischTest::istNormaleDatei).sorted().forEach(p -> ziel.add(
+                    new Quelle(p, praefix + basis.relativize(p).toString().replace('\\', '/'))));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /**
+     * Quellen ausserhalb von {@code src/test/java}: eigene Ressourcen und Testbaeume der Nachbarmodule. Die
+     * Projektwurzel und die Testbaeume der Nachbarmodule muessen vorhanden sein, sie duerfen nicht stillschweigend
+     * entfallen.
+     */
+    private static List<Quelle> weitereQuellen() {
+        List<Quelle> quellen = new ArrayList<>();
+        sammle(QUELLE.resolveSibling("resources"), "resources/", quellen);
+        Optional<Path> wurzel = projektWurzel();
+        assertTrue(wurzel.isPresent(), "Projektwurzel (Verzeichnis mit skillshield-core/src) nicht gefunden");
+        for (String modul : NACHBARMODULE) {
+            Path baum = wurzel.get().resolve(modul).resolve("src").resolve("test");
+            assertTrue(Files.isDirectory(baum), "Testbaum des Nachbarmoduls fehlt: " + modul);
+            sammle(baum, modul + "/", quellen);
+        }
+        return quellen;
+    }
+
+    /**
+     * Liest eine Datei als Text: zuerst strikt als UTF-8; ist sie kein gueltiges UTF-8, wird sie als ISO-8859-1
+     * gelesen (jedes Byte ein Zeichen), damit sie nicht uebersprungen wird. Grenzen: UTF-16-Dateien (Nullbytes
+     * zwischen den Zeichen) und Binaerformate (zum Beispiel komprimierte Archive oder Bilder) werden nicht sinnvoll
+     * als Text gelesen; Ziffernfolgen darin werden nicht zuverlaessig erkannt.
+     */
+    private static String liesTextDatei(Path datei, String name) {
         try {
-            return Files.readString(datei, StandardCharsets.UTF_8);
+            byte[] bytes = liesBytes(datei, name);
+            try {
+                return StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+                        .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString();
+            } catch (CharacterCodingException e) {
+                return new String(bytes, StandardCharsets.ISO_8859_1);
+            }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -287,9 +804,25 @@ class TestdatenSynthetischTest {
     private static Ergebnis pruefeAlle(List<Path> dateien) {
         Ergebnis gesamt = new Ergebnis();
         for (Path datei : dateien) {
-            gesamt = gesamt.plus(pruefe(relativ(datei), lies(datei), AUSNAHMEN.keySet()));
+            gesamt = gesamt.plus(pruefe(relativ(datei), lies(datei), AUSNAHMEN.keySet(),
+                    AUSNAHMEN_ZIFFERN.keySet()));
         }
         return gesamt;
+    }
+
+    /** Nur die Regel "Ziffernketten", angewandt auf die weiteren Quellen. */
+    private static Ergebnis pruefeWeitere() {
+        Ergebnis gesamt = new Ergebnis();
+        for (Quelle quelle : weitereQuellen()) {
+            String text = liesTextDatei(quelle.pfad(), quelle.name());
+            gesamt = gesamt.plus(pruefe(quelle.name(), text, Set.of(), AUSNAHMEN_ZIFFERN.keySet(), true));
+        }
+        return gesamt;
+    }
+
+    /** Alle Quellen der Regel "Ziffernketten": der Baum dieses Moduls und die weiteren Quellen. */
+    private static Ergebnis pruefeGesamt() {
+        return pruefeAlle(testdateien()).plus(pruefeWeitere());
     }
 
     // ------------------------------------------------------------------ Prüfung des Testbestands
@@ -336,6 +869,474 @@ class TestdatenSynthetischTest {
             }
         }
         return n;
+    }
+
+    // ------------------------------------------------------------------ Ziffernketten: Pruefung des Bestands
+
+    @Test
+    void ak28_ausnahmelisteZiffernHatKeineVerwaistenEintraege_undJederEintragHatBegruendung() {
+        Ergebnis erg = pruefeGesamt();
+        assertEquals(Set.of(), verwaiste(AUSNAHMEN_ZIFFERN.keySet(), erg.benutzteZiffernAusnahmen()),
+                "Verwaiste Ziffern-Ausnahmen (Kette in der genannten Datei nicht mehr als Verstoss vorhanden)");
+        List<String> namen = new ArrayList<>(testdateien().stream().map(p -> dateiname(relativ(p))).toList());
+        weitereQuellen().forEach(q -> namen.add(dateiname(q.name())));
+        AUSNAHMEN_ZIFFERN.forEach((eintrag, begruendung) -> {
+            assertFalse(begruendung.isBlank(), "Begruendung fehlt: " + eintrag.datei());
+            assertEquals(eintrag.datei(), dateiname(eintrag.datei()), "Nur der Dateiname, kein Pfad");
+            assertEquals(1, Collections.frequency(namen, eintrag.datei()),
+                    "Dateiname nicht genau einmal in den geprueften Baeumen: " + eintrag.datei());
+            List<Kette> ketten = ziffernKetten(eintrag.kette());
+            assertEquals(1, ketten.size(), "Eintrag ist keine einzelne Ziffernkette: " + eintrag.datei());
+            assertEquals(eintrag.kette(), ketten.get(0).text());
+            assertFalse(ketten.get(0).verstossArt() == null, "Eintrag ist ohnehin zulaessig: " + eintrag.datei());
+            assertFalse(istDokuIpv4(eintrag.kette()), "Eintrag ist ohnehin zulaessig: " + eintrag.datei());
+        });
+        assertEquals(6, AUSNAHMEN_ZIFFERN.size());
+    }
+
+    @Test
+    void ak28_zentraleKlasse_jedeNeunstelligeFolgeBeginntMit00() {
+        List<Path> dateien = testdateien();
+        assertTrue(dateien.stream().map(TestdatenSynthetischTest::relativ).toList().contains(ZENTRALE_DATEI));
+        String text = lies(QUELLE.resolve(ZENTRALE_DATEI));
+        int neunstellige = 0;
+        for (String zeile : text.split("\\R", -1)) {
+            for (Kette k : ziffernKetten(loeseEscapesAuf(zeile))) {
+                if (istDokuIpv4(k.text())) {
+                    continue;
+                }
+                for (String folge : k.neunerFolgen()) {
+                    neunstellige++;
+                    assertTrue(folge.startsWith("00"), "Neunstellige Folge ohne Praefix 00 in der zentralen Klasse");
+                }
+            }
+        }
+        assertTrue(neunstellige >= 13, "Geprueft neunstellige Folgen in der zentralen Klasse: " + neunstellige);
+        assertEquals(List.of(), pruefe(ZENTRALE_DATEI, text, Set.of(), Set.of()).verstoesse());
+    }
+
+    @Test
+    void ak28_ziffernkettenPruefungLaeuftNichtInsLeere() {
+        Ergebnis erg = pruefeAlle(testdateien());
+        assertTrue(erg.ketten() >= MIN_KETTEN, "Geprueft Ziffernketten: " + erg.ketten());
+        assertTrue(erg.neunerKetten() >= MIN_NEUNER_KETTEN, "Ketten mit neun Ziffern: " + erg.neunerKetten());
+    }
+
+    @Test
+    void ak28_weitereTestbaeume_ziffernkettenOhneVerstoesse_undNurDieseRegel() {
+        Ergebnis erg = pruefeWeitere();
+        assertEquals(List.of(), erg.verstoesse(), "Verstoesse in den weiteren Testbaeumen");
+        assertEquals(0, erg.emails());
+        assertEquals(0, erg.ipv4());
+        List<Quelle> quellen = weitereQuellen();
+        for (String modul : NACHBARMODULE) {
+            assertTrue(quellen.stream().anyMatch(q -> q.name().startsWith(modul + "/")),
+                    "Keine Datei gefunden im Testbaum von " + modul);
+        }
+    }
+
+    // ------------------------------------------------------------------ Selbsttests: Ziffernketten
+
+    /** Escape-Folge fuer ein Zeichen (Backslash, kleines u, vier Hexziffern), nur zur Laufzeit zusammengesetzt. */
+    private static String esc(int zeichen) {
+        return "\\u" + String.format("%04X", zeichen);
+    }
+
+    private static List<Art> arten(String datei, String text, Set<ZiffernAusnahme> ausnahmen) {
+        return pruefe(datei, text, Set.of(), ausnahmen, true).kettenVerstoesse().stream()
+                .map(KettenVerstoss::art).toList();
+    }
+
+    private static List<Art> arten(String text) {
+        return arten("a/B.java", text, Set.of());
+    }
+
+    private static List<String> kettenTexte(String zeile) {
+        return ziffernKetten(zeile).stream().map(Kette::text).toList();
+    }
+
+    @Test
+    void selbsttest_ziffern_verstoss_genauNeunZiffernInAllenTrennerformen() {
+        List<String> beispiele = List.of(
+                "001" + "235101", "001" + " 235" + " 101", "001" + "-235" + "-101", "001" + ".235" + ".101",
+                "001" + "/235" + "/101", "0012351" + " 01", "001" + NBSP + "235" + NBSP + "101",
+                "001" + "\t235" + "\t101", "001" + "_235" + "_101", "001" + " 235" + "-101",
+                "x 001" + "235101 y", "(001" + "235101)", "172.16" + ".100.1");
+        for (int i = 0; i < beispiele.size(); i++) {
+            assertEquals(1, arten("ok\n" + beispiele.get(i) + "\nok").size(), "Beispiel " + i);
+        }
+        assertEquals(List.of(Art.NEUN_ZIFFERN_GESAMT), arten("001" + "235101"));
+        assertEquals(List.of(Art.NEUN_ZIFFERN_GESAMT), arten("172.16" + ".100.1"));
+        assertEquals(List.of(Art.NEUN_ZIFFERN_BLOCK), arten("12 " + "001" + "235101"));
+        assertEquals(List.of(Art.NEUN_ZIFFERN_BLOCK), arten("001" + "235101" + "-2025"));
+        assertEquals(List.of(Art.NEUN_ZIFFERN_BLOCK), arten("001" + "235101" + " 12 34"));
+    }
+
+    @Test
+    void selbsttest_ziffern_verstoss_escapesWerdenAufgeloest() {
+        String nbsp = esc(NBSP);
+        List<String> beispiele = List.of(
+                "001" + nbsp + "235" + nbsp + "101", "001" + esc(NBSP).toLowerCase(Locale.ROOT) + "235101",
+                "001" + "\\uu" + "00A0" + "235" + "\\uuu" + "00a0" + "101",
+                "001" + esc(' ') + "235" + esc('-') + "101", "001" + esc('.') + "235" + esc('/') + "101",
+                "001" + esc('\t') + "235" + esc('_') + "101",
+                esc('0') + esc('0') + "1235101", "00" + esc('1') + esc('2') + "35101",
+                "\\" + "060" + "\\" + "060" + "1235101", "00" + "\\" + "61" + "\\" + "62" + "35101",
+                "001" + "\\" + "40" + "235" + "\\" + "55" + "101", "001" + "\\" + "t235" + "\\" + "s101");
+        for (int i = 0; i < beispiele.size(); i++) {
+            assertEquals(1, arten(beispiele.get(i)).size(), "Beispiel " + i);
+        }
+    }
+
+    @Test
+    void selbsttest_ziffern_verstoss_gleitendeNeunerfolgeOhnePunkt() {
+        List<String> beispiele = List.of(
+                "001" + " 235" + " 101" + " 2025", "12" + " 001" + " 235" + " 101", "001" + " 235" + " 101" + "-2025",
+                "12" + "/001" + "_235" + " 101", "5" + " 4" + " 123" + " 456" + " 78",
+                "1" + "\t2" + "\t3" + "\t4" + "\t5" + "\t6" + "\t7" + "\t8" + "\t9" + "\t11",
+                "123" + NBSP + "456" + NBSP + "78" + NBSP + "9" + NBSP + "10");
+        for (int i = 0; i < beispiele.size(); i++) {
+            Kette kette = ziffernKetten(beispiele.get(i)).get(0);
+            assertFalse(kette.mitPunkt(), "Beispiel " + i);
+            assertEquals(1, arten(beispiele.get(i)).size(), "Beispiel " + i);
+        }
+        assertEquals(List.of(Art.NEUN_ZIFFERN_GLEITEND), arten("001" + " 235" + " 101" + " 2025"));
+        assertEquals(List.of(Art.NEUN_ZIFFERN_GLEITEND), arten("12" + " 001" + " 235" + " 101"));
+        assertEquals(List.of(Art.NEUN_ZIFFERN_GLEITEND), arten("001" + " 235" + " 101" + "-2025"));
+        assertEquals(List.of(Art.NEUN_ZIFFERN_GLEITEND), arten("5" + " 4" + " 123" + " 456" + " 78"));
+    }
+
+    @Test
+    void selbsttest_ziffern_zahlenliteralMitUnterstrichen_nichtGleitend_gemischtSchon() {
+        assertEquals(List.of(), arten("2" + "_000" + "_000" + "_000"));
+        assertEquals(List.of(), arten("10" + "_000" + "_000" + "_000"));
+        assertEquals(List.of(), arten("123" + "_000" + "_000" + "_000"));
+        assertEquals(List.of(Art.NEUN_ZIFFERN_GESAMT), arten("123" + "_456" + "_789"));
+        assertEquals(List.of(Art.NEUN_ZIFFERN_BLOCK), arten("1" + "_123456" + "789"));
+        assertEquals(List.of(Art.NEUN_ZIFFERN_GLEITEND), arten("1" + "_000" + "_000" + " 000"));
+        assertEquals(List.of(Art.NEUN_ZIFFERN_GLEITEND), arten("12" + " 000" + "_000" + "-000"));
+        assertTrue(ziffernKetten("2" + "_000" + "_000").get(0).nurUnterstriche());
+        assertFalse(ziffernKetten("2" + "_000" + " 000").get(0).nurUnterstriche());
+    }
+
+    @Test
+    void selbsttest_ziffern_verstoss_gleitendeNeunerfolgeInPunktfreierTeilkette() {
+        // die Kette wird an den Punkten aufgeteilt; jede punktfreie Teilkette wird gleitend geprueft
+        for (String beispiel : List.of("001" + " 235" + " 101" + ".2025", "001" + " 235" + " 101" + "-2025" + ".1",
+                "1.2." + "001" + " 235" + " 101", "7.001" + " 235" + " 101" + ".8",
+                "2025." + "001" + " 235" + "/101")) {
+            assertTrue(ziffernKetten(beispiel).get(0).mitPunkt(), beispiel.length() + " Zeichen");
+            assertEquals(List.of(Art.NEUN_ZIFFERN_GLEITEND), arten(beispiel), beispiel.length() + " Zeichen");
+        }
+    }
+
+    @Test
+    void selbsttest_ziffern_bekannteGrenze_neunerPraefixUeberPunkteHinweg_wirdNichtErkannt() {
+        // Erste Bloecke der ganzen Kette ergeben ueber Punkte hinweg neun Ziffern, danach folgen weitere Bloecke:
+        // wird bewusst nicht geprueft (im Bestand 17 Treffer in Ipv4RecognizerTest), siehe Javadoc der Klasse
+        for (String beispiel : List.of("001" + ".235" + ".101" + ".2025", "12" + ".345" + ".678" + ".9" + ".11",
+                "1234" + ".56789" + ".1", "198.51" + ".100.1" + ".2.3", "123" + "_456" + "_789" + ".5")) {
+            assertEquals(List.of(), arten(beispiel), beispiel.length() + " Zeichen");
+        }
+        // an den Punkten aufgeteilt greift die gleitende Pruefung weiterhin
+        assertEquals(List.of(Art.NEUN_ZIFFERN_GLEITEND), arten("001" + " 235" + " 101" + ".2025"));
+    }
+
+    @Test
+    void selbsttest_ziffern_keinVerstoss_beiPunktOhneNeunerfolge() {
+        List<String> beispiele = List.of(
+                "12" + ".001" + ".235" + ".101", "1" + ".001" + ".235" + ".101",
+                // weder eine Teilkette noch die Gesamtzahl ergibt neun (Praefix 2 + 4 + 5 = 11 ist zudem keine Regel)
+                "12" + ".3456" + ".78901" + ".2",
+                // ohne Punkt, aber keine Folge mit Summe neun
+                "12" + " 3456" + " 78" + " 90", "0012" + " 3510" + " 12", "001" + " 235" + " 10",
+                "8" + " 4" + " 123" + " 456",
+                "2026" + "-11" + "-21" + " 12");
+        for (int i = 0; i < beispiele.size(); i++) {
+            assertEquals(List.of(), arten(beispiele.get(i)), "Beispiel " + i);
+        }
+    }
+
+    @Test
+    void selbsttest_ziffern_backslashEscape_istEigenerVerstoss_ohneInhalt() {
+        String u = "\\u";
+        for (String beispiel : List.of("a" + u + "005c" + "b", u + "005C", "\\uu" + "005c", "\\uuuu" + "005C",
+                "x = \"" + u + "005c" + u + "0030\"")) {
+            assertTrue(backslashEscapePosition(beispiel) >= 0, beispiel.length() + " Zeichen");
+            assertEquals(List.of(Art.BACKSLASH_ESCAPE), arten(beispiel), beispiel.length() + " Zeichen");
+        }
+        // kein Escape fuer den Backslash: doppelter Backslash, andere Zeichen, zu kurz, keine Hexziffern
+        for (String beispiel : List.of("\\\\" + "u" + "005c", u + "005d", u + "005", u + "00", u, "005c", u + "005g",
+                "\\" + "134")) {
+            assertEquals(-1, backslashEscapePosition(beispiel), beispiel.length() + " Zeichen");
+            assertEquals(List.of(), arten(beispiel), beispiel.length() + " Zeichen");
+        }
+        // Spalte bezieht sich auf die nicht aufgeloeste Zeile; der doppelte Backslash davor zaehlt mit
+        assertEquals(3, backslashEscapePosition("\\\\" + "x" + u + "005c"));
+        Ergebnis erg = pruefe("a/B.java", "ok\nab " + u + "005c" + "\nok", Set.of(), Set.of(), true);
+        assertEquals(List.of("a/B.java:2:4: Ziffernkette, " + Art.BACKSLASH_ESCAPE.beschreibung()),
+                erg.verstoesse());
+        assertEquals(List.of(new KettenVerstoss("a/B.java", 2, 4, Art.BACKSLASH_ESCAPE)), erg.kettenVerstoesse());
+        // auch in der zentralen Klasse, ohne Ausnahmeliste
+        assertEquals(List.of(Art.BACKSLASH_ESCAPE), arten(ZENTRALE_DATEI, u + "005c", Set.of()));
+    }
+
+    @Test
+    void selbsttest_ziffern_dateilesen_utf8_latin1Rueckfall_groessenobergrenze() throws IOException {
+        Path verzeichnis = Files.createTempDirectory(Path.of("target"), "ziffern");
+        Path utf8 = verzeichnis.resolve("utf8.txt");
+        Path latin1 = verzeichnis.resolve("latin1.txt");
+        Path gross = verzeichnis.resolve("gross.txt");
+        try {
+            Files.write(utf8, new byte[] {'a', (byte) 0xC3, (byte) 0xA4, '1'});
+            Files.write(latin1, new byte[] {'a', (byte) 0xE4, '1'});
+            // genau an der Obergrenze: erlaubt, eins darueber: Testfehler mit Dateiname
+            Files.write(gross, new byte[(int) MAX_DATEIGROESSE]);
+            assertEquals("a\u00E41", liesTextDatei(utf8, "utf8.txt"));
+            assertEquals("a\u00E41", liesTextDatei(latin1, "latin1.txt"));
+            assertEquals((int) MAX_DATEIGROESSE, liesTextDatei(gross, "gross.txt").length());
+            Files.write(gross, new byte[(int) MAX_DATEIGROESSE + 1]);
+            AssertionError fehler = assertThrows(AssertionError.class, () -> liesTextDatei(gross, "gross.txt"));
+            assertTrue(fehler.getMessage().contains("gross.txt"), fehler.getMessage());
+            assertTrue(istNormaleDatei(utf8));
+            assertFalse(istNormaleDatei(verzeichnis));
+        } finally {
+            Files.deleteIfExists(utf8);
+            Files.deleteIfExists(latin1);
+            Files.deleteIfExists(gross);
+            Files.deleteIfExists(verzeichnis);
+        }
+    }
+
+    @Test
+    void selbsttest_ziffern_keinVerstoss_andereLaengenUndZweiTrenner() {
+        List<String> beispiele = List.of(
+                "0012351" + "0", "0123456" + "789" + "0", "001235", "0012351" + "01234",
+                "001" + "  235" + " 101", "001" + " - 235" + " 101", "0012" + ". 35101", "001" + "__235" + "_101",
+                "\uFF10\uFF10\uFF11\uFF12\uFF13\uFF15\uFF11\uFF10\uFF11", "001" + "\\u" + "00A1" + "235" + "101",
+                "001" + "\\u" + "00" + " 235" + " 101", "001" + " 235" + " 1" + "\\u" + "00",
+                "001" + "\\u" + "00G0" + "235" + "101",
+                "2026-11-" + "21 12:30", "198.51" + ".100", "001" + "a235" + "b101", "001" + ":235" + ":101");
+        for (int i = 0; i < beispiele.size(); i++) {
+            assertEquals(List.of(), arten(beispiele.get(i)), "Beispiel " + i);
+        }
+        // Unterstrich trennt nur zwischen zwei Ziffern
+        assertEquals(List.of(), arten("a_" + "123456" + "_b"));
+        assertEquals(List.of("123456"), kettenTexte("a_" + "123456" + "_b"));
+    }
+
+    @Test
+    void selbsttest_ziffern_platzhalter_unterstrichNurImPlatzhalterZulaessig() {
+        String neun = "123456" + "789";
+        // zulaessig: Klammerpaar, Typname, Unterstrich, genau ein Ziffernblock, schliessendes Klammerpaar
+        assertEquals(List.of(), arten("[[EMAIL_" + "123456" + "789]]"));
+        assertEquals(List.of(), arten("[[X1_" + "123456" + "789]]"));
+        assertEquals(List.of(), arten("[[" + "A".repeat(32) + "_" + "123456" + "789]]"));
+        assertEquals(List.of(), arten("a [[IP4_" + "123456" + "789]] b [[IP_" + "123456" + "789]]"));
+        // Verstoss: Unterstrich ohne Klammerpaar und Typname
+        assertEquals(1, arten("Datei_" + neun).size());
+        assertEquals(1, arten("LANR_" + neun).size());
+        assertEquals(1, arten("LANR_" + neun + "]]").size());
+        assertEquals(1, arten("[EMAIL_" + neun + "]]").size());
+        assertEquals(1, arten("EMAIL_" + neun + "]]").size());
+        assertEquals(1, arten("[[email_" + neun + "]]").size());
+        assertEquals(1, arten("[[1X_" + neun + "]]").size());
+        assertEquals(1, arten("[[]]_" + neun + "]]").size());
+        assertEquals(1, arten("[[" + "A".repeat(33) + "_" + neun + "]]").size());
+        assertEquals(1, arten("[[EMAIL_X" + neun + "]]").size());
+        assertEquals(1, arten("[[EMAIL" + "_ " + neun + "]]").size());
+        // mehrere Bloecke im Platzhalter: keine Platzhalternummer, sondern ein Versteck fuer eine Nummer
+        assertEquals(1, arten("[[EMAIL_" + neun + "_1]]").size());
+        assertEquals(1, arten("[[X1_" + "001 235" + " 101]]").size());
+        assertEquals(1, arten("[[X_" + "123_456" + "_789]]").size());
+        // nur direkt hinter dem Unterstrich und vor dem schliessenden Klammerpaar
+        assertEquals(1, arten("[[EMAIL_" + neun + " ]]").size());
+        assertEquals(1, arten("[[EMAIL_" + neun).size());
+        assertEquals(1, arten("_ " + neun).size());
+        assertEquals(1, arten("_a" + neun).size());
+        assertEquals(1, arten(neun + "_").size());
+        // Unterstrich zwischen zwei Ziffern ist ein Trenner: das Java-Zahlenliteral mit Unterstrichen
+        assertEquals(List.of(Art.NEUN_ZIFFERN_GESAMT), arten("123" + "_456" + "_789"));
+        assertEquals(List.of(Art.NEUN_ZIFFERN_GESAMT), arten("int x = 123" + "_456" + "_789;"));
+        // ein Platzhalter mit Escape-Unterstrich ist ebenfalls ein Platzhalter
+        assertEquals(List.of(), arten("[[EMAIL" + esc('_') + "123456" + "789]]"));
+    }
+
+    @Test
+    void selbsttest_ziffern_keinVerstoss_dokuIpv4_aberVerstossBeiAndererAdresse() {
+        assertEquals(List.of(), arten("IP 198.51." + "100.1 ok"));
+        assertEquals(List.of(), arten("203.0." + "113.99"));
+        // neun Ziffern in vier Bloecken, aber Adresse ausserhalb der Dokumentationsbereiche
+        assertEquals(1, arten("172.16." + "100.1").size());
+        // neun Ziffern in vier Bloecken, aber keine gueltige IPv4 (Block ueber 255)
+        assertEquals(1, arten("198.51." + "300.1").size());
+    }
+
+    @Test
+    void selbsttest_ziffern_ausnahmeliste_istGeschlossen_giltNurFuerDieBenannteDatei_undErkenntVerwaiste() {
+        String kette = "123" + "456" + "789";
+        String text = "a\nf(" + kette + ")\n";
+        ZiffernAusnahme eintrag = new ZiffernAusnahme("B.java", kette);
+        assertEquals(List.of(Art.NEUN_ZIFFERN_GESAMT), arten("a/B.java", text, Set.of()));
+        Ergebnis mit = pruefe("a/B.java", text, Set.of(), Set.of(eintrag), true);
+        assertEquals(List.of(), mit.verstoesse());
+        assertEquals(Set.of(eintrag), mit.benutzteZiffernAusnahmen());
+        assertEquals(Set.of(), verwaiste(Set.of(eintrag), mit.benutzteZiffernAusnahmen()));
+        // gleicher Dateiname in einem anderen Verzeichnis zaehlt als dieselbe Datei
+        assertEquals(List.of(), pruefe("x/y/B.java", text, Set.of(), Set.of(eintrag), true).verstoesse());
+        // falsche Datei: Verstoss, und der Eintrag ist verwaist
+        Ergebnis falsch = pruefe("a/C.java", text, Set.of(), Set.of(eintrag), true);
+        assertEquals(1, falsch.verstoesse().size());
+        assertEquals(Set.of(eintrag), verwaiste(Set.of(eintrag), falsch.benutzteZiffernAusnahmen()));
+        // eine andere Kette in der richtigen Datei deckt die Zeichenfolge nicht ab und ist verwaist
+        ZiffernAusnahme andere = new ZiffernAusnahme("B.java", "123" + "456" + "788");
+        Ergebnis ander = pruefe("a/B.java", text, Set.of(), Set.of(andere), true);
+        assertEquals(1, ander.verstoesse().size());
+        assertEquals(Set.of(andere), verwaiste(Set.of(andere), ander.benutzteZiffernAusnahmen()));
+        // zulaessige Ketten verbrauchen keine Ausnahme
+        assertEquals(Set.of(), pruefe("a/B.java", "[[E_" + kette + "]]", Set.of(), Set.of(eintrag), true)
+                .benutzteZiffernAusnahmen());
+        assertEquals(Set.of(), pruefe("a/B.java", "x 12345" + "678", Set.of(), Set.of(eintrag), true)
+                .benutzteZiffernAusnahmen());
+        // der Dateiname ist der Teil hinter dem letzten Schraegstrich
+        assertEquals("B.java", dateiname("a/b/B.java"));
+        assertEquals("B.java", dateiname("B.java"));
+    }
+
+    @Test
+    void selbsttest_ziffern_zentraleKlasse_praefix00Pflicht_ohneGleitendeRegel() {
+        String ok = "x = \"00" + "1235101\";";
+        String falsch = "x = \"12" + "3456789\";";
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, ok, Set.of()));
+        assertEquals(List.of(Art.ZENTRALE_OHNE_PRAEFIX_00), arten(ZENTRALE_DATEI, falsch, Set.of()));
+        // in jeder anderen Datei ist auch die Folge mit 00 ein Verstoss
+        assertEquals(1, arten("a/B.java", ok, Set.of()).size());
+        // in der zentralen Klasse zaehlt jede Folge einer Kette mit mehreren Bloecken
+        assertEquals(1, arten(ZENTRALE_DATEI, "00" + "1235101" + "-" + "12" + "3456789", Set.of()).size());
+        // Ausnahmeliste gilt dort nicht als Freibrief
+        assertEquals(1, arten(ZENTRALE_DATEI, falsch, Set.of(new ZiffernAusnahme("SynthetischeKvNummern.java",
+                "12" + "3456789"))).size());
+        // die gleitende Neunerfolge gilt dort nicht, in jeder anderen Datei schon
+        String gleitend = "12" + " 001" + " 235" + " 101";
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, gleitend, Set.of()));
+        assertEquals(List.of(Art.NEUN_ZIFFERN_GLEITEND), arten("a/B.java", gleitend, Set.of()));
+        // Escapes werden auch dort aufgeloest
+        assertEquals(List.of(Art.ZENTRALE_OHNE_PRAEFIX_00),
+                arten(ZENTRALE_DATEI, "12" + esc('3') + "456789", Set.of()));
+    }
+
+    @Test
+    void selbsttest_ziffern_eigeneDatei_nurAusnahmelistenzeilenSindAusgenommen() {
+        String kette = "123" + "456" + "789";
+        String text = String.join("\n", kette, LISTE_ANFANG, kette, LISTE_ENDE, kette);
+        Ergebnis erg = pruefe(EIGENE_DATEI, text, Set.of(), Set.of(), true);
+        assertEquals(List.of(new KettenVerstoss(EIGENE_DATEI, 1, 1, Art.NEUN_ZIFFERN_GESAMT),
+                new KettenVerstoss(EIGENE_DATEI, 5, 1, Art.NEUN_ZIFFERN_GESAMT)), erg.kettenVerstoesse());
+    }
+
+    @Test
+    void selbsttest_ziffern_nurKetten_ignoriertEmailUndIpv4_pruefungMitSieGilt() {
+        String text = "n@" + "gmail.com 8.8." + "8.8";
+        Ergebnis nur = pruefe("a/B.java", text, Set.of(), Set.of(), true);
+        assertEquals(List.of(), nur.verstoesse());
+        assertEquals(0, nur.emails());
+        assertEquals(0, nur.ipv4());
+        assertEquals(1, nur.ketten());
+        Ergebnis alle = pruefe("a/B.java", text, Set.of());
+        assertEquals(1, alle.emails());
+        assertEquals(1, alle.ipv4());
+        assertEquals(2, alle.verstoesse().size());
+    }
+
+    @Test
+    void selbsttest_ziffern_meldungNenntDateiZeileSpalteUndArt_nichtDieZiffern() {
+        String text = "ok\nab " + "001" + "235101" + " x\nok";
+        Ergebnis erg = pruefe("a/B.java", text, Set.of(), Set.of(), true);
+        assertEquals(List.of("a/B.java:2:4: Ziffernkette, Kette mit insgesamt neun Ziffern"), erg.verstoesse());
+        assertEquals(List.of(new KettenVerstoss("a/B.java", 2, 4, Art.NEUN_ZIFFERN_GESAMT)),
+                erg.kettenVerstoesse());
+        for (Art art : Art.values()) {
+            assertFalse(art.beschreibung().chars().anyMatch(Character::isDigit), art.name());
+        }
+        // Spalte bezieht sich auf die aufgeloeste Zeile: ein Escape zaehlt als ein Zeichen
+        Ergebnis mitEscape = pruefe("a/B.java", esc('A') + " " + "001" + "235101", Set.of(), Set.of(), true);
+        assertEquals(List.of(new KettenVerstoss("a/B.java", 1, 3, Art.NEUN_ZIFFERN_GESAMT)),
+                mitEscape.kettenVerstoesse());
+    }
+
+    @Test
+    void selbsttest_ziffern_loeseEscapesAuf() {
+        assertEquals("a0b", loeseEscapesAuf("a" + esc('0') + "b"));
+        assertEquals("9", loeseEscapesAuf(esc('9')));
+        assertEquals(String.valueOf(NBSP), loeseEscapesAuf("\\u" + "00A0"));
+        assertEquals(String.valueOf(NBSP), loeseEscapesAuf("\\u" + "00a0"));
+        assertEquals("1", loeseEscapesAuf("\\uu" + "0031"));
+        assertEquals("1", loeseEscapesAuf("\\uuuu" + "0031"));
+        assertEquals("-./_ \t", loeseEscapesAuf(esc('-') + esc('.') + esc('/') + esc('_') + esc(' ') + esc('\t')));
+        // nicht aufloesbar: andere Zeichen, zu kurz, keine Hexziffern, Steuerzeichen, Backslash
+        for (String s : List.of("\\u" + "00A1", "\\u" + "00", "\\u" + "00G0", "\\u" + "FF10", esc('\n'), esc('\\'),
+                "\\u", "\\", "\\u" + "0030".substring(0, 3))) {
+            assertEquals(s, loeseEscapesAuf(s), s.length() + " Zeichen");
+        }
+        // doppelter Backslash leitet kein Escape ein, dreifacher schon
+        assertEquals("\\\\" + "u0030", loeseEscapesAuf("\\\\" + "u0030"));
+        assertEquals("\\\\" + "0", loeseEscapesAuf("\\\\" + esc('0')));
+        assertEquals("\\\\" + "060", loeseEscapesAuf("\\\\" + "060"));
+        // Oktal: eine bis drei Ziffern nach der Java-Regel
+        assertEquals("0", loeseEscapesAuf("\\" + "060"));
+        assertEquals("0", loeseEscapesAuf("\\" + "60"));
+        assertEquals("01", loeseEscapesAuf("\\" + "0601"));
+        assertEquals("9", loeseEscapesAuf("\\" + "71"));
+        assertEquals("A", loeseEscapesAuf("\\" + "101"));
+        assertEquals(" 0", loeseEscapesAuf("\\" + "400"));
+        assertEquals("\\" + "0", loeseEscapesAuf("\\" + "0"));
+        assertEquals("\\" + "1", loeseEscapesAuf("\\" + "1"));
+        assertEquals("\\" + "8", loeseEscapesAuf("\\" + "8"));
+        // Escapes fuer Tab und Leerzeichen; andere Buchstaben-Escapes bleiben
+        assertEquals("\t", loeseEscapesAuf("\\" + "t"));
+        assertEquals(" ", loeseEscapesAuf("\\" + "s"));
+        assertEquals("\\" + "n", loeseEscapesAuf("\\" + "n"));
+        assertEquals("ohne Escapes 12", loeseEscapesAuf("ohne Escapes 12"));
+    }
+
+    @Test
+    void selbsttest_ziffern_kettenzerlegung() {
+        assertEquals(List.of(), ziffernKetten("keine Ziffern"));
+        assertEquals(List.of("12"), kettenTexte("a12b"));
+        assertEquals(List.of("1 2-3.4/5"), kettenTexte("x 1 2-3.4/5 y"));
+        // Tab, NBSP und Unterstrich zwischen Ziffern sind Trenner
+        assertEquals(List.of("1\t2"), kettenTexte("1\t2"));
+        assertEquals(List.of("1" + NBSP + "2"), kettenTexte("1" + NBSP + "2"));
+        assertEquals(List.of("1_2_3"), kettenTexte("x_1_2_3_y"));
+        assertEquals(List.of("12"), kettenTexte("A_12"));
+        assertEquals(List.of("12"), kettenTexte("12_"));
+        assertEquals(List.of("12"), kettenTexte("_12"));
+        // Trenner am Ende und Doppeltrenner gehoeren nicht zur Kette
+        assertEquals(List.of("12 34"), kettenTexte("12 34 "));
+        assertEquals(List.of("12", "34"), kettenTexte("12  34"));
+        assertEquals(List.of("12", "34"), kettenTexte("12-.34"));
+        assertEquals(List.of("12", "34"), kettenTexte("12_ 34"));
+        assertEquals(List.of("12"), kettenTexte("12."));
+        assertEquals(List.of("12", "34"), kettenTexte("12:34"));
+        // Escapes werden nicht von der Zerlegung, sondern vorher aufgeloest
+        assertEquals(3, ziffernKetten("1" + "\\u" + "00A" + "2").size());
+        assertEquals(List.of("1" + NBSP + "2"), kettenTexte(loeseEscapesAuf("1" + esc(NBSP) + "2")));
+        // Position, Bloecke, Punkt und Platzhalter
+        List<Kette> k = ziffernKetten("ab 12 345 c 6");
+        assertEquals(2, k.size());
+        assertEquals(3, k.get(0).start());
+        assertEquals(List.of("12", "345"), k.get(0).bloecke());
+        assertEquals(5, k.get(0).ziffern());
+        assertFalse(k.get(0).mitPunkt());
+        assertEquals(12, k.get(1).start());
+        assertTrue(k.get(1).neunerFolgen().isEmpty());
+        assertTrue(ziffernKetten("1.2").get(0).mitPunkt());
+        assertTrue(ziffernKetten("[[X1_" + "1234]]").get(0).platzhalter());
+        assertEquals(1, ziffernKetten("[[X1_" + "1234]]").size());
+        assertFalse(ziffernKetten("[[X1_" + "12 34]]").get(0).platzhalter());
+        assertFalse(ziffernKetten("[[X1_" + "1234").get(0).platzhalter());
+        assertFalse(ziffernKetten("[[X1_" + "1234]").get(0).platzhalter());
+        assertFalse(ziffernKetten("x[[X1" + "1234]]").get(0).platzhalter());
     }
 
     // ------------------------------------------------------------------ Selbsttests: E-Mail

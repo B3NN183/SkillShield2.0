@@ -339,6 +339,22 @@ reviewer und security. Verbindlich ab Durchlauf 2:
 8. **Bekannte Grenzen der Regel** (im Javadoc des Tests genannt, durch Durchsicht von reviewer und security gedeckt):
    verkettete Literale, `char`-Arrays, Aufteilung über Zeilen oder Textblöcke, Trenner außerhalb der Liste, Dateien
    außerhalb der geprüften Bäume (`docs/`, `profiles/`).
+10. **Nach Prüfung von Durchlauf 2 (security):**
+    - Kein Test bildet zur Laufzeit eine neunstellige Nummer, die nach LANR- oder IK-Verfahren gültig ist und nicht
+      mit `00` beginnt (A-6, AK-28); ein Wächtertest in `SynthetischeKvNummernTest` hält das fest. Das gilt für
+      alle Testtexte dieses Features. Im älteren Bestand gibt es Ziffernfolgen in IP-Proben des `Ipv4RecognizerTest`
+      (darunter die Ausnahme-Einträge `192.0.2.10.5.7` und `192.0.2.10/24`) und den Zahlen-Grenzwert im
+      `PlaceholderSyntaxTest`, die nach dem LANR-Verfahren zufällig rechnerisch gültig sind; sie stehen in IP- bzw.
+      Zahlenkontext, haben keinen Personenbezug und bleiben unverändert (Folgepunkt: Begründungen der beiden
+      IP-Einträge um diesen Hinweis ergänzen).
+    - Punkt 4 gilt jetzt je punktfreier Teilkette: Ketten mit Punkt werden an den Punkten geteilt und jede Teilkette
+      gleitend geprüft. Eine Neunerfolge, die über Punkte hinweg entsteht (z. B. als Anfang einer längeren Kette),
+      bleibt unerkannt; eine Regel dafür hätte 17 Stellen im `Ipv4RecognizerTest` getroffen. Bekannte Grenze, als
+      Test `…bekannteGrenze…` festgehalten.
+    - Das Unicode-Escape des Backslashs ist im geprüften Text ein eigener Verstoß.
+    - Dateien, die kein gültiges UTF-8 sind, werden als ISO-8859-1 gelesen statt übersprungen; Dateien über 5 MB sind
+      ein Testfehler; Symlinks auf Dateien werden nicht verfolgt; die Projektwurzel und die vier Nachbar-Testbäume
+      müssen gefunden werden. UTF-16 und Binärformate bleiben ungeprüft (bekannte Grenze).
 9. **AK-29:** Der Vermerk steht in `SynthetischeKvNummern`; `SynthetischeKvNummernTest` verweist darauf. Das gilt als
    erfüllt (Kap. 4 nennt die Klassen mit Pflichtvermerk abschließend).
 
