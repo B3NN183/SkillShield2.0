@@ -152,9 +152,11 @@ class TestdatenSynthetischTest {
         Map.entry(new ZiffernAusnahme("Ipv4RecognizerTest.java", "110.0.0.1234"),
             "Kettenprobe: Block ueber 255, keine gueltige IPv4 und keine KV-Nummer"),
         Map.entry(new ZiffernAusnahme("Ipv4RecognizerTest.java", "192.0.2.10.5.7"),
-            "Kettenprobe: Dokumentationsadresse mit angehaengten Bloecken, keine KV-Nummer"),
+            "Kettenprobe: Dokumentationsadresse mit angehaengten Bloecken, keine KV-Nummer; "
+                + "die Ziffern sind nach dem LANR-Verfahren zufaellig rechnerisch gueltig"),
         Map.entry(new ZiffernAusnahme("Ipv4RecognizerTest.java", "192.0.2.10/24"),
-            "Probe: Dokumentationsadresse mit Praefixlaenge (CIDR), keine KV-Nummer"),
+            "Probe: Dokumentationsadresse mit Praefixlaenge (CIDR), keine KV-Nummer; "
+                + "die Ziffern sind nach dem LANR-Verfahren zufaellig rechnerisch gueltig"),
         Map.entry(new ZiffernAusnahme("Ipv4RecognizerTest.java", "192.0.2.1234"),
             "Probe: Dokumentationsadresse mit Block ueber 255, keine KV-Nummer"),
         Map.entry(new ZiffernAusnahme("PlaceholderSyntaxTest.java", "999_999_999"),

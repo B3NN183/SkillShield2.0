@@ -2,8 +2,11 @@ package de.skillshield.core.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import de.skillshield.core.pseudonymize.PlaceholderSyntax;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -60,5 +63,22 @@ class FindingTypeTest {
     void gleicherNameIstGleich() {
         assertEquals(FindingType.PFAD, new FindingType("PFAD"));
         assertEquals(FindingType.PFAD.hashCode(), new FindingType("PFAD").hashCode());
+    }
+
+    @Test
+    void kvFundtypenIkUndLanrSindGueltigeKonstanten() {
+        assertEquals("IK", FindingType.IK.name());
+        assertEquals("LANR", FindingType.LANR.name());
+        assertTrue(FindingType.isValidName(FindingType.IK.name()));
+        assertTrue(FindingType.isValidName(FindingType.LANR.name()));
+        assertEquals(FindingType.IK, new FindingType("IK"));
+        assertEquals(FindingType.LANR, new FindingType("LANR"));
+        assertNotEquals(FindingType.IK, FindingType.LANR);
+    }
+
+    @Test
+    void kvFundtypenErgebenDiePlatzhalterIkUndLanr() {
+        assertEquals("[[IK_1]]", PlaceholderSyntax.format(FindingType.IK, 1));
+        assertEquals("[[LANR_1]]", PlaceholderSyntax.format(FindingType.LANR, 1));
     }
 }

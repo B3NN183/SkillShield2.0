@@ -19,6 +19,10 @@ public record FindingType(String name) {
     public static final FindingType EMAIL = new FindingType("EMAIL");
     public static final FindingType IP = new FindingType("IP");
     public static final FindingType URL = new FindingType("URL");
+    /** Institutionskennzeichen (IK), neun Ziffern. */
+    public static final FindingType IK = new FindingType("IK");
+    /** Lebenslange Arztnummer (LANR), neun Ziffern. */
+    public static final FindingType LANR = new FindingType("LANR");
     /** Literalschutz für platzhalterähnlichen Originaltext. */
     public static final FindingType TEXT = new FindingType("TEXT");
 
