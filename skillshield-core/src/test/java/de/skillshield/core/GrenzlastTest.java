@@ -1,11 +1,16 @@
 package de.skillshield.core;
 
+import static de.skillshield.core.SynthetischeKvNummern.IK_FORM_DOKU_IP;
+import static de.skillshield.core.SynthetischeKvNummern.IK_GUELTIG;
+import static de.skillshield.core.SynthetischeKvNummern.LANR_GUELTIG;
 import static de.skillshield.core.TestTexte.bs;
+import static de.skillshield.core.recognizer.kv.KvTestHilfen.neunerfenster;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import de.skillshield.core.model.ConfidenceLevel;
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.model.FindingType;
 import de.skillshield.core.pseudonymize.PseudonymizationResult;
@@ -287,5 +292,105 @@ class GrenzlastTest {
         }
         assertEquals(0, kandidatNichtImScan, "Kandidatenpositionen ohne Abdeckung im Scan");
         assertEquals(0, fremdImScan, "Scanpositionen ohne Kandidat");
+    }
+
+    // ------------------------------------------------------------------ AK-21: KV-Eingaben (T-8)
+
+    /** Text aus Praefix und so oft wiederholtem Baustein, dass er mindestens {@code MIN_ZEICHEN} Zeichen hat. */
+    private static String kvText(String praefix, String baustein, int mindestlaenge) {
+        return praefix + baustein.repeat(kvWiederholungen(praefix, baustein, mindestlaenge));
+    }
+
+    private static int kvWiederholungen(String praefix, String baustein, int mindestlaenge) {
+        return (mindestlaenge - praefix.length() + baustein.length() - 1) / baustein.length();
+    }
+
+    /**
+     * Die zehn Eingaben aus AK-21, je mit Praefix, Baustein, erwarteter Fundzahl je Stufe (sicher, wahrscheinlich;
+     * fraglich gibt es in keiner Eingabe) und Typ. Die Zahlen folgen aus den Regeln (Plan Kap. 3.2 und 3.3, Nachtrag
+     * T-5), nicht aus einem Probelauf. Ersetzungen gegenueber dem Wortlaut von AK-21 (Nachtrag "Laufzeittests"):
+     * Eingabe 2 mit {@code 0 } statt {@code 1 }, Eingabe 1 mit Nullen als Ziffern.
+     */
+    static Stream<Arguments> kvEingaben() {
+        // Eingabe 8: Baustein "IK " + IK_GUELTIG + " " = 13 Zeichen; Wiederholungen = (1 000 000 + 12) / 13 = 76 924.
+        String baustein8 = "IK " + IK_GUELTIG + " ";
+        int wiederholungen8 = kvWiederholungen("", baustein8, MIN_ZEICHEN);
+        assertEquals(76_924, wiederholungen8);
+
+        // Eingabe 9: Baustein LANR_GUELTIG + " (LANR) " = 9 + 8 = 17 Zeichen; Wiederholungen
+        // = (1 000 000 + 16) / 17 = 58 824. Die erste Nummer steht vor dem Kontextwort (nachgestellt, "offen"): Fund
+        // mit 0.80 (wahrscheinlich). Danach ist der Kontext aktiv und bleibt "direkt" (")" und Leerzeichen sind
+        // neutral): jede weitere Nummer wird als Segment bei "direkt" ausgegeben (0.95, sicher); das folgende
+        // Kontextwort setzt den Kontext neu und hat kein offenes Segment. Je Wiederholung genau ein Fund.
+        String baustein9 = LANR_GUELTIG + " (LANR) ";
+        int wiederholungen9 = kvWiederholungen("", baustein9, MIN_ZEICHEN);
+        assertEquals(58_824, wiederholungen9);
+
+        // Eingabe 10: Baustein "IK " + IK_FORM_DOKU_IP + " " = 3 + 12 + 1 = 16 Zeichen; Wiederholungen
+        // = (1 000 000 + 15) / 16 = 62 500 (genau 16 * 62 500 = 1 000 000). Je Wiederholung ein IK-Kandidat ueber
+        // genau die Adresse (Gruppen 3-2-3-1 = neun Ziffern; Pruefziffer ungueltig, 0.50 fraglich) und ein
+        // IPv4-Fund (0.85): bei gleichem Bereich gewinnt der staerkere, also je Wiederholung ein Fund Typ IP.
+        String baustein10 = "IK " + IK_FORM_DOKU_IP + " ";
+        int wiederholungen10 = kvWiederholungen("", baustein10, MIN_ZEICHEN);
+        assertEquals(62_500, wiederholungen10);
+
+        // Eingabe 2: Praefix "LANR " (5), Baustein "0 " (2): Bloecke b = (1 000 000 - 5 + 1) / 2 = 499 998. Jede Kette
+        // liest ganze Bloecke; das Neuner-Praefix (neun Nullen, 17 Zeichen) ist das Segment, der Durchlauf geht
+        // dahinter weiter. Segmente = b / 9 = 55 555 (Rest drei Nullen, kein Segment). Das erste Segment steht
+        // direkt hinter dem Kontextwort (0.95, sicher), alle weiteren nicht (0.80, wahrscheinlich): 1 und 55 554.
+        int bloecke2 = kvWiederholungen("LANR ", "0 ", MIN_ZEICHEN);
+        assertEquals(499_998, bloecke2);
+        int segmente2 = bloecke2 / 9;
+        assertEquals(55_555, segmente2);
+
+        return Stream.of(
+            // 1: "IK " + nur Ziffern (Nullen): ein einziger Ziffernblock mit ueber 12 Ziffern, kein Segment: 0 Funde.
+            Arguments.of("01 IK plus nur Ziffern", "IK ", "0", 0, 0, null),
+            Arguments.of("02 LANR plus 0 und Leerzeichen wiederholt", "LANR ", "0 ", 1, segmente2 - 1,
+                FindingType.LANR),
+            // 3: Kontextwort, dann nur "-": keine Ziffer, keine Kette: 0 Funde.
+            Arguments.of("03 IK plus nur Bindestriche", "IK", "-", 0, 0, null),
+            // 4: Kontextwort, dann nur Leerzeichen: 0 Funde.
+            Arguments.of("04 LANR plus nur Leerzeichen", "LANR", " ", 0, 0, null),
+            // 5: 200 000 Kontextwoerter ohne Ziffer: 0 Funde.
+            Arguments.of("05 LANR Leerzeichen wiederholt ohne Ziffern", "", "LANR ", 0, 0, null),
+            // 6: Kontextwort, dann Woerter ohne Satzende und ohne Ziffer: 0 Funde.
+            Arguments.of("06 LANR plus Woerter ohne Satzende", "LANR", " wort", 0, 0, null),
+            // 7: Kontextwort, dann nur Zeilenumbrueche und keine Ziffer: 0 Funde.
+            Arguments.of("07 LANR plus nur Zeilenumbrueche", "LANR", "\n", 0, 0, null),
+            // 8: je Wiederholung ein Fund (Kontextwort direkt vor der Nummer, 0.92 sicher), Typ IK.
+            Arguments.of("08 IK gueltige Nummer wiederholt", "", baustein8, wiederholungen8, 0, FindingType.IK),
+            Arguments.of("09 gueltige LANR mit nachgestelltem Kontext wiederholt", "", baustein9,
+                wiederholungen9 - 1, 1, FindingType.LANR),
+            Arguments.of("10 IK mit Dokumentations-IP wiederholt", "", baustein10, 0, wiederholungen10,
+                FindingType.IP));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("kvEingaben")
+    void ak21_kvEingabeEineMillionZeichen_dreiSchritteJeUnterZweiSekundenMitExakterFundzahl(String name,
+            String praefix, String baustein, int sicher, int wahrscheinlich, FindingType typ) {
+        // Aufwaermlauf (nicht gemessen) mit 10 000 Zeichen derselben Bauart
+        String warm = kvText(praefix, baustein, 10_000);
+        assertEquals(0, neunerfenster(warm, "00")[1], "Waechter Aufwaermtext " + name);
+        drei(warm, GRENZE_GROSSER_TEXT);
+
+        String text = kvText(praefix, baustein, MIN_ZEICHEN);
+        assertTrue(text.length() >= MIN_ZEICHEN, "Textlaenge " + text.length());
+        // Testdatenregel: kein gueltiges Neunerfenster ohne Praefix 00
+        assertEquals(0, neunerfenster(text, "00")[1], "Waechter " + name);
+
+        Durchlauf d = drei(text, GRENZE_PATHOLOGISCH);
+
+        List<Finding> funde = d.funde();
+        assertEquals(sicher + wahrscheinlich, funde.size(), "Fundzahl " + name);
+        long anzahlSicher = funde.stream().filter(f -> f.level() == ConfidenceLevel.SICHER).count();
+        long anzahlWahrscheinlich = funde.stream().filter(f -> f.level() == ConfidenceLevel.WAHRSCHEINLICH).count();
+        assertEquals(sicher, anzahlSicher, "Stufe sicher " + name);
+        assertEquals(wahrscheinlich, anzahlWahrscheinlich, "Stufe wahrscheinlich " + name);
+        for (Finding f : funde) {
+            assertEquals(typ, f.type(), "Typ " + name);
+        }
+        pruefeRoundtrip(text, d);
     }
 }

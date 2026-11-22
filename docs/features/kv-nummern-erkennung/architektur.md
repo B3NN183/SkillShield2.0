@@ -575,6 +575,12 @@ reviewer und security. Verbindlich ab Durchlauf 2:
 - **Tests**: alle zehn Eingaben aus AK-21 mit je 1 000 000 Zeichen durch Scan, Pseudonymisierung, Rückübersetzung je
   < 2 s nach Aufwärmlauf, exakte Fundzahl (Formel im Kommentar; `IK 001234561 ` wiederholt > 70 000 Funde;
   `IK 198.51.100.1 ` wiederholt: je Wiederholung ein Fund Typ IP), Roundtrip gleich.
+- **Nachtrag der Hauptsitzung (22.11.2026, aus der Sicherheitsprüfung von T-8, Schwere niedrig; in T-9 miterledigen):**
+  `GrenzlastTest` um drei Fälle über die ganze Kette ergänzen (je 1 000 000 Zeichen, < 2 s je Schritt, exakte
+  Fundzahl mit Formel, Wächter vor dem Scan): (a) sehr viele offene Segmente, die erst ein Kontextwort am Textende
+  ausgibt (R-2; `LANR_GUELTIG` + `, ` wiederholt, am Ende ` (LANR)`); (b) Kontextwort mit unsichtbarem Zeichen
+  (R-1) vor jeder Nummer; (c) nummerierte Liste (R-3) unter einem Kontextwort. Auf Erkennerebene sind diese Fälle
+  bereits in `KvNachtragTest#laufzeit_r1…r4` abgedeckt.
 
 ### T-9: Roundtrip-Korpus, Klartextfreiheit, Architekturregeln
 - **Dateien**: `RoundtripKorpusTest.java` (KV-Texte ergänzt), `KlartextFreiheitTest.java`, `ArchitekturRegelnTest.java`
