@@ -1,5 +1,7 @@
 package de.skillshield.core;
 
+import static de.skillshield.core.SynthetischeKvNummern.IK_MARKER;
+import static de.skillshield.core.SynthetischeKvNummern.LANR_MARKER;
 import static de.skillshield.core.TestTexte.bs;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -21,6 +23,8 @@ import de.skillshield.core.pseudonymize.PseudonymizationResult;
 import de.skillshield.core.pseudonymize.Pseudonymizer;
 import de.skillshield.core.recognizer.Recognizer;
 import de.skillshield.core.recognizer.TextScanner;
+import de.skillshield.core.recognizer.kv.IkRecognizer;
+import de.skillshield.core.recognizer.kv.LanrRecognizer;
 import de.skillshield.core.reidentify.ReidentificationResult;
 import de.skillshield.core.reidentify.Reidentifier;
 import de.skillshield.core.reidentify.UnresolvedPlaceholder;
@@ -64,9 +68,11 @@ class KlartextFreiheitTest {
 
     /** Der Marker und alle seine Bestandteile; Suche ohne Beachtung der Groß-/Kleinschreibung. */
     private static final List<String> MARKER_TEILE = List.of(MARKER_PFAD, MARKER_MAIL, "Marker", "mustermann",
-            "MarkerTool", "marker.mustermann");
+            "MarkerTool", "marker.mustermann", LANR_MARKER, IK_MARKER, LANR_MARKER.substring(0, 6),
+            IK_MARKER.substring(0, 6));
 
-    private static final String TEXT = "Siehe " + MARKER_PFAD + " und " + MARKER_MAIL + " Ende";
+    private static final String TEXT = "Siehe " + MARKER_PFAD + " und " + MARKER_MAIL + ", LANR " + LANR_MARKER
+            + ", IK " + IK_MARKER + " Ende";
     private static final String UE_MELDUNG = "Ung\u00FCltiger Fund an Listenindex ";
 
     private static final Pseudonymizer PSEUDONYMIZER = new Pseudonymizer();
@@ -389,6 +395,10 @@ class KlartextFreiheitTest {
             fall("X10 zweiter Erkenner wirft IllegalArgumentException mit Marker", IllegalStateException.class,
                 () -> new TextScanner(List.of(text -> List.of(), erkennerMitAusnahme(
                     new IllegalArgumentException(MARKER_MAIL, new RuntimeException(MARKER_PFAD))))).scan(scanText)),
+            fall("L01 LanrRecognizer.detect text=null", NullPointerException.class,
+                () -> new LanrRecognizer().detect(null)),
+            fall("L02 IkRecognizer.detect text=null", NullPointerException.class,
+                () -> new IkRecognizer().detect(null)),
             fall("C01 ConflictResolver.resolve text=null", NullPointerException.class,
                 () -> ConflictResolver.resolve(null, List.of(pfadFund()))),
             fall("C02 ConflictResolver.resolve candidates=null", NullPointerException.class,
@@ -592,6 +602,102 @@ class KlartextFreiheitTest {
         assertEquals(Finding.SOURCE_MERGED, gescannt.get(0).source());
         assertToStringKlartextfrei("zusammengelegter Fund (Scan)", gescannt.get(0));
         assertToStringKlartextfrei("Liste der Funde", gescannt);
+    }
+
+    // ------------------------------------------------------------------ KV-Nummern (AK-24)
+
+    /** Die drei Quellen je Typ (Pruefziffer gueltig, ungueltig, Laenge abweichend) als Funde der echten Erkenner. */
+    private static List<Finding> kvFundeAllerQuellen() {
+        String lanr = LANR_MARKER;
+        String lanrUngueltig = lanr.substring(0, 6) + (char) ('0' + (lanr.charAt(6) - '0' + 1) % 10)
+                + lanr.substring(7);
+        String lanrLaenge = lanr.substring(0, 7);
+        String ik = IK_MARKER;
+        String ikUngueltig = ik.substring(0, 8) + (char) ('0' + (ik.charAt(8) - '0' + 1) % 10);
+        String ikLaenge = ik.substring(0, 7);
+        List<Finding> funde = new ArrayList<>();
+        for (String n : List.of(lanr, lanrUngueltig, lanrLaenge)) {
+            funde.addAll(new LanrRecognizer().detect("LANR " + n));
+        }
+        for (String n : List.of(ik, ikUngueltig, ikLaenge)) {
+            funde.addAll(new IkRecognizer().detect("IK " + n));
+        }
+        return funde;
+    }
+
+    @Test
+    void ak24_kvFunde_alleDreiQuellenJeTyp_toStringOhneMarkerUndQuellenOhneZiffer() {
+        Ausgabe ausgabe = erfasse(() -> {
+            List<Finding> funde = kvFundeAllerQuellen();
+            assertEquals(6, funde.size(), "je Typ drei Funde");
+            assertEquals(Set.of(LanrRecognizer.SOURCE, LanrRecognizer.SOURCE_PRUEFZIFFER_UNGUELTIG,
+                    LanrRecognizer.SOURCE_LAENGE_ABWEICHEND, IkRecognizer.SOURCE,
+                    IkRecognizer.SOURCE_PRUEFZIFFER_UNGUELTIG, IkRecognizer.SOURCE_LAENGE_ABWEICHEND),
+                    funde.stream().map(Finding::source).collect(java.util.stream.Collectors.toSet()),
+                    "alle sechs Quellen kommen vor");
+            assertEquals(3L, funde.stream().filter(f -> FindingType.LANR.equals(f.type())).count(), "Typ LANR");
+            assertEquals(3L, funde.stream().filter(f -> FindingType.IK.equals(f.type())).count(), "Typ IK");
+            for (Finding f : funde) {
+                assertToStringKlartextfrei("KV-Finding.toString " + f.source(), f);
+                assertToStringKlartextfrei("KV-Finding.source " + f.source(), f.source());
+                assertToStringKlartextfrei("KV-Finding.type " + f.source(), f.type());
+                for (int i = 0; i < f.source().length(); i++) {
+                    assertFalse(Character.isDigit(f.source().charAt(i)), "Quelle enthaelt eine Ziffer: " + f.source());
+                }
+                assertTrue(f.toString().contains("source=" + f.source()), "toString nennt die Quelle");
+            }
+            assertToStringKlartextfrei("Liste der KV-Funde", funde);
+            // Pseudonymisierung und Rueckuebersetzung der Funde einzeln: Ergebnisobjekte ohne Marker
+            for (Finding f : funde) {
+                String text = "Z " + f.originalValue() + " E";
+                Finding im = new Finding(f.type(), f.originalValue(), 2, 2 + f.originalValue().length(),
+                        f.confidence(), f.source());
+                PseudonymizationResult pseudo = PSEUDONYMIZER.pseudonymize(text, List.of(im));
+                assertTrue(findeMarker(pseudo.text()).isEmpty(), "Marker im pseudonymisierten Text");
+                assertToStringKlartextfrei("PseudonymizationResult KV", pseudo);
+                assertToStringKlartextfrei("PlaceholderMapping KV", pseudo.mapping());
+                ReidentificationResult zurueck = REIDENTIFIER.restore(pseudo.text(), pseudo.mapping());
+                assertEquals(text, zurueck.text());
+                assertToStringKlartextfrei("ReidentificationResult KV", zurueck);
+            }
+        });
+        assertAusgabeKlartextfrei("KV-toString-Test", ausgabe);
+    }
+
+    @Test
+    void ak24_kvFunde_manuellGebildeteQuellenSindZifferfreiUndToStringOhneMarker() {
+        for (String quelle : List.of(LanrRecognizer.SOURCE, LanrRecognizer.SOURCE_PRUEFZIFFER_UNGUELTIG,
+                LanrRecognizer.SOURCE_LAENGE_ABWEICHEND, IkRecognizer.SOURCE, IkRecognizer.SOURCE_PRUEFZIFFER_UNGUELTIG,
+                IkRecognizer.SOURCE_LAENGE_ABWEICHEND)) {
+            FindingType typ = quelle.startsWith("lanr") ? FindingType.LANR : FindingType.IK;
+            String wert = typ.equals(FindingType.LANR) ? LANR_MARKER : IK_MARKER;
+            Finding f = new Finding(typ, wert, 0, wert.length(), 0.5, quelle);
+            assertToStringKlartextfrei("KV manuell " + quelle, f);
+            assertTrue(quelle.chars().noneMatch(Character::isDigit), "Quelle enthaelt eine Ziffer: " + quelle);
+            assertTrue(findeMarker(f.originalValue()).isPresent(), "Suchfunktion findet den KV-Marker");
+        }
+    }
+
+    @Test
+    void ak24_kvMarkerImText_werdenPseudonymisiertUndTauchenInKeinerAusgabeAuf() {
+        List<Finding> funde = TextScanner.standard().scan(TEXT);
+        assertEquals(4, funde.size(), "Pfad, E-Mail, LANR, IK");
+        assertEquals(1L, funde.stream().filter(f -> FindingType.LANR.equals(f.type())).count(), "LANR im Marker-Text");
+        assertEquals(1L, funde.stream().filter(f -> FindingType.IK.equals(f.type())).count(), "IK im Marker-Text");
+        PseudonymizationResult pseudo = PSEUDONYMIZER.pseudonymize(TEXT, funde);
+        assertTrue(findeMarker(pseudo.text()).isEmpty(), "Marker im pseudonymisierten Text");
+        assertTrue(pseudo.text().contains("LANR [[LANR_3]], IK [[IK_4]]"), "Platzhalter der KV-Funde");
+        assertEquals(TEXT, REIDENTIFIER.restore(pseudo.text(), pseudo.mapping()).text());
+    }
+
+    @Test
+    void selbsttest_kvMarkerUndIhreErstenSechsZiffernWerdenGefunden() {
+        assertTrue(findeMarker("x " + LANR_MARKER + " y").isPresent(), "LANR voll");
+        assertTrue(findeMarker("x " + IK_MARKER + " y").isPresent(), "IK voll");
+        assertTrue(findeMarker("x " + LANR_MARKER.substring(0, 6) + " y").isPresent(), "LANR erste sechs");
+        assertTrue(findeMarker("x " + IK_MARKER.substring(0, 6) + " y").isPresent(), "IK erste sechs");
+        assertTrue(MARKER_TEILE.contains(LANR_MARKER.substring(0, 6)), "LANR-Anfang in MARKER_TEILE");
+        assertTrue(MARKER_TEILE.contains(IK_MARKER.substring(0, 6)), "IK-Anfang in MARKER_TEILE");
     }
 
     // ------------------------------------------------------------------ Selbsttests der Suchfunktion

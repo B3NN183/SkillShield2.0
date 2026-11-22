@@ -1,6 +1,38 @@
 package de.skillshield.core;
 
+import static de.skillshield.core.SynthetischeKvNummern.IK_FORM_DOKU_IP;
+import static de.skillshield.core.SynthetischeKvNummern.IK_GUELTIG;
+import static de.skillshield.core.SynthetischeKvNummern.IK_GUELTIG_DREI;
+import static de.skillshield.core.SynthetischeKvNummern.IK_GUELTIG_ZWEI;
+import static de.skillshield.core.SynthetischeKvNummern.IK_TRENNER_BINDESTRICH;
+import static de.skillshield.core.SynthetischeKvNummern.IK_TRENNER_GRUPPE_6_3;
+import static de.skillshield.core.SynthetischeKvNummern.IK_TRENNER_NBSP;
+import static de.skillshield.core.SynthetischeKvNummern.IK_TRENNER_PUNKT;
+import static de.skillshield.core.SynthetischeKvNummern.IK_UNGUELTIG_KOMPLEMENT;
+import static de.skillshield.core.SynthetischeKvNummern.IK_UNGUELTIG_NULL;
+import static de.skillshield.core.SynthetischeKvNummern.IK_UNGUELTIG_VERTAUSCHT;
+import static de.skillshield.core.SynthetischeKvNummern.LAENGE_10;
+import static de.skillshield.core.SynthetischeKvNummern.LAENGE_12;
+import static de.skillshield.core.SynthetischeKvNummern.LAENGE_13;
+import static de.skillshield.core.SynthetischeKvNummern.LAENGE_4;
+import static de.skillshield.core.SynthetischeKvNummern.LAENGE_5;
+import static de.skillshield.core.SynthetischeKvNummern.LAENGE_6;
+import static de.skillshield.core.SynthetischeKvNummern.LAENGE_7;
+import static de.skillshield.core.SynthetischeKvNummern.LAENGE_8;
+import static de.skillshield.core.SynthetischeKvNummern.LANR_GUELTIG;
+import static de.skillshield.core.SynthetischeKvNummern.LANR_GUELTIG_FACHGRUPPE;
+import static de.skillshield.core.SynthetischeKvNummern.LANR_GUELTIG_PRUEFZIFFER_NULL;
+import static de.skillshield.core.SynthetischeKvNummern.LANR_GUELTIG_ZWEI;
+import static de.skillshield.core.SynthetischeKvNummern.LANR_TRENNER_LEERZEICHEN;
+import static de.skillshield.core.SynthetischeKvNummern.LANR_TRENNER_NBSP;
+import static de.skillshield.core.SynthetischeKvNummern.LANR_TRENNER_SCHRAEGSTRICH;
+import static de.skillshield.core.SynthetischeKvNummern.LANR_TRENNER_UNGLEICHE_GRUPPEN;
+import static de.skillshield.core.SynthetischeKvNummern.LANR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN;
+import static de.skillshield.core.SynthetischeKvNummern.LANR_UNGUELTIG_VERTAUSCHT;
+import static de.skillshield.core.SynthetischeKvNummern.LANR_UNGUELTIG_ZIFFER_GEAENDERT;
+import static de.skillshield.core.SynthetischeKvNummern.TELEFON_PROBE;
 import static de.skillshield.core.TestTexte.bs;
+import static de.skillshield.core.recognizer.kv.KvTestHilfen.neunerfenster;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -15,7 +47,11 @@ import de.skillshield.core.reidentify.Reidentifier;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 /**
  * Roundtrip-Korpus (T-17; AK-7 (g), AK-25, AK-26, AK-28, AK-37, AK-38, AK-39, AK-54).
@@ -25,6 +61,13 @@ import org.junit.jupiter.api.Test;
  * Typen) und die Abwesenheit einer ausdrücklich angegebenen Liste verbotener Bestandteile prüfen, dann
  * zurückübersetzen: Ergebnis zeichengleich mit dem Original, keine Meldung. Die Tests dokumentieren auch die
  * bekannten Grenzen aus dem Architektur-Plan (D-5, unsichtbare Zeichen im Kopf).
+ *
+ * <p>KV-Teil (Feature kv-nummern-erkennung, AK-20, AK-1 bis AK-16): {@link #kvFaelle()} haelt alle Texte mit IK- und
+ * LANR-Formen als Liste (auch fuer {@code KvDifferenzTest}). Je Fall: Waechter der Testdatenregel vor dem Scan,
+ * Scan, alle Funde pseudonymisieren, erwarteter Ausgabetext und Typen, keine Ziffernkette mit 6+ Ziffern im
+ * Ausgabetext (Faelle ohne Fund sind ausgenommen, dort bleibt der Text absichtlich unveraendert), Rueckuebersetzung
+ * zeichengleich ohne Meldung. Meldungen nennen nur den Fallnamen. Dazu Konsistenzfaelle (AK-20, OF-5) und die bekannte
+ * Grenze 13.
  *
  * <p>Testdaten sind synthetisch ({@code *.invalid}, {@code *.example}, 192.0.2.0/24, erfundene Namen).
  * Backslashes werden über {@link TestTexte#bs(String)} geschrieben; Nicht-ASCII-, unsichtbare und typografische
@@ -674,5 +717,312 @@ class RoundtripKorpusTest {
         String pfad = AK7G.substring(5, 83);
         assertEquals(">> Ergebnis: " + pfad + "' ende <<\n" + pfad, r.text(), "ak54 AK-7 (g)");
         assertTrue(r.unresolved().isEmpty(), "ak54 keine Meldung");
+    }
+
+    // ------------------------------------------------------------------ KV-Nummern (AK-20, AK-1 bis AK-16)
+
+    /** Ein KV-Korpusfall: Name, Text, erwarteter pseudonymisierter Text, erwartete Typen in Textreihenfolge. */
+    record KvFall(String name, String text, String erwartet, String typen) {
+    }
+
+    private static KvFall kvFall(String name, String text, String erwartet, String typen) {
+        return new KvFall(name, text, erwartet, typen);
+    }
+
+    /** Genau ein Fund: {@code vor + nummer + nach}, die Nummer wird zu {@code [[TYP_1]]}. */
+    private static KvFall ein(String name, String vor, String nummer, String typ, String nach) {
+        return kvFall(name, vor + nummer + nach, vor + "[[" + typ + "_1]]" + nach, typ);
+    }
+
+    /** Kein Fund: der Text bleibt unveraendert. */
+    private static KvFall kein(String name, String text) {
+        return kvFall(name, text, text, "");
+    }
+
+    private static final String[] LANR_KONTEXTE = {"lanr ", "LANR: ", "LANR=", "LANR;", "LANR\t", "LANR-Nr. ",
+        "Arztnummer ", "Lebenslange Arztnummer: ", "Arzt-Nr. ", "Praxis-LANR "};
+    private static final String[] IK_KONTEXTE = {"ik: ", "IK=", "IK-Nr. ", "IK-Nummer: ", "IKNR ",
+        "Institutionskennzeichen ", "Praxis-IK "};
+    private static final String[] LANR_TRENNERFORMEN = {LANR_TRENNER_LEERZEICHEN, LANR_TRENNER_UNGLEICHE_GRUPPEN,
+        LANR_TRENNER_NBSP, LANR_TRENNER_SCHRAEGSTRICH};
+    private static final String[] IK_TRENNERFORMEN = {IK_TRENNER_BINDESTRICH, IK_TRENNER_PUNKT,
+        IK_TRENNER_GRUPPE_6_3, IK_TRENNER_NBSP};
+
+    /** Alle KV-Korpusfaelle (AK-1 bis AK-16 und AK-20). Texte aus Konstanten von {@link SynthetischeKvNummern}. */
+    static List<KvFall> kvFaelle() {
+        List<KvFall> f = new ArrayList<>();
+        // AK-1, AK-2, AK-3, AK-4: Kontextwoerter
+        f.add(ein("ak1", "Arzt: LANR ", LANR_GUELTIG, "LANR", ", Praxis"));
+        for (int i = 0; i < LANR_KONTEXTE.length; i++) {
+            f.add(ein("ak2-" + i, LANR_KONTEXTE[i], LANR_GUELTIG, "LANR", ""));
+        }
+        f.add(ein("ak3", "Rechnung an IK ", IK_GUELTIG, "IK", " gesendet"));
+        for (int i = 0; i < IK_KONTEXTE.length; i++) {
+            f.add(ein("ak4-" + i, IK_KONTEXTE[i], IK_GUELTIG, "IK", ""));
+        }
+        // AK-5
+        f.add(kvFall("ak5", "IK " + IK_GUELTIG + ", LANR " + LANR_GUELTIG, "IK [[IK_1]], LANR [[LANR_2]]", "IK,LANR"));
+        // AK-6: Trenner (Fund umfasst die ganze Folge), Trenner am Ende gehoert nicht dazu
+        for (int i = 0; i < LANR_TRENNERFORMEN.length; i++) {
+            f.add(ein("ak6-lanr-" + i, "LANR ", LANR_TRENNERFORMEN[i], "LANR", ""));
+        }
+        for (int i = 0; i < IK_TRENNERFORMEN.length; i++) {
+            f.add(ein("ak6-ik-" + i, "IK ", IK_TRENNERFORMEN[i], "IK", ""));
+        }
+        f.add(ein("ak6-lanr-trenner-am-ende", "LANR ", LANR_TRENNER_LEERZEICHEN, "LANR", " Ende"));
+        f.add(ein("ak6-ik-trenner-am-ende", "IK ", IK_TRENNER_BINDESTRICH, "IK", "- Ende"));
+        // AK-7, AK-8, AK-9: gueltige und ungueltige Pruefziffern, alle sind Funde
+        for (String n : List.of(LANR_GUELTIG_FACHGRUPPE, LANR_GUELTIG_PRUEFZIFFER_NULL, LANR_GUELTIG_ZWEI,
+                LANR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN, LANR_UNGUELTIG_VERTAUSCHT, LANR_UNGUELTIG_ZIFFER_GEAENDERT)) {
+            f.add(ein("ak7-" + f.size(), "LANR ", n, "LANR", ""));
+        }
+        for (String n : List.of(IK_GUELTIG_ZWEI, IK_GUELTIG_DREI, IK_UNGUELTIG_KOMPLEMENT, IK_UNGUELTIG_NULL,
+                IK_UNGUELTIG_VERTAUSCHT)) {
+            f.add(ein("ak8-" + f.size(), "IK ", n, "IK", ""));
+        }
+        // AK-10: ohne Kontextwort kein Fund
+        f.add(kein("ak10-rueckruf", "R\u00FCckruf unter " + LANR_GUELTIG));
+        f.add(kein("ak10-vorgang", "Vorgang " + IK_GUELTIG + " liegt vor"));
+        f.add(kein("ak10-telefon", "Tel. " + TELEFON_PROBE));
+        f.add(kein("ak10-allein", LANR_GUELTIG));
+        // AK-11: Kontextwort nur als ganzes Wort, abweichende Laengen
+        f.add(kein("ak11-technik", "Technik: " + IK_GUELTIG));
+        f.add(kein("ak11-fabrik", "Fabrik " + IK_GUELTIG));
+        f.add(kein("ak11-ikea", "IKEA " + IK_GUELTIG));
+        f.add(kein("ak11-lanrx", "LANRX " + LANR_GUELTIG));
+        f.add(ein("ak11-laenge-7", "LANR ", LAENGE_7, "LANR", ""));
+        f.add(ein("ak11-laenge-8", "IK ", LAENGE_8, "IK", ""));
+        f.add(ein("ak11-laenge-10", "LANR ", LAENGE_10, "LANR", ""));
+        f.add(ein("ak11-laenge-6", "IK ", LAENGE_6, "IK", ""));
+        f.add(ein("ak11-laenge-12", "LANR ", LAENGE_12, "LANR", ""));
+        f.add(kein("ak11-laenge-4", "IK " + LAENGE_4));
+        f.add(kein("ak11-laenge-5", "LANR " + LAENGE_5));
+        f.add(kein("ak11-laenge-13", "IK " + LAENGE_13));
+        f.add(ein("ak11-jahr-hinten", "LANR ", LANR_GUELTIG, "LANR", " 2025"));
+        f.add(ein("ak11-bindestrich-jahr", "IK ", IK_GUELTIG, "IK", "-2025"));
+        // AK-12: Fuellwoerter
+        f.add(ein("ak12-lanr", "LANR des Behandlers ", LANR_GUELTIG, "LANR", ""));
+        f.add(ein("ak12-ik", "Institutionskennzeichen der Praxis: ", IK_GUELTIG, "IK", ""));
+        f.add(kein("ak12-vier-woerter", "LANR der Praxis von Frau Beispiel " + LANR_GUELTIG));
+        f.add(kein("ak12-satzende", "Die LANR fehlt. Vorgang " + LANR_GUELTIG));
+        // AK-13: nachgestelltes Kontextwort (Kontextwort in Klammern bleibt)
+        f.add(ein("ak13-lanr", "Nummer ", LANR_GUELTIG, "LANR", " (LANR)"));
+        f.add(ein("ak13-ik", "Kennung ", IK_GUELTIG, "IK", " (IK)"));
+        // AK-14: Zeilenumbruch
+        f.add(ein("ak14-lanr-lf", "LANR:\n", LANR_GUELTIG, "LANR", ""));
+        f.add(ein("ak14-lanr-crlf", "LANR:\r\n", LANR_GUELTIG, "LANR", ""));
+        f.add(ein("ak14-ik-lf", "IK:\n", IK_GUELTIG, "IK", ""));
+        f.add(ein("ak14-ik-crlf", "IK:\r\n", IK_GUELTIG, "IK", ""));
+        f.add(kein("ak14-leerzeile-lf", "LANR:\n\n" + LANR_GUELTIG));
+        f.add(kein("ak14-leerzeile-crlf", "IK:\r\n\r\n" + IK_GUELTIG));
+        // AK-15: Aufzaehlung (Trenner , ; / und), je Zeile, nummerierte Liste
+        f.add(kvFall("ak15-lanr-drei", "LANR " + LANR_GUELTIG + ", " + LANR_GUELTIG_ZWEI + " und "
+                + LANR_GUELTIG_FACHGRUPPE, "LANR [[LANR_1]], [[LANR_2]] und [[LANR_3]]", "LANR,LANR,LANR"));
+        f.add(kvFall("ak15-ik-zwei", "IK " + IK_GUELTIG + " / " + IK_UNGUELTIG_KOMPLEMENT, "IK [[IK_1]] / [[IK_2]]",
+                "IK,IK"));
+        f.add(kvFall("ak15-semikolon", "LANR " + LANR_GUELTIG + "; " + LANR_GUELTIG_ZWEI,
+                "LANR [[LANR_1]]; [[LANR_2]]", "LANR,LANR"));
+        f.add(kvFall("ak15-je-zeile-lf", "LANR:\n" + LANR_GUELTIG + "\n" + LANR_GUELTIG_ZWEI,
+                "LANR:\n[[LANR_1]]\n[[LANR_2]]", "LANR,LANR"));
+        f.add(kvFall("ak15-je-zeile-crlf", "IK:\r\n" + IK_GUELTIG + "\r\n" + IK_GUELTIG_ZWEI,
+                "IK:\r\n[[IK_1]]\r\n[[IK_2]]", "IK,IK"));
+        f.add(kvFall("ak15-nummerierte-liste", "LANR:\n1. " + LANR_GUELTIG + "\n2. " + LANR_GUELTIG_ZWEI,
+                "LANR:\n1. [[LANR_1]]\n2. [[LANR_2]]", "LANR,LANR"));
+        f.add(kvFall("ak15-nachgestellt-aufzaehlung", LANR_GUELTIG + ", " + LANR_GUELTIG_ZWEI + " (LANR)",
+                "[[LANR_1]], [[LANR_2]] (LANR)", "LANR,LANR"));
+        // AK-16: Rand- und Fehlerfaelle
+        f.add(ein("ak16a-punkt", "LANR ", LANR_GUELTIG, "LANR", "."));
+        f.add(ein("ak16b-textende", "LANR ", LANR_GUELTIG, "LANR", ""));
+        f.add(ein("ak16b-textanfang-nachgestellt", "", LANR_GUELTIG, "LANR", " (LANR)"));
+        f.add(kein("ak16c-lanr", "LANR"));
+        f.add(kein("ak16c-ik", "IK:"));
+        f.add(kein("ak16c-arztnummer-fehlt", "Arztnummer fehlt"));
+        f.add(kein("ak16c-kontextwort-am-ende", "Bitte die Nummer eintragen: IK"));
+        f.add(kein("ak16d-leer", ""));
+        f.add(kein("ak16d-leerraum", " \t\r\n  "));
+        // AK-17, AK-18, AK-19: Enthaltensein, gleicher Bereich, Einbindung
+        f.add(kvFall("ak17-url", "https://example.invalid/praxis?ik=" + IK_GUELTIG, "[[URL_1]]", "URL"));
+        f.add(kvFall("ak17-pfad", bs("C:\u00A6Praxis\u00A6IK-") + IK_GUELTIG + bs("\u00A6x.txt"), "[[PFAD_1]]",
+                "PFAD"));
+        f.add(kvFall("ak17-email", "LANR " + LANR_GUELTIG + "@example.invalid", "LANR [[EMAIL_1]]", "EMAIL"));
+        f.add(kvFall("ak18-gleicher-bereich-ip", "IK " + IK_FORM_DOKU_IP, "IK [[IP_1]]", "IP"));
+        f.add(kvFall("ak19-sechs-funde", "Mail " + MAIL + ", Server 192.0.2.10, Link https://example.invalid/a, Pfad "
+                + bs("C:\u00A6Tools\u00A6a.exe") + ", IK " + IK_GUELTIG + ", LANR " + LANR_GUELTIG,
+                "Mail [[EMAIL_1]], Server [[IP_2]], Link [[URL_3]], Pfad [[PFAD_4]], IK [[IK_5]], LANR [[LANR_6]]",
+                "EMAIL,IP,URL,PFAD,IK,LANR"));
+        // AK-20: Konsistenz (gleiche Zahl, keine Normalisierung, gleiche Zahl unter LANR und IK)
+        f.add(kvFall("ak20-gleiche-zahl-zweimal", "LANR " + LANR_GUELTIG + " ... LANR " + LANR_GUELTIG,
+                "LANR [[LANR_1]] ... LANR [[LANR_1]]", "LANR,LANR"));
+        f.add(kvFall("ak20-mit-und-ohne-trenner", "LANR " + LANR_GUELTIG + " / LANR " + LANR_TRENNER_LEERZEICHEN,
+                "LANR [[LANR_1]] / LANR [[LANR_2]]", "LANR,LANR"));
+        f.add(kvFall("ak20-lanr-dann-ik", "LANR " + IK_GUELTIG + "\n\nIK " + IK_GUELTIG,
+                "LANR [[LANR_1]]\n\nIK [[IK_2]]", "LANR,IK"));
+        f.add(kvFall("ak20-ik-dann-lanr", "IK " + IK_GUELTIG + "\n\nLANR " + IK_GUELTIG,
+                "IK [[IK_1]]\n\nLANR [[LANR_2]]", "IK,LANR"));
+        // Zeilenenden, Leerraum, Unicode (AK-39-Form fuer KV-Texte)
+        String[] eolNamen = {"lf", "crlf", "cr"};
+        String[] eols = {"\n", "\r\n", "\r"};
+        for (int i = 0; i < eols.length; i++) {
+            String eol = eols[i];
+            f.add(kvFall("zeilenende-" + eolNamen[i], "LANR " + LANR_GUELTIG + eol + "IK "
+                    + IK_GUELTIG + eol, "LANR [[LANR_1]]" + eol + "IK [[IK_2]]" + eol, "LANR,IK"));
+        }
+        f.add(kvFall("zeilenende-gemischt", "LANR " + LANR_GUELTIG + "\nIK " + IK_GUELTIG + "\r\nLANR "
+                + LANR_GUELTIG_ZWEI + "\rEnde\n", "LANR [[LANR_1]]\nIK [[IK_2]]\r\nLANR [[LANR_3]]\rEnde\n",
+                "LANR,IK,LANR"));
+        f.add(kvFall("emoji-und-bom", "\uFEFF" + EMOJI + " LANR " + LANR_GUELTIG + " " + EMOJI + " IK " + IK_GUELTIG
+                + " " + EMOJI, "\uFEFF" + EMOJI + " LANR [[LANR_1]] " + EMOJI + " IK [[IK_2]] " + EMOJI, "LANR,IK"));
+        f.add(kvFall("rtl-text", "\u05E9\u05DC\u05D5\u05DD LANR " + LANR_GUELTIG + " \u0645\u0631\u062D\u0628\u0627 IK "
+                + IK_GUELTIG, "\u05E9\u05DC\u05D5\u05DD LANR [[LANR_1]] \u0645\u0631\u062D\u0628\u0627 IK [[IK_2]]",
+                "LANR,IK"));
+        f.add(kvFall("unsichtbares-zeichen-im-kontext", "Praxis\u200BLANR " + LANR_GUELTIG,
+                "Praxis\u200BLANR [[LANR_1]]", "LANR"));
+        f.add(kvFall("tabelle-mit-tabulatoren", "Praxis\tLANR\t" + LANR_GUELTIG + "\tIK\t" + IK_GUELTIG + "\t",
+                "Praxis\tLANR\t[[LANR_1]]\tIK\t[[IK_2]]\t", "LANR,IK"));
+        return f;
+    }
+
+    /** Die Texte aller KV-Korpusfaelle (fuer den Differenztest). */
+    static List<String> kvTexte() {
+        List<String> texte = new ArrayList<>();
+        for (KvFall k : kvFaelle()) {
+            texte.add(k.text());
+        }
+        return texte;
+    }
+
+    /**
+     * Laengste Ziffernkette im Text: aufeinanderfolgende ASCII-Ziffern, die ueber je genau einen Gruppentrenner
+     * (Leerzeichen, U+00A0, Bindestrich, Punkt, Schraegstrich) verbunden sein duerfen; gezaehlt werden die Ziffern.
+     */
+    static int laengsteZiffernkette(String text) {
+        int beste = 0;
+        int aktuell = 0;
+        int n = text.length();
+        for (int i = 0; i < n; i++) {
+            char c = text.charAt(i);
+            if (c >= '0' && c <= '9') {
+                aktuell++;
+                beste = Math.max(beste, aktuell);
+            } else if (aktuell > 0 && i + 1 < n && text.charAt(i + 1) >= '0' && text.charAt(i + 1) <= '9'
+                    && (c == ' ' || c == '\u00A0' || c == '-' || c == '.' || c == '/')) {
+                continue;
+            } else {
+                aktuell = 0;
+            }
+        }
+        return beste;
+    }
+
+    /**
+     * Scan, Pseudonymisierung aller Funde, Pruefung und Rueckuebersetzung eines KV-Textes. Waechter der Testdatenregel
+     * vor dem Scan; Meldungen nennen nur den Fallnamen, nie Text oder Nummern.
+     */
+    private static PseudonymizationResult kvPruefe(KvFall k, boolean ohneLangeZiffernkette) {
+        assertEquals(0, neunerfenster(k.text(), "00")[1], k.name() + ": Waechter der Testdatenregel");
+        List<Finding> funde = SCANNER.scan(k.text());
+        assertEquals(k.typen(), typen(funde), k.name() + ": Fundzahl und Typen");
+        for (Finding fund : funde) {
+            assertTrue(k.text().substring(fund.start(), fund.end()).equals(fund.originalValue()),
+                    k.name() + ": Teilstring-Invariante");
+        }
+        PseudonymizationResult pseudo = PSEUDONYMIZER.pseudonymize(k.text(), funde);
+        assertTrue(k.erwartet().equals(pseudo.text()), k.name() + ": pseudonymisierter Text");
+        if (ohneLangeZiffernkette) {
+            assertTrue(laengsteZiffernkette(pseudo.text()) < 6,
+                    k.name() + ": Ziffernkette mit 6+ Ziffern im Ausgabetext");
+        }
+        ReidentificationResult zurueck = REIDENTIFIER.restore(pseudo.text(), pseudo.mapping());
+        assertTrue(k.text().equals(zurueck.text()), k.name() + ": Roundtrip nicht zeichengleich");
+        assertTrue(zurueck.unresolved().isEmpty(), k.name() + ": Rueckuebersetzung meldet Platzhalter");
+        return pseudo;
+    }
+
+    @Test
+    void ak20Kv_korpusIstGrossGenugUndNamenSindEindeutig() {
+        List<KvFall> faelle = kvFaelle();
+        assertTrue(faelle.size() >= 100, "Korpusgroesse " + faelle.size());
+        assertEquals(faelle.size(), faelle.stream().map(KvFall::name).distinct().count(), "Fallnamen eindeutig");
+        assertTrue(faelle.stream().anyMatch(k -> k.typen().isEmpty()), "Korpus enthaelt Faelle ohne Fund");
+        assertTrue(faelle.stream().anyMatch(k -> k.typen().contains("LANR")), "Korpus enthaelt LANR-Funde");
+        assertTrue(faelle.stream().anyMatch(k -> k.typen().contains("IK")), "Korpus enthaelt IK-Funde");
+        // die Pruefung der Ausgabe ist nicht wirkungslos: eine unveraenderte Nummer wuerde auffallen
+        assertTrue(laengsteZiffernkette("LANR " + LANR_GUELTIG) >= 6, "Pruefung erkennt neun Ziffern");
+        assertTrue(laengsteZiffernkette("LANR " + LANR_TRENNER_LEERZEICHEN) >= 6, "Pruefung erkennt Gruppen");
+        assertTrue(laengsteZiffernkette("LANR " + LANR_TRENNER_NBSP) >= 6, "Pruefung erkennt NBSP-Gruppen");
+        assertTrue(laengsteZiffernkette("[[LANR_12]] und [[IK_3]]") < 6, "Platzhalter sind keine Ziffernkette");
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("kvFallStrom")
+    void ak20Kv_scanPseudonymisierungRoundtrip_keineLangeZiffernketteImAusgabetext(String name, KvFall k) {
+        // Faelle ohne Fund (AK-10 bis AK-12, AK-14, AK-16) haben absichtlich unveraenderte Ziffern im Text.
+        kvPruefe(k, !k.typen().isEmpty());
+    }
+
+    static Stream<Arguments> kvFallStrom() {
+        return kvFaelle().stream().map(k -> Arguments.of(k.name(), k));
+    }
+
+    @Test
+    void ak20Kv_gleicheZahlZweimal_gleicherPlatzhalter_verschiedeneSchreibweisen_verschiedene() {
+        PseudonymizationResult p = kvPruefe(kvFall("konsistenz-gleich", "LANR " + LANR_GUELTIG + " ... LANR "
+                + LANR_GUELTIG, "LANR [[LANR_1]] ... LANR [[LANR_1]]", "LANR,LANR"), true);
+        assertEquals(1, p.mapping().size(), "ein Platzhalter fuer die gleiche Zahl");
+        PseudonymizationResult q = kvPruefe(kvFall("konsistenz-trenner", "LANR " + LANR_GUELTIG + " ... LANR "
+                + LANR_TRENNER_LEERZEICHEN, "LANR [[LANR_1]] ... LANR [[LANR_2]]", "LANR,LANR"), true);
+        assertEquals(2, q.mapping().size(), "keine Normalisierung: zwei Platzhalter");
+        assertEquals(LANR_GUELTIG, q.mapping().resolve("[[LANR_1]]").orElseThrow(), "Platzhalter 1 fuehrt zurueck");
+        assertEquals(LANR_TRENNER_LEERZEICHEN, q.mapping().resolve("[[LANR_2]]").orElseThrow(),
+                "Platzhalter 2 fuehrt zurueck");
+    }
+
+    @Test
+    void ak20Kv_gleicheZahlUnterLanrUndIk_platzhalterTragenDenTypDesFundes_beideFuehrenZurueck_of5() {
+        PseudonymizationResult p = kvPruefe(kvFall("konsistenz-lanr-ik", "LANR " + IK_GUELTIG + "\n\nIK "
+                + IK_GUELTIG, "LANR [[LANR_1]]\n\nIK [[IK_2]]", "LANR,IK"), true);
+        assertEquals(2, p.mapping().size(), "zwei Platzhalter fuer dieselbe Zahl, je Typ einer");
+        assertEquals(IK_GUELTIG, p.mapping().resolve("[[LANR_1]]").orElseThrow(), "LANR-Platzhalter fuehrt zurueck");
+        assertEquals(IK_GUELTIG, p.mapping().resolve("[[IK_2]]").orElseThrow(), "IK-Platzhalter fuehrt zurueck");
+        PseudonymizationResult umgekehrt = kvPruefe(kvFall("konsistenz-ik-lanr", "IK " + IK_GUELTIG + "\n\nLANR "
+                + IK_GUELTIG, "IK [[IK_1]]\n\nLANR [[LANR_2]]", "IK,LANR"), true);
+        assertEquals(2, umgekehrt.mapping().size(), "zwei Platzhalter, umgekehrte Reihenfolge");
+    }
+
+    @Test
+    void ak20Kv_kiSimulation_platzhalterVertauschtUndEingebettet_ergibtOriginalwerte() {
+        PseudonymizationResult p = kvPruefe(kvFall("ki-kv", "IK " + IK_GUELTIG + ", LANR " + LANR_GUELTIG,
+                "IK [[IK_1]], LANR [[LANR_2]]", "IK,LANR"), true);
+        ReidentificationResult r = umformen(p, "Antwort: LANR [[LANR_2]] und IK ([[IK_1]]), nochmal [[LANR_2]].");
+        assertTrue(("Antwort: LANR " + LANR_GUELTIG + " und IK (" + IK_GUELTIG + "), nochmal " + LANR_GUELTIG + ".")
+                .equals(r.text()), "KI-Antwort wird rueckuebersetzt");
+        assertTrue(r.unresolved().isEmpty(), "keine Meldung");
+    }
+
+    // ------------------------------------------------------------------ Bekannte Grenze 13 (Plan T-6 Nachtrag)
+
+    /**
+     * Bekannte Grenze 13: Ein woertlich im Eingabetext stehender Platzhalter mit mindestens sechs Ziffern wird
+     * zerstueckelt pseudonymisiert, weil {@code IK} und {@code LANR} vor dem Unterstrich als Kontextwort gelten und die
+     * Ziffern als Fund (Laengenabweichung, fraglich) erkannt werden. Der Anfang {@code [[IK_} steht dann als
+     * platzhalterartiger Originaltext (Literalschutz, Typ TEXT) neben dem Platzhalter der Ziffern; das schliessende
+     * {@code ]]} bleibt stehen. Der Roundtrip bleibt zeichengleich und meldet nichts; im Ausgabetext bleibt keine
+     * Ziffernkette mit 6+ Ziffern stehen (die Ziffern sind ersetzt), daher braucht dieser Fall keine Ausnahme von der
+     * Pruefung. Das Verhalten wird festgehalten, nicht veraendert.
+     */
+    @Test
+    void bekannteGrenze13_woertlicherPlatzhalterMitSechsZiffern_wirdZerstueckeltRoundtripZeichengleich() {
+        String sechs = LAENGE_5 + "6";
+        PseudonymizationResult ik = kvPruefe(kvFall("grenze13-ik-ohne-fuehrende-null",
+                "Vorher [[IK_" + sechs + "]] nachher", "Vorher [[TEXT_1]][[IK_2]]]] nachher", "IK"), true);
+        assertEquals(2, ik.mapping().size(), "Anfang als TEXT, Ziffern als IK");
+        assertEquals(sechs, ik.mapping().resolve("[[IK_2]]").orElseThrow(), "Platzhalter fuehrt auf Ziffern zurueck");
+        assertEquals("[[IK_", ik.mapping().resolve("[[TEXT_1]]").orElseThrow(), "Platzhalter fuehrt auf den Anfang");
+        kvPruefe(kvFall("grenze13-lanr-ohne-fuehrende-null", "Vorher [[LANR_" + sechs + "]] nachher",
+                "Vorher [[TEXT_1]][[LANR_2]]]] nachher", "LANR"), true);
+        kvPruefe(kvFall("grenze13-ik-mit-fuehrender-null", "Vorher [[IK_" + LAENGE_6 + "]] nachher",
+                "Vorher [[TEXT_1]][[IK_2]]]] nachher", "IK"), true);
+        kvPruefe(kvFall("grenze13-ik-neun-ziffern", "Vorher [[IK_" + IK_GUELTIG + "]] nachher",
+                "Vorher [[TEXT_1]][[IK_2]]]] nachher", "IK"), true);
     }
 }

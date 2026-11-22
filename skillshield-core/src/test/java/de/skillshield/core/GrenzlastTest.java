@@ -393,4 +393,78 @@ class GrenzlastTest {
         }
         pruefeRoundtrip(text, d);
     }
+
+    // ------------------------------------------------------------------ AK-21: Nachtrag T-8 (R-1, R-2, R-3)
+
+    /**
+     * Anzahl der Wiederholungen des Bausteins, sodass Praefix, Wiederholungen und Schluss zusammen mindestens
+     * {@code mindestlaenge} Zeichen haben: aufgerundet (mindestlaenge - praefix - schluss) / baustein.
+     */
+    private static int kvWiederholungen(String praefix, String baustein, String schluss, int mindestlaenge) {
+        return (mindestlaenge - praefix.length() - schluss.length() + baustein.length() - 1) / baustein.length();
+    }
+
+    private static String kvText(String praefix, String baustein, String schluss, int mindestlaenge) {
+        return praefix + baustein.repeat(kvWiederholungen(praefix, baustein, schluss, mindestlaenge)) + schluss;
+    }
+
+    private static void pruefeNachtragFall(String name, String praefix, String baustein, String schluss,
+            int erwarteteWiederholungen, int erwarteteFunde, ConfidenceLevel stufe) {
+        // Formel der Wiederholungen: (1 000 000 - |Praefix| - |Schluss| + |Baustein| - 1) / |Baustein| (ganzzahlig)
+        assertEquals(erwarteteWiederholungen, kvWiederholungen(praefix, baustein, schluss, MIN_ZEICHEN),
+                "Wiederholungen " + name);
+        // Aufwaermlauf (nicht gemessen) mit 10 000 Zeichen derselben Bauart
+        String warm = kvText(praefix, baustein, schluss, 10_000);
+        assertEquals(0, neunerfenster(warm, "00")[1], "Waechter Aufwaermtext " + name);
+        drei(warm, GRENZE_GROSSER_TEXT);
+
+        String text = kvText(praefix, baustein, schluss, MIN_ZEICHEN);
+        assertTrue(text.length() >= MIN_ZEICHEN, "Textlaenge " + text.length());
+        // Testdatenregel: kein gueltiges Neunerfenster ohne Praefix 00, vor dem Scan
+        assertEquals(0, neunerfenster(text, "00")[1], "Waechter " + name);
+
+        Durchlauf d = drei(text, GRENZE_PATHOLOGISCH);
+        List<Finding> funde = d.funde();
+        assertEquals(erwarteteFunde, funde.size(), "Fundzahl " + name);
+        for (Finding f : funde) {
+            assertEquals(FindingType.LANR, f.type(), "Typ " + name);
+            assertEquals(stufe, f.level(), "Stufe " + name);
+        }
+        pruefeRoundtrip(text, d);
+        assertFalse(d.pseudo().text().contains(LANR_GUELTIG.substring(0, 6)), "Nummer im Ausgabetext " + name);
+    }
+
+    @Test
+    void ak21_nachtragA_sehrVieleOffeneSegmenteDieErstEinKontextwortAmEndeAusgibt() {
+        // Text: r mal "<LANR>, " (11 Zeichen), dann "<LANR> (LANR)" (16 Zeichen). Ohne Kontextwort bleiben alle
+        // Segmente offen (R-2: Leerraum und Komma erlauben das Anhaengen); das Kontextwort am Ende gibt sie alle aus.
+        // r = (1 000 000 - 16 + 11 - 1) / 11 = 999 994 / 11 = 90 908 (11 * 90 908 + 16 = 1 000 004 >= 1 000 000,
+        // 11 * 90 907 + 16 = 999 993 < 1 000 000). Funde = r + 1 = 90 909, je Segment ein Fund (nachgestellt,
+        // gueltig: 0.80, wahrscheinlich), Typ LANR; kein IK-Kontext, keine IP, kein Pfad: nur der LANR-Erkenner
+        // liefert.
+        pruefeNachtragFall("a offene Segmente", "", LANR_GUELTIG + ", ", LANR_GUELTIG + " (LANR)", 90_908, 90_909,
+                ConfidenceLevel.WAHRSCHEINLICH);
+    }
+
+    @Test
+    void ak21_nachtragB_kontextwortMitUnsichtbaremZeichenVorJederNummer() {
+        // Baustein "Praxis" + U+200B + "LANR " + <LANR> + " " = 6 + 1 + 5 + 9 + 1 = 22 Zeichen. Je Wiederholung bilden
+        // die Teilstuecke "Praxis" und "LANR" einen Lauf (R-1); "LANR" ist Kontextwort, die Zahl steht direkt dahinter
+        // (0.95, sicher); "Praxis" vor dem Kontextwort des Laufs leert nur offene Segmente.
+        // r = (1 000 000 - 0 - 0 + 21) / 22 = 45 455 (22 * 45 455 = 1 000 010 >= 1 000 000,
+        // 22 * 45 454 = 999 988 < 1 000 000). Funde = r = 45 455, alle Typ LANR, sicher.
+        pruefeNachtragFall("b unsichtbares Zeichen", "", "Praxis\u200BLANR " + LANR_GUELTIG + " ", "", 45_455, 45_455,
+                ConfidenceLevel.SICHER);
+    }
+
+    @Test
+    void ak21_nachtragC_nummerierteListeUnterEinemKontextwort() {
+        // Text: Praefix "LANR:\n" (6 Zeichen), dann r mal "1. <LANR>\n" (3 + 9 + 1 = 13 Zeichen). Der Listenpunkt "1."
+        // am Zeilenanfang ist neutral (R-3, kein Fuellwort, kein Satzende), die einfachen Umbrueche beenden den Kontext
+        // nicht. Je Zeile ein Fund, bei weiterem Kontext (Umbruch) 0.80, wahrscheinlich.
+        // r = (1 000 000 - 6 - 0 + 13 - 1) / 13 = 1 000 006 / 13 = 76 923 (6 + 13 * 76 923 = 1 000 005 >= 1 000 000,
+        // 6 + 13 * 76 922 = 999 992 < 1 000 000). Funde = r = 76 923.
+        pruefeNachtragFall("c nummerierte Liste", "LANR:\n", "1. " + LANR_GUELTIG + "\n", "", 76_923, 76_923,
+                ConfidenceLevel.WAHRSCHEINLICH);
+    }
 }

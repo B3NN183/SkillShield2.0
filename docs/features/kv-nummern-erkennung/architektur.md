@@ -593,6 +593,14 @@ reviewer und security. Verbindlich ab Durchlauf 2:
   Nummern aus `SynthetischeKvNummern` (voll und erste sechs Ziffern) in `MARKER_TEILE` und `TEXT`; neue Fehlerpfade
   `L01 LanrRecognizer.detect(null)`, `L02 IkRecognizer.detect(null)`; `toString()` aller Funde mit Typ IK/LANR und aller
   drei Quellen je Typ ohne Marker; Quellen enthalten keine Ziffer.
+- **Nachtrag der Hauptsitzung (22.11.2026, aus der Prüfung von T-9):**
+  1. Unter `recognizer/kv` liegen fünf Klassen (`IkRecognizer`, `KvArt`, `KvCheckDigits`, `KvNumberScanner`,
+     `LanrRecognizer`), nicht vier; alle fünf stehen in `BEKANNT`.
+  2. Bekannte Grenze 14 (aus der Stichprobe von security, bisher ohne Test): gesperrt geschriebene Kontextwörter
+     (`L A N R`, `I K`) ergeben keinen Kontext.
+  3. Offene Folgepunkte (Schwere niedrig, kein Schutzverlust): einzelne `assertEquals` mit synthetischen Werten in
+     `RoundtripKorpusTest` und `KlartextFreiheitTest` (auch eine Bestandsstelle) auf `assertTrue(equals)` umstellen;
+     Negativ-Selbsttest für `assertTextfolgeGleich`; `laengsteZiffernkette` um U+2009/U+202F ergänzen.
 
 ### Zuordnung AK → Task
 

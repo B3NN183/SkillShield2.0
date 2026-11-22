@@ -44,6 +44,9 @@ class KvDifferenzTest {
     private static final LanrRecognizer LANR = new LanrRecognizer();
     private static final IkRecognizer IK = new IkRecognizer();
 
+    /** Feste Zahl der Waechtertreffer in Fuzz-Teil 1 (Ausnahme zur Testdatenregel, Nachtrag T-7). */
+    private static final int WAECHTERTREFFER_ALTFOLGE = 11;
+
     private static final String MAIL = "erika.beispiel@example.invalid";
     /** U+1F600 als Surrogatpaar. */
     private static final String EMOJI = "\uD83D\uDE00";
@@ -157,8 +160,24 @@ class KvDifferenzTest {
     @Test
     void ak19_teil1Altfolge_neuGleichAlt() {
         // Altfolge ohne KV-Bausteine: ohne KV-Kandidat ist neu = alt, keine Position geht verloren.
-        pruefe(RoundtripFuzzTest.SEED_TEXTE, texte(RoundtripFuzzTest.erzeuge(RoundtripFuzzTest.SEED_TEXTE)), false,
-                900, 0, 0, 0);
+        List<String> altfolge = texte(RoundtripFuzzTest.erzeuge(RoundtripFuzzTest.SEED_TEXTE));
+        pruefe(RoundtripFuzzTest.SEED_TEXTE, altfolge, false, 900, 0, 0, 0);
+    }
+
+    /**
+     * Dokumentierte Ausnahme (Plan, Nachtrag T-7 Punkt 1): Die Altfolge enthaelt genau 11 Texte, in denen der Waechter
+     * der Testdatenregel anschlaegt (gueltige Neunerfenster aus Dokumentations-IPs). Die Zahl ist fest; waechst sie,
+     * ist die Folge veraendert oder die Ausnahme ausgeweitet. Die Meldung nennt nur die Anzahl.
+     */
+    @Test
+    void ak19_teil1Altfolge_waechterTrifftGenauElfTexte() {
+        int treffer = 0;
+        for (String text : texte(RoundtripFuzzTest.erzeuge(RoundtripFuzzTest.SEED_TEXTE))) {
+            if (KvTestHilfen.neunerfenster(text, "00")[1] != 0) {
+                treffer++;
+            }
+        }
+        assertEquals(WAECHTERTREFFER_ALTFOLGE, treffer, "Waechtertreffer in Teil 1: " + treffer);
     }
 
     @Test
@@ -190,8 +209,8 @@ class KvDifferenzTest {
 
     /**
      * Korpus: Texte der Bauart des Roundtrip-Korpus (alle Pfadformen, E-Mail, IP, URL, Anfuehrungszeichen,
-     * Zeilenenden, Unicode, AK-7 (g)) und KV-Texte der Akzeptanzkriterien. Der Roundtrip-Korpus selbst haelt seine
-     * Texte nicht als Liste vor; T-9 ergaenzt ihn um KV-Faelle.
+     * Zeilenenden, Unicode, AK-7 (g)) und KV-Texte der Akzeptanzkriterien, dazu alle KV-Texte des Roundtrip-Korpus
+     * ({@code RoundtripKorpusTest.kvTexte()}, T-9).
      */
     static List<String> korpus() {
         List<String> t = new ArrayList<>();
@@ -246,6 +265,8 @@ class KvDifferenzTest {
         t.add("IK-" + IK_GUELTIG + "@example.invalid schrieb");
         t.add("LANR\n" + LANR_GUELTIG + "\nIK\r\n" + IK_GUELTIG);
         t.add(LANR_GUELTIG + " (LANR)");
+        // KV-Texte des Roundtrip-Korpus (gemeinsame Liste, T-9)
+        t.addAll(RoundtripKorpusTest.kvTexte());
         return t;
     }
 }

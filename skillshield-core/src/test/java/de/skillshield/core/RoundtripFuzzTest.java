@@ -34,7 +34,11 @@ import org.junit.jupiter.api.Test;
  * (Pfade aller elf Formen mit Backslashes, Leerzeichen, auch ungeschlossenen Anführungszeichen; E-Mail, IPv4, URLs
  * mit angehängtem Pfad in Anführungszeichen), Sonderzeichen, Unicode (auch außerhalb der BMP), Zeilenenden und
  * platzhalterähnlichen Mustern. Je Text: zufällige Teilmenge der Scan-Funde plus manuelle Funde, Pseudonymisierung,
- * Rückübersetzung. Teil 2: {@value #ANZAHL_EINGABEN} Zufallseingaben an {@code restore}.
+ * Rueckuebersetzung. Teil 1b ({@code SEED_TEXTE_KV}): {@value #ANZAHL_TEXTE} Texte mit KV-Bausteinen (alle
+ * Kontextwoerter, Trennerformen, U+00A0, Umbrueche, Aufzaehlung, nachgestellter Kontext, ungueltige Pruefziffer,
+ * Laengenabweichung, KV-Nummer in URL, Pfad und E-Mail, IK mit Dokumentations-IP), dieselben Eigenschaften wie Teil 1
+ * samt Schutzgarantie mit {@code TextScanner.standard().recognizers()} und Waechter der Testdatenregel; Teil 1 bleibt
+ * unveraendert (Hashwert {@link #HASH_TEIL_1}). Teil 2: {@value #ANZAHL_EINGABEN} Zufallseingaben an {@code restore}.
  *
  * <p>Der Lauf wird einmal ausgeführt ({@link #LAUF}); jede Eigenschaft ist ein eigener Test. Meldungen nennen nur
  * Startwert, Iteration und Anzahl, nie einen Text. Testdaten sind synthetisch. Nicht-ASCII-Zeichen stehen nur als
@@ -823,6 +827,24 @@ class RoundtripFuzzTest {
 
     // ------------------------------------------------------------------ Tests: Determinismus und Abdeckung
 
+    /**
+     * Vergleicht zwei Textfolgen. Die Meldung nennt nur Startwert und erste abweichende Iteration (nie Texte, anders
+     * als {@code assertEquals} auf Listen); die Erwartung ist unveraendert: gleiche Laenge, gleiche Texte.
+     */
+    private static void assertTextfolgeGleich(List<String> erwartet, List<String> ist, long seed, String name) {
+        int gemeinsam = Math.min(erwartet.size(), ist.size());
+        int erste = -1;
+        for (int i = 0; i < gemeinsam && erste < 0; i++) {
+            if (!erwartet.get(i).equals(ist.get(i))) {
+                erste = i;
+            }
+        }
+        if (erste < 0 && erwartet.size() != ist.size()) {
+            erste = gemeinsam;
+        }
+        assertEquals(-1, erste, name + ": Startwert " + seed + ", erste abweichende Iteration " + erste);
+    }
+
     @Test
     void ak45_zweiLaeufeMitDemselbenStartwertErzeugenDieselbeTextfolge() {
         List<String> a = new ArrayList<>();
@@ -835,7 +857,7 @@ class RoundtripFuzzTest {
         }
         assertEquals(ANZAHL_TEXTE, a.size());
         assertEquals(a.hashCode(), b.hashCode(), "Hashwert der Textfolge, Startwert " + SEED_TEXTE);
-        assertEquals(a, b, "Textfolge, Startwert " + SEED_TEXTE);
+        assertTextfolgeGleich(a, b, SEED_TEXTE, "Textfolge");
         List<String> anders = new ArrayList<>();
         for (Fall f : erzeuge(SEED_TEXTE + 1)) {
             anders.add(f.text());
@@ -902,7 +924,7 @@ class RoundtripFuzzTest {
             b.add(f.text());
         }
         assertEquals(ANZAHL_TEXTE, a.size());
-        assertEquals(a, b, "Teil 1b: Textfolge, Startwert " + SEED_TEXTE_KV);
+        assertTextfolgeGleich(a, b, SEED_TEXTE_KV, "Teil 1b: Textfolge");
         List<String> altfolge = new ArrayList<>();
         for (Fall f : erzeuge(SEED_TEXTE_KV)) {
             altfolge.add(f.text());

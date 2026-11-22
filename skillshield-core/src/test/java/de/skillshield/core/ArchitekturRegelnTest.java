@@ -58,7 +58,12 @@ class ArchitekturRegelnTest {
             "de/skillshield/core/model/Finding.java",
             "de/skillshield/core/recognizer/general/PathRecognizer.java",
             "de/skillshield/core/pseudonymize/Pseudonymizer.java",
-            "de/skillshield/core/reidentify/Reidentifier.java");
+            "de/skillshield/core/reidentify/Reidentifier.java",
+            "de/skillshield/core/recognizer/kv/IkRecognizer.java",
+            "de/skillshield/core/recognizer/kv/KvArt.java",
+            "de/skillshield/core/recognizer/kv/KvCheckDigits.java",
+            "de/skillshield/core/recognizer/kv/KvNumberScanner.java",
+            "de/skillshield/core/recognizer/kv/LanrRecognizer.java");
 
     private static final Pattern PAKET = Pattern.compile("(?m)^\\s*package\\s+([A-Za-z0-9_.]+)\\s*;");
 
