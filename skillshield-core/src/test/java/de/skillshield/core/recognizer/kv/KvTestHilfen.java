@@ -372,6 +372,96 @@ public final class KvTestHilfen {
         }
     }
 
+    // ------------------------------------------------------------------ Referenz fuer Sperrschrift (T-5, Orakel)
+
+    private static final List<String> SPERR_WOERTER_LANR = List.of("lanr", "lanrnr", "arztnummer", "arztnr");
+    private static final List<String> SPERR_WOERTER_IK = List.of("ik", "iknr", "iknummer", "institutionskennzeichen");
+
+    /**
+     * Unabhaengige Referenz zu den gesperrt geschriebenen Kontextwoertern (D-1, D-2; Plan T-5). Sie nutzt weder den
+     * Scanner noch den Vorgaenger und ist bewusst anders gebaut: Zuerst werden alle unsichtbaren Zeichen entfernt
+     * (mit Indexabbildung auf den Originaltext), dann werden einfache Folgen "Einzelbuchstabe, genau ein Trenner,
+     * Einzelbuchstabe, ..." gesucht. Ein Einzelbuchstabe ist ein Buchstabe, an den links und rechts kein Buchstabe
+     * (und kein Kombinationszeichen) grenzt. Zulaessige Trenner: Leerzeichen, NBSP, THIN, NNBSP, Punkt, Bindestrich,
+     * U+2011, U+2013. Eine Folge ist ein Kontextwort, wenn sie 2 bis 23 Buchstaben hat und ihre nach {@code A-Z}
+     * gefalteten Buchstaben genau einem Wort der Art entsprechen (andere Buchstaben passen nie). Laufzeit egal.
+     *
+     * @return je Fund {@code {Start, Ende}} im Originaltext, vom ersten Buchstaben bis hinter den letzten
+     */
+    static List<int[]> sperrKontextwoerterReferenz(String text, Art a) {
+        List<String> woerter = a.lanr ? SPERR_WOERTER_LANR : SPERR_WOERTER_IK;
+        int[] cp = new int[text.length()];
+        int[] ursprung = new int[text.length()];
+        int n = 0;
+        for (int i = 0; i < text.length();) {
+            int c = text.codePointAt(i);
+            if (!istUnsichtbarReferenz(c)) {
+                cp[n] = c;
+                ursprung[n] = i;
+                n++;
+            }
+            i += Character.charCount(c);
+        }
+        List<int[]> treffer = new ArrayList<>();
+        int i = 0;
+        while (i < n) {
+            if (!istEinzelbuchstabeReferenz(cp, n, i)) {
+                i++;
+                continue;
+            }
+            int letzter = i;
+            StringBuilder gefaltet = new StringBuilder();
+            gefaltet.append(faltungReferenz(cp[i]));
+            int anzahl = 1;
+            while (letzter + 2 < n && istSperrTrennerReferenz(cp[letzter + 1])
+                    && istEinzelbuchstabeReferenz(cp, n, letzter + 2)) {
+                letzter += 2;
+                anzahl++;
+                gefaltet.append(faltungReferenz(cp[letzter]));
+            }
+            if (anzahl >= 2 && anzahl <= 23 && woerter.contains(gefaltet.toString())) {
+                treffer.add(new int[] {ursprung[i], ursprung[letzter] + Character.charCount(cp[letzter])});
+            }
+            i = letzter + 1;
+        }
+        return treffer;
+    }
+
+    private static boolean istUnsichtbarReferenz(int c) {
+        return Character.getType(c) == Character.FORMAT || (c >= 0xFE00 && c <= 0xFE0F);
+    }
+
+    private static boolean istBuchstabeOderMarkReferenz(int c) {
+        int typ = Character.getType(c);
+        return Character.isLetter(c) || typ == Character.NON_SPACING_MARK || typ == Character.ENCLOSING_MARK
+                || typ == Character.COMBINING_SPACING_MARK;
+    }
+
+    private static boolean istEinzelbuchstabeReferenz(int[] cp, int n, int i) {
+        if (!Character.isLetter(cp[i])) {
+            return false;
+        }
+        boolean linksFrei = i == 0 || !istBuchstabeOderMarkReferenz(cp[i - 1]);
+        boolean rechtsFrei = i + 1 >= n || !istBuchstabeOderMarkReferenz(cp[i + 1]);
+        return linksFrei && rechtsFrei;
+    }
+
+    private static boolean istSperrTrennerReferenz(int c) {
+        return c == ' ' || c == NBSP || c == DUENN || c == SCHMAL_NBSP || c == '.' || c == '-'
+                || c == GESCH_BINDESTRICH || c == HALBGEVIERT;
+    }
+
+    /** Faltung nur fuer {@code A-Z}; jeder andere Buchstabe wird zu einem Zeichen, das in keinem Wort vorkommt. */
+    private static char faltungReferenz(int c) {
+        if (c >= 'A' && c <= 'Z') {
+            return (char) (c + 32);
+        }
+        if (c >= 'a' && c <= 'z') {
+            return (char) c;
+        }
+        return '?';
+    }
+
     static boolean istZiffer(char c) {
         return c >= '0' && c <= '9';
     }

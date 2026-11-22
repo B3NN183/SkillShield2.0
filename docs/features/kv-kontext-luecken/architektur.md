@@ -571,6 +571,12 @@ Nach jedem Task ist `mvn verify` im Wurzelverzeichnis grün. Pfade unter `skills
   Zeichen zwischen `I K` und der Nummer sowie bei `I K N IK M` (N 0,50, M bleibt 0,92). In 1,1 Mio. Zufallstexten gab
   es keinen anderen Mechanismus; die Abdeckung blieb in allen Fällen erhalten.
 - Alle übrigen Grenzen des Vorgängers (1–11, 13) unverändert.
+- **15. (Nachtrag 22.11.2026, Befund von security in T-3 und T-5; offen, Entscheidung liegt beim Nutzer):** Steht ein
+  unsichtbares Zeichen genau zwischen CR und LF (`KW:` CR unsichtbar LF `N`), zählt der Scanner zwei Zeilenumbrüche
+  statt einem; der Kontext erlischt, die Nummer bleibt ohne Fund. Das Verhalten stammt aus dem Vorfeature
+  (`kv-nummern-erkennung`, auch im eingefrorenen Vorgänger) und gilt ebenso hinter gesperrten Kontextwörtern. Ohne das
+  unsichtbare Zeichen gibt es den Fund mit 0,80. Die Eigenschaftstests aus T-5 sparen diese Position beim Einstreuen
+  aus. Behebung (CR + unsichtbare Zeichen + LF als ein Zeilenumbruch zählen) ist nicht Teil des freigegebenen Plans.
 
 ## 12. Risiken
 

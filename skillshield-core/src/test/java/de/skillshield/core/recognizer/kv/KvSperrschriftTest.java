@@ -3,6 +3,7 @@ package de.skillshield.core.recognizer.kv;
 import static de.skillshield.core.SynthetischeKvNummern.LAENGE_7;
 import static de.skillshield.core.recognizer.kv.KvTestHilfen.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -752,7 +753,7 @@ class KvSperrschriftTest {
         assertEin(IK, "I K ", gruppiert(IK.ungueltig, "-"), "", PZ_UNGUELTIG, IK.quellePruefziffer());
         // gleiche Konfidenz 0,50, aber unterscheidbar nur ueber die Quelle (Plan Hinweis 1)
         assertEquals(scan(IK, "I K " + IKN).get(0).confidence(), scan(IK, "I K " + IK.ungueltig).get(0).confidence());
-        assertTrue(!scan(IK, "I K " + IKN).get(0).source().equals(scan(IK, "I K " + IK.ungueltig).get(0).source()));
+        assertNotEquals(scan(IK, "I K " + IKN).get(0).source(), scan(IK, "I K " + IK.ungueltig).get(0).source());
     }
 
     @Test
@@ -949,8 +950,8 @@ class KvSperrschriftTest {
         String aufzaehlung = "I K " + IKN + " " + IKN2 + " IK";
         folgeNachNummer(aufzaehlung, new Erw(IKN, ZWEI), new Erw(IKN2, WAHRSCHEINLICH));
         assertAbdeckungGleich(aufzaehlung);
-        // ein Komma vor dem nachgestellten Kontextwort: Stand vor T-4 war 0,60 (der Vorgaenger kennt das Komma noch
-        // nicht); die Position bleibt abgedeckt, jetzt mit 0,50
+        // ein Komma vor dem nachgestellten Kontextwort: Stand nach T-2 war 0,60; der eingefrorene Vorgaenger ist
+        // aelter als T-2 und kennt die Komma-Regel nicht; die Position bleibt abgedeckt, jetzt mit 0,50
         String komma = "I K " + IKN + ", IK";
         folgeNachNummer(komma, new Erw(IKN, ZWEI));
         // danach ein weiteres Kontextwort mit eigener Nummer: 0,92
@@ -970,7 +971,7 @@ class KvSperrschriftTest {
     private static void assertAbdeckungGleich(String text) {
         List<Finding> alt = IK.vorgaenger.detect(text);
         List<Finding> neu = scan(IK, text);
-        assertEquals(alt.size(), neu.size(), "Anzahl Funde: " + text.length());
+        assertEquals(alt.size(), neu.size(), "Anzahl Funde alt gegen neu (Textlaenge " + text.length() + ")");
         for (int i = 0; i < alt.size(); i++) {
             assertEquals(alt.get(i).start(), neu.get(i).start(), "Start " + i);
             assertEquals(alt.get(i).end(), neu.get(i).end(), "Ende " + i);
