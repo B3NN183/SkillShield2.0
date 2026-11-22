@@ -13,10 +13,6 @@ import de.skillshield.core.pseudonymize.PseudonymizationResult;
 import de.skillshield.core.pseudonymize.Pseudonymizer;
 import de.skillshield.core.recognizer.Recognizer;
 import de.skillshield.core.recognizer.TextScanner;
-import de.skillshield.core.recognizer.general.EmailRecognizer;
-import de.skillshield.core.recognizer.general.Ipv4Recognizer;
-import de.skillshield.core.recognizer.general.PathRecognizer;
-import de.skillshield.core.recognizer.general.UrlRecognizer;
 import de.skillshield.core.reidentify.ReidentificationResult;
 import de.skillshield.core.reidentify.Reidentifier;
 import java.util.ArrayList;
@@ -72,8 +68,7 @@ class RoundtripFuzzTest {
     private static final Reidentifier REIDENTIFIER = new Reidentifier();
 
     /** Genau die Erkenner von {@code TextScanner.standard()}, in derselben Reihenfolge. */
-    private static final List<Recognizer> STANDARD_ERKENNER = List.of(new EmailRecognizer(), new Ipv4Recognizer(),
-            new UrlRecognizer(), new PathRecognizer());
+    private static final List<Recognizer> STANDARD_ERKENNER = TextScanner.standard().recognizers();
 
     private static Lauf LAUF;
 

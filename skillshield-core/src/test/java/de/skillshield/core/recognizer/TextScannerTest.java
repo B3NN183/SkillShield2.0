@@ -9,6 +9,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import de.skillshield.core.model.ConfidenceLevel;
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.model.FindingType;
+import de.skillshield.core.recognizer.general.EmailRecognizer;
+import de.skillshield.core.recognizer.general.Ipv4Recognizer;
+import de.skillshield.core.recognizer.general.PathRecognizer;
+import de.skillshield.core.recognizer.general.UrlRecognizer;
+import de.skillshield.core.recognizer.kv.IkRecognizer;
+import de.skillshield.core.recognizer.kv.LanrRecognizer;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -340,6 +346,28 @@ class TextScannerTest {
         NullPointerException npe = assertThrows(NullPointerException.class,
                 () -> new TextScanner(List.of((Recognizer) t -> null)).scan(text));
         assertFalse(String.valueOf(npe.getMessage()).contains(MARKER));
+    }
+
+    @Test
+    void ak22_abgleichErkennerlisteStandardEnthaeltAlleErkennerInFesterReihenfolge() {
+        // Folgepunkt T-18 des Vorgaengers: Fuzz- und Grenzlasttest nehmen ihre Liste aus recognizers(); fehlt kuenftig
+        // ein Standard-Erkenner oder aendert sich die Reihenfolge, schlaegt dieser Test fehl.
+        List<Class<?>> klassen = TextScanner.standard().recognizers().stream()
+                .<Class<?>>map(Object::getClass).toList();
+        assertEquals(List.of(EmailRecognizer.class, Ipv4Recognizer.class, UrlRecognizer.class, PathRecognizer.class,
+                LanrRecognizer.class, IkRecognizer.class), klassen);
+    }
+
+    @Test
+    void ak22_recognizersIstUnveraenderlichUndLiefertDieKopierteListe() {
+        List<Recognizer> liste = TextScanner.standard().recognizers();
+        assertThrows(UnsupportedOperationException.class, () -> liste.add(new EmailRecognizer()));
+        assertThrows(UnsupportedOperationException.class, () -> liste.remove(0));
+        assertThrows(UnsupportedOperationException.class, liste::clear);
+        Recognizer stub = stub(FindingType.TEXT, "xyz", 0.9, "stub");
+        TextScanner eigener = new TextScanner(List.of(stub));
+        assertEquals(List.of(stub), eigener.recognizers());
+        assertTrue(new TextScanner(List.of()).recognizers().isEmpty());
     }
 
     @Test

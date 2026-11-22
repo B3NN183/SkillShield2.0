@@ -532,6 +532,15 @@ reviewer und security. Verbindlich ab Durchlauf 2:
   Abgleichtest: Klassen von `TextScanner.standard().recognizers()` = `[EmailRecognizer, Ipv4Recognizer,
   UrlRecognizer, PathRecognizer, LanrRecognizer, IkRecognizer]` in dieser Reihenfolge; `recognizers()` ist
   unveränderlich. Alle bestehenden Tests grün ohne geänderte Erwartung.
+- **Nachtrag der Hauptsitzung (22.11.2026, aus der Sicherheitsprüfung von T-6, beide Punkte Schwere niedrig):**
+  1. Lesart von AK-19 („kein bisheriger Fund ändert sich“): **keine bisher abgedeckte Position geht verloren**.
+     Überlappt ein KV-Kandidat einen IP-, URL- oder Pfad-Fund, kann der zusammengelegte Fund nach der bestehenden
+     Regel (schwächste Konfidenz) auf „fraglich“ sinken und den Typ wechseln (`IK 2 198.51.100.1`). Der Differenztest
+     in T-7 prüft die Abdeckung. Vormerkung für das Oberflächen-Feature: zusammengelegte oder fragliche Funde nicht
+     standardmäßig abwählen.
+  2. Bekannte Grenze 13 (in T-9 als Fall im Roundtrip-Korpus festhalten): Ein wörtlich im Eingabetext stehender
+     Platzhalter mit mindestens sechs Ziffern (`[[IK_123456]]`) wird zerstückelt pseudonymisiert, weil `IK`/`LANR`
+     vor `_` als Kontextwort gilt; der Roundtrip bleibt zeichengleich, kein Klartext tritt aus.
 
 ### T-7: Fuzz mit KV-Formen und Differenztest
 - **Dateien**: `RoundtripFuzzTest.java`; neu `KvDifferenzTest.java` (Paket `de.skillshield.core`).

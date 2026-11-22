@@ -6,6 +6,8 @@ import de.skillshield.core.recognizer.general.EmailRecognizer;
 import de.skillshield.core.recognizer.general.Ipv4Recognizer;
 import de.skillshield.core.recognizer.general.PathRecognizer;
 import de.skillshield.core.recognizer.general.UrlRecognizer;
+import de.skillshield.core.recognizer.kv.IkRecognizer;
+import de.skillshield.core.recognizer.kv.LanrRecognizer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -34,12 +36,22 @@ public final class TextScanner {
     }
 
     /**
-     * Scanner mit den Standard-Erkennern (wächst mit den folgenden Tasks; bisher: E-Mail, IPv4, URL, Pfad
-     * (Laufwerkspfade)).
+     * Scanner mit den Standard-Erkennern in dieser Reihenfolge: E-Mail, IPv4, URL, Pfad, LANR, IK. Die Liste ist
+     * ueber {@link #recognizers()} lesbar.
      */
     public static TextScanner standard() {
         return new TextScanner(List.of(new EmailRecognizer(), new Ipv4Recognizer(), new UrlRecognizer(),
-                new PathRecognizer()));
+                new PathRecognizer(), new LanrRecognizer(), new IkRecognizer()));
+    }
+
+    /**
+     * Die Erkenner dieses Scanners in der Aufrufreihenfolge. Tests nehmen die Liste von
+     * {@code TextScanner.standard().recognizers()}, damit sie nicht von der Standardliste abweichen koennen.
+     *
+     * @return unveraenderliche Liste
+     */
+    public List<Recognizer> recognizers() {
+        return recognizers;
     }
 
     /**
