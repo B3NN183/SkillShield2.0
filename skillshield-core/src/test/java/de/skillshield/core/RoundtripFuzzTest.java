@@ -829,11 +829,10 @@ class RoundtripFuzzTest {
      * 0,80, {@code I K} 0,50 mit Quelle {@code ik}, Komma 0,60. Dann werden alle Scan-Funde pseudonymisiert und
      * geprueft, dass jeder Fund vollstaendig durch einen Platzhalter ersetzt ist. Zusaetzlich zaehlt die Klasse
      * {@code block-ohne-scan-abdeckung} die vermerkten Bloecke, die nicht als Grenze 14e markiert sind
-     * ({@link #erzeugeTextC}) und deren Nummernbereich von keinem Scan-Fund ganz abgedeckt ist. Das ist die
-     * offene Grenze 14h (Plan Kap. 11): laufender IK-Kontext, Vorwort, gesperrtes {@code I K}, Nachsatzwort,
-     * gueltige IK, z. B. {@code IK: Praxis I K Nr N}. Messwert 20 bei festem Seed, von security einzeln
-     * bestaetigt (alle IK); T-7 stellt die Erwartung auf 0 um (siehe
-     * {@code t6_kvC_blockOhneScanAbdeckung_nurOffeneGrenze14h}). Nicht geprueft werden die Konfidenz der
+     * ({@link #erzeugeTextC}) und deren Nummernbereich von keinem Scan-Fund ganz abgedeckt ist. Bis T-6 waren das
+     * 20 Bloecke mit dem Muster 14h (laufender IK-Kontext, Vorwort, gesperrtes {@code I K}, Nachsatzwort, gueltige
+     * IK, z. B. {@code IK: Praxis I K Nr N}); die Grenze ist in T-7a geschlossen, der Messwert ist 0 (siehe
+     * {@code t6_kvC_blockOhneScanAbdeckung_grenze14hGeschlossen}). Nicht geprueft werden die Konfidenz der
      * Abdeckung sowie Nummern ohne Vermerk (Gegenproben, ungueltige Formen).
      */
     private static void pruefeKvC(Lauf lauf, TextScanner scanner, int it, FallC fall) {
@@ -1540,11 +1539,14 @@ class RoundtripFuzzTest {
     }
 
     /**
-     * Mindestzahlen der Klassen (Messwerte bei festem Seed in Klammern, Abstand mindestens ein Drittel):
-     * Fund der neuen Regel je Blockart und Art (Sperrschrift ab drei Buchstaben 656 / LANR 446 / IK 388, I K 510,
-     * Komma 699 / LANR 452 / IK 464), Fund aus neuer Regel insgesamt 960 (Untergrenze 600), Funde je Typ
-     * (LANR 843, IK 939; je 500), fraglich 947 (500), Scan-Funde 998 (600), manuelle Funde 947 (500), echte
-     * Teilmengen der Scan-Funde 854 (500).
+     * Mindestzahlen der Klassen (Messwerte bei festem Seed in Klammern, Abstand mindestens ein Drittel; Stand nach
+     * T-7a, die Werte vor T-7a standen bei Sperrschrift ab drei Buchstaben 656 / IK 388, I K 510, Komma 699 / IK 464,
+     * insgesamt 960, IK 939, fraglich 947, manuelle Funde 947, echte Teilmengen 854): Fund der neuen Regel je
+     * Blockart und Art (Sperrschrift ab drei Buchstaben 659 / LANR 446 / IK 391, I K 507, Komma 698 / LANR 452 /
+     * IK 461), Fund aus neuer Regel insgesamt 961 (Untergrenze 600), Funde je Typ (LANR 843, IK 940; je 500),
+     * fraglich 948 (500), Scan-Funde 998 (600), manuelle Funde 944 (500), echte Teilmengen der Scan-Funde 866
+     * (500). Einzelne Zaehler sinken leicht (I K, Komma IK, manuelle Funde): Die Ursache sind Funde mit hoeherer
+     * Konfidenz; im Zufallsvergleich gegen den Stand T-6 ist kein Fund gesenkt oder verschwunden (T-7a).
      */
     @Test
     void t6_kvC_fuzzPruftNichtInsLeere_jedeKlasseKommtVor() {
@@ -1566,26 +1568,24 @@ class RoundtripFuzzTest {
     }
 
     /**
-     * OFFENE GRENZE 14h, wird in T-7 geschlossen; dann Erwartung auf 0 umdrehen (Plan Kap. 11, 14h). Die als
-     * 14e markierten Bloecke ohne Scan-Abdeckung (69: 53 Sperrbloecke hinter {@code " x "}, 16 Kommabloecke
-     * vor {@code " x "}) sind per Konstruktion markiert und zaehlen nicht. Die uebrigen Bloecke ohne Abdeckung
-     * haben alle das Muster 14h: laufender IK-Kontext, Vorwort, gesperrtes {@code I K}, Nachsatzwort, gueltige IK
-     * ({@code IK: Praxis I K Nr N}). Beim Konstruieren laesst sich "aktiver Kontext" nicht sicher bestimmen (er
-     * haengt von den Vorbausteinen, Trennern und Fuellwoertern ab), eine Markierung ist daher nicht sauber
-     * moeglich; stattdessen gilt der exakte Messwert bei festem Seed. Ein Wert ungleich 20 ist ein Befund.
+     * GRENZE 14h GESCHLOSSEN (T-7a, Plan Kap. 11). Die als 14e markierten Bloecke ohne Scan-Abdeckung (69: 53
+     * Sperrbloecke hinter {@code " x "}, 16 Kommabloecke vor {@code " x "}) sind per Konstruktion markiert und
+     * zaehlen nicht. Alle uebrigen Bloecke sind abgedeckt; vor T-7a waren es 20 mit dem Muster 14h (laufender
+     * IK-Kontext, Vorwort, gesperrtes {@code I K}, Nachsatzwort, gueltige IK, {@code IK: Praxis I K Nr N}). Ein
+     * Wert ungleich 0 ist ein Befund.
      */
     @Test
-    void t6_kvC_blockOhneScanAbdeckung_nurOffeneGrenze14h() {
-        assertEquals(20, LAUF_KV_C.klasse_("block-ohne-scan-abdeckung"),
-                "Bloecke ohne Scan-Abdeckung (offene Grenze 14h, T-7 stellt auf 0), Startwert " + SEED_TEXTE_KV_C);
+    void t6_kvC_blockOhneScanAbdeckung_grenze14hGeschlossen() {
+        assertEquals(0, LAUF_KV_C.klasse_("block-ohne-scan-abdeckung"),
+                "Bloecke ohne Scan-Abdeckung (Grenze 14h geschlossen), Startwert " + SEED_TEXTE_KV_C);
     }
 
-    /** Strukturbeleg 14h: nicht markierte Bloecke ohne Abdeckung nach Blockart und Art (T-7 stellt alle auf 0). */
+    /** Strukturbeleg 14h: nicht markierte Bloecke ohne Abdeckung nach Blockart und Art, alle 0. */
     @Test
     void t6_kvC_blockOhneScanAbdeckung_nachBlockartUndArt() {
         String basis = "block-ohne-scan-abdeckung-";
-        assertEquals(17, LAUF_KV_C.klasse_(basis + "sperr-zwei-ik"), "Sperrschrift zwei Buchstaben, IK");
-        assertEquals(3, LAUF_KV_C.klasse_(basis + "sperr-drei-ik"), "Sperrschrift ab drei Buchstaben, IK");
+        assertEquals(0, LAUF_KV_C.klasse_(basis + "sperr-zwei-ik"), "Sperrschrift zwei Buchstaben, IK");
+        assertEquals(0, LAUF_KV_C.klasse_(basis + "sperr-drei-ik"), "Sperrschrift ab drei Buchstaben, IK");
         assertEquals(0, LAUF_KV_C.klasse_(basis + "sperr-drei-lanr"), "Sperrschrift ab drei Buchstaben, LANR");
         assertEquals(0, LAUF_KV_C.klasse_(basis + "sperr-zwei-lanr"), "Sperrschrift zwei Buchstaben, LANR");
         assertEquals(0, LAUF_KV_C.klasse_(basis + "komma-lanr"), "Komma, LANR");

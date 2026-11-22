@@ -585,6 +585,35 @@ Nach jedem Task ist `mvn verify` im Wurzelverzeichnis grün. Pfade unter `skills
   Kap. 13 Hinweis 6). Bedingungen: kein bestehender Fund wird schwächer oder fällt weg (Differenzprüfung, einzige
   Ausnahme bleibt 14g), Laufzeit linear, Tests für die Formen oben samt Gegenproben (viertes echtes Füllwort bleibt
   „kein Fund“). In T-6 wird die Form im Fuzz-Teil 1c als offene Grenze geführt; T-7 stellt den Zähler auf 0.
+  **Ergänzung nach T-6 (security, Produktbefund P-1, Schwere „mittel“, kein Rückschritt gegenüber dem Vorgänger):**
+  T-7 wird geteilt. **T-7a** schließt nur 14h (Produkt + Tests), **T-7b** ist der ursprüngliche T-7. Pflichtfälle für
+  T-7a (heute alle ohne Fund, danach Fund mit der Konfidenz des laufenden Kontexts): (a) weitere Nachsatzformen
+  hinter `IK: Praxis I K…`: `-Nummer N`, ` Nummer N`, `: Nr N`, `-Nr: N`, ` Nr.: N`, ` Nr = N`, ` Nr. Nr N`;
+  (b) Punktform `IK: Praxis I.K. Nr. N`; (c) Kontext ohne Doppelpunkt, über eine Zeile oder mit anderem Kontextwort:
+  `IK Praxis I K Nr N`, `IK:` LF `Praxis I K Nr N`, `IK-Nr.: Praxis I K Nr N`, `IK: Hallo I K Nr N`, Kleinschreibung
+  `i k nr`; (d) nachgestellter Kontext davor: `N, IK` LF `Praxis I K-Nr. M`; (e) Aufzählung dahinter:
+  `IK: Praxis I K Nr N und M`, `… N, M` (beide Nummern wie in der Bestandsform ohne Nachsatzwort); (f) ohne Vorwort
+  mit einem Füllwort: `IK: I K Nr der N`. Gegenprobe: ein viertes echtes Füllwort bleibt „kein Fund“
+  (`IK: Praxis der Firma Nr N`). Hinweis von security: Robuster als die Nachsatz-Regel wäre, `I K` bei laufendem
+  IK-Kontext höchstens als ein Füllwort zu zählen; der engineer wählt die Variante, die alle Pflichtfälle erfüllt und
+  keinen Bestandsfund schwächt.
+  **Umsetzung in T-7a (22.11.2026):** Weder die Nachsatz-Regel allein noch „höchstens ein Füllwort“ erfüllt den
+  Pflichtfall ` Nr. Nr N` (jeweils vier Füllwörter). Umgesetzt ist deshalb: Bei laufendem IK-Kontext ist das
+  gesperrte `I K` **kein** Füllwort (die zwei für `I` und `K` gezählten Füllwörter werden zurückgegeben), und
+  unmittelbar hinter `I K` gilt – wie direkt hinter einem normalen Kontextwort – ein Nachsatzwort nicht als Füllwort
+  und ein Punkt nicht als Satzende (Merker `direktNachIk`, endet mit Füllwort, Nummer, Zeilenumbruch, Satzende,
+  neuem Kontext). Konfidenz, Deckel und `nurDirekt` des laufenden Kontexts bleiben unverändert (0,80). Folge: auch
+  Formen wie `IK: Praxis I K der Firma N` und `IK: Praxis I K . N` werden jetzt erkannt. Unverändert bleibt die
+  nicht monotone Restform `IK: der Praxis I K Nr N` → 0,50 (Kontext ist dort schon erloschen, `I K` beginnt neu;
+  die Nummer ist abgedeckt). Im LANR-Erkenner wirkt die Regel nicht.
+  **Restformen nach T-7a (security und reviewer, alle wie vor T-7a, keine Rückschritte):** (1) mehrere Vorwörter
+  vor `I K` (`IK: Praxis Firma I K Nr N`, `IK: Dr. med. Praxis I K Nr N`) → 0,50 statt 0,80, Nummer abgedeckt;
+  (2) Füllwort zwischen `I K` und Nachsatzwort (`IK: Praxis I K der Firma Nr N`) → kein Fund (viertes Füllwort);
+  (3) zwei Zeilenumbrüche seit dem Kontextwort (`IK:` LF `Praxis I K` LF `Nr N`) → kein Fund; (4) `IK: a b I K Nr N`
+  → kein Fund (14e). (5) Reichweite: Wiederholtes `I K` mit neutralem Zeichen dazwischen (`IK: I K, I K, … N`)
+  verlängert den laufenden Kontext beliebig; das kostet keinen Schutz, kann aber einen Fehlalarm mit 0,80 erzeugen.
+  (6) Auf Scanner-Ebene kann ein Pfad-Fund (0,80) mit einem 14g-IK-Fund (0,50) zu einem Fund mit 0,50
+  zusammengelegt werden (2 von 1,6 Mio. Zufallstexten, schon vor T-7a so); die Positionen bleiben abgedeckt.
 - **15. (Nachtrag 22.11.2026, Befund von security in T-3 und T-5; offen, Entscheidung liegt beim Nutzer):** Steht ein
   unsichtbares Zeichen genau zwischen CR und LF (`KW:` CR unsichtbar LF `N`), zählt der Scanner zwei Zeilenumbrüche
   statt einem; der Kontext erlischt, die Nummer bleibt ohne Fund. Das Verhalten stammt aus dem Vorfeature

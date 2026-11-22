@@ -17,7 +17,9 @@ import java.util.List;
  * erkannt wurde, hat nun hoechstens 0.50 statt 0.80 bzw. 0.60, z. B. {@code I K N (IK)}, {@code I K N, IK},
  * {@code I K N1 N2 IK} (nur N1), {@code I K N IK M} (N 0.50, M 0.92); die Position bleibt abgedeckt),
  * ungueltig 0.50 (Quelle {@value #SOURCE_PRUEFZIFFER_UNGUELTIG}), Laenge 6 bis 12 ausser neun 0.40 (Quelle
- * {@value #SOURCE_LAENGE_ABWEICHEND}). Der Fund umfasst nur die Ziffern samt inneren Trennern.
+ * {@value #SOURCE_LAENGE_ABWEICHEND}). Bei bereits laufendem Kontext ist {@code I K} kein Fuellwort, und ein
+ * Nachsatzwort dahinter ist es ebenfalls nicht ({@code IK: Praxis I K Nr N}: 0.80, Grenze 14h geschlossen). Der Fund
+ * umfasst nur die Ziffern samt inneren Trennern.
  *
  * <p>Der Erkenner ist zustandslos und deterministisch; die Regeln und der Linearitaetsbeleg stehen im Javadoc von
  * {@link KvNumberScanner}. Es entsteht kein Netz- oder Dateizugriff, und Meldungen enthalten keinen Text.

@@ -1009,10 +1009,31 @@ class RoundtripKorpusTest {
         f.add(kein("bekannteGrenze14e-x-y-ik", "X Y I K " + IK_GUELTIG));
         f.add(ein("bekannteGrenze14g-ik-nachgestellt-ik", "I K ", IK_GUELTIG, "IK", " (IK)"));
         f.add(ein("bekannteGrenze14g-ik-komma-ik", "I K ", IK_GUELTIG, "IK", ", IK"));
-        // 14h: laufender IK-Kontext, Vorwort, gesperrtes I K, Nachsatzwort, gueltige IK -> heute kein Fund;
-        // offene Grenze, wird in T-7 geschlossen (dann ein(...) mit Konfidenz des laufenden Kontexts)
-        f.add(kein("bekannteGrenze14h-ik-praxis-sperr-nr", "IK: Praxis I K Nr " + IK_GUELTIG));
-        f.add(kein("bekannteGrenze14h-iknr-der-sperr-nr", "IKNR, der I K-Nr. " + IK_GUELTIG));
+        // 14h geschlossen (T-7a): laufender IK-Kontext, Vorwort, gesperrtes I K, Nachsatzwort, gueltige IK -> Fund
+        f.add(ein("kl-14h-geschlossen-ik-praxis-sperr-nr", "IK: Praxis I K Nr ", IK_GUELTIG, "IK", ""));
+        f.add(ein("kl-14h-geschlossen-iknr-der-sperr-nr", "IKNR, der I K-Nr. ", IK_GUELTIG, "IK", ""));
+        f.add(ein("kl-14h-geschlossen-nummer", "IK: Praxis I K-Nummer ", IK_GUELTIG, "IK", ""));
+        f.add(ein("kl-14h-geschlossen-doppelpunkt-nr", "IK: Praxis I K: Nr ", IK_GUELTIG, "IK", ""));
+        f.add(ein("kl-14h-geschlossen-nr-punkt-nr", "IK: Praxis I K Nr. Nr ", IK_GUELTIG, "IK", ""));
+        f.add(ein("kl-14h-geschlossen-punktform", "IK: Praxis I.K. Nr. ", IK_GUELTIG, "IK", ""));
+        f.add(ein("kl-14h-geschlossen-ohne-doppelpunkt", "IK Praxis I K Nr ", IK_GUELTIG, "IK", ""));
+        f.add(ein("kl-14h-geschlossen-ueber-zeile", "IK:\nPraxis I K Nr ", IK_GUELTIG, "IK", ""));
+        f.add(ein("kl-14h-geschlossen-anderes-kontextwort", "IK-Nr.: Praxis I K Nr ", IK_GUELTIG, "IK", ""));
+        f.add(ein("kl-14h-geschlossen-kleinschreibung", "IK: Praxis i k nr ", IK_GUELTIG, "IK", ""));
+        f.add(ein("kl-14h-geschlossen-ohne-vorwort", "IK: I K Nr der ", IK_GUELTIG, "IK", ""));
+        f.add(kvFall("kl-14h-geschlossen-nachgestellter-kontext-davor",
+                IK_GUELTIG + ", IK\nPraxis I K-Nr. " + IK_GUELTIG_ZWEI,
+                "[[IK_1]], IK\nPraxis I K-Nr. [[IK_2]]", "IK,IK"));
+        f.add(kvFall("kl-14h-geschlossen-aufzaehlung-und",
+                "IK: Praxis I K Nr " + IK_GUELTIG + " und " + IK_GUELTIG_ZWEI,
+                "IK: Praxis I K Nr [[IK_1]] und [[IK_2]]", "IK,IK"));
+        f.add(kvFall("kl-14h-geschlossen-aufzaehlung-komma",
+                "IK: Praxis I K Nr " + IK_GUELTIG + ", " + IK_GUELTIG_ZWEI,
+                "IK: Praxis I K Nr [[IK_1]], [[IK_2]]", "IK,IK"));
+        f.add(ein("kl-14h-geschlossen-ungueltig", "IK: Praxis I K Nr ", IK_UNGUELTIG_KOMPLEMENT, "IK", ""));
+        f.add(kein("kl-14h-gegenprobe-viertes-fuellwort", "IK: Praxis der Firma Nr " + IK_GUELTIG));
+        f.add(kein("kl-14h-gegenprobe-fuellwoerter-hinter-nachsatz",
+                "IK: Praxis I K Nr der Firma Hallo " + IK_GUELTIG));
         // Roundtrip mit Sperrschrift neben anderen Funden und Umgebung
         f.add(kvFall("kl-sperr-neben-mail-und-ip", "Mail " + MAIL + ", L A N R " + LANR_GUELTIG + ", Server 192.0.2.10",
                 "Mail [[EMAIL_1]], L A N R [[LANR_2]], Server [[IP_3]]", "EMAIL,LANR,IP"));

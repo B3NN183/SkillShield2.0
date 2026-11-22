@@ -79,13 +79,20 @@ import java.util.Set;
  * gesetzt: Der Kontext endet ({@code aktiv = false}), sobald {@code direkt} verloren geht, also bei einem
  * Fuellwort, einem ausgegebenen Segment (keine Aufzaehlung) und einem Zeilenumbruch; ein Nachsatzwort
  * ({@code I K-Nr.}), {@code :}, {@code =} und Leerraum bleiben erlaubt. Die Buchstaben selbst werden
- * unveraendert je als Fuellwort verarbeitet; das Ereignis kommt nur hinzu. Ein laufender Kontext bleibt
- * unveraendert. Der Verfolger hat drei Zustaende: keine Folge, zuletzt ein Einzelbuchstabe, danach genau ein
- * Sperr-Trenner. Ein Lauf hinter einem Trenner wird vorab (Vorgriff,
- * hoechstens bis zum zweiten Buchstaben) auf Einzelbuchstabe geprueft: Ist er einer, wird er angehaengt, sonst endet
- * die Folge vor seiner Verarbeitung, damit ein Nachsatzwort ({@code L A N R-Nummer}) im direkten Kontext liegt. Das
- * Abbild wird bei jedem Laufanfang ohne laufende Folge neu gespeichert. Ein normales Kontextwort setzt Deckel 1,0
- * und {@code nurDirekt = false} ({@code I K IK N}: 0,92).</li>
+ * unveraendert je als Fuellwort verarbeitet; das Ereignis kommt nur hinzu. Bei laufendem Kontext
+ * ({@code aktiv}, Grenze 14h, geschlossen) bleiben Deckel, {@code direkt} und {@code nurDirekt} unveraendert, aber
+ * {@code I K} ist dort kein Fuellwort: die beiden gezaehlten Fuellwoerter werden zurueckgegeben ({@code woerter}
+ * sinkt um zwei), und unmittelbar dahinter gelten ein Nachsatzwort (kein Fuellwort) und ein Punkt (kein Satzende)
+ * wie bei {@code direkt} (Merker {@code direktNachIk}; die Konfidenz wird dadurch nicht gehoben). Der Merker endet
+ * mit {@code direkt}-Verlust, Satzende und neuem Kontext. Ist der Kontext schon erloschen (viertes Fuellwort vor
+ * oder in {@code I K}), gilt das Ereignis wie ohne laufenden Kontext.
+ * Fuer LANR gibt es kein Zwei-Buchstaben-Kontextwort; dort aendert sich nichts.
+ * Der Verfolger hat drei Zustaende: keine Folge, zuletzt ein Einzelbuchstabe, danach genau ein Sperr-Trenner. Ein
+ * Lauf hinter einem Trenner wird vorab (Vorgriff, hoechstens bis zum zweiten Buchstaben) auf Einzelbuchstabe
+ * geprueft: Ist er einer, wird er angehaengt, sonst endet die Folge vor seiner Verarbeitung, damit ein Nachsatzwort
+ * ({@code L A N R-Nummer}) im direkten Kontext liegt. Das Abbild wird bei jedem Laufanfang ohne laufende Folge neu
+ * gespeichert. Ein normales Kontextwort setzt Deckel 1,0 und {@code nurDirekt = false} ({@code I K IK N}:
+ * 0,92).</li>
  * <li>Segment bei {@code aktiv}: wird ausgegeben; danach {@code direkt = false}, {@code woerter = umbrueche = 0}
  * (Aufzaehlung, auch zeilenweise). Segment ohne {@code aktiv}: wird offen (siehe unten).</li>
  * <li>Fuellwort (Wort, Ziffernblock ohne Segment, Nachsatzwort ausserhalb von {@code direkt}): {@code woerter++},
@@ -94,13 +101,15 @@ import java.util.Set;
  * die hinter dem letzten Kontextwort (ohne dessen Nachsatzwort) zaehlen zusammen als genau ein Fuellwort. Ein Lauf
  * ganz ohne Kontextwort zaehlt als genau ein Fuellwort.</li>
  * <li>Nachsatzwort ({@code nr}, {@code nummer}, auch aus mehreren Teilstuecken): Unmittelbar hinter einem
- * Kontextwort ({@code direkt}), im selben oder im folgenden Lauf, ist es kein Fuellwort.</li>
- * <li>{@code .}: bei {@code aktiv} und nicht {@code direkt} Satzende ({@code aktiv = false}). Kein Satzende ist
- * der Punkt direkt hinter dem Kontextwort ({@code LANR-Nr.}) und der Abkuerzungspunkt unmittelbar hinter einem Lauf
- * mit Buchstaben aus hoechstens vier Buchstaben ({@code Dr.}, {@code e.V.}, {@code Prof.}); das Wort zaehlt
- * weiter als Fuellwort. Ein ein- bis zweistelliger Ziffernblock, der das erste Zeichen seiner Zeile nach
- * optionalem Leerraum ist und dem unmittelbar ein {@code .} folgt, das nicht Gruppentrenner einer Kette ist, ist
- * samt Punkt neutral (nummerierte Liste). {@code !} und {@code ?}: {@code aktiv = false}.</li>
+ * Kontextwort ({@code direkt}) oder hinter {@code I K} bei laufendem Kontext ({@code direktNachIk}), im selben
+ * oder im folgenden Lauf, ist es kein Fuellwort.</li>
+ * <li>{@code .}: bei {@code aktiv} und nicht {@code direkt} (auch nicht {@code direktNachIk}) Satzende
+ * ({@code aktiv = false}). Kein Satzende ist der Punkt direkt hinter dem Kontextwort ({@code LANR-Nr.}) und der
+ * Abkuerzungspunkt unmittelbar hinter einem Lauf mit Buchstaben aus hoechstens vier Buchstaben ({@code Dr.},
+ * {@code e.V.}, {@code Prof.}); das Wort zaehlt weiter als Fuellwort. Ein ein- bis zweistelliger Ziffernblock, der
+ * das erste Zeichen seiner Zeile nach optionalem Leerraum ist und dem unmittelbar ein {@code .} folgt, das nicht
+ * Gruppentrenner einer Kette ist, ist samt Punkt neutral (nummerierte Liste). {@code !} und {@code ?}: {@code aktiv =
+ * false}.</li>
  * <li>Zeilenumbruch: bei {@code aktiv} {@code umbrueche++}, {@code direkt = false}; bei mehr als einem Umbruch
  * {@code aktiv = false} (Leerzeile).</li>
  * </ul>
@@ -328,6 +337,12 @@ final class KvNumberScanner {
         private double kontextDeckel = KEIN_DECKEL;
         /** D-3: Der Kontext endet, sobald {@code direkt} verloren geht (gesetzt nur durch {@code I K}). */
         private boolean nurDirekt;
+        /**
+         * 14h: {@code I K} bei laufendem Kontext hat {@code direkt} nicht gesetzt (die Konfidenz bleibt die des
+         * Kontexts), aber unmittelbar dahinter gilt der Kontext wie {@code direkt} fuer das Nachsatzwort (kein
+         * Fuellwort) und den Punkt (kein Satzende), wie beim frischen Kontext von {@code I K}.
+         */
+        private boolean direktNachIk;
 
         /** Offene Segmente als Tripel (Start, Ende, Ziffernzahl). */
         private int[] offenDaten = new int[12];
@@ -447,11 +462,13 @@ final class KvNumberScanner {
             umbrueche = 0;
             kontextDeckel = deckel;
             nurDirekt = nurDirektKontext;
+            direktNachIk = false;
         }
 
         /** Verliert der Kontext {@code direkt}, endet ein nur-direkter Kontext (D-3). */
         private void direktVerloren() {
             direkt = false;
+            direktNachIk = false;
             if (nurDirekt) {
                 aktiv = false;
             }
@@ -489,8 +506,9 @@ final class KvNumberScanner {
             zeilenanfang = false;
             offenLeeren();
             boolean abkuerzung = index == laufEnde && laufBuchstaben >= 1 && laufBuchstaben <= MAX_ABKUERZUNG;
-            if (aktiv && !direkt && !abkuerzung) {
+            if (aktiv && !direkt && !direktNachIk && !abkuerzung) {
                 aktiv = false;
+                direktNachIk = false;
             }
         }
 
@@ -499,6 +517,7 @@ final class KvNumberScanner {
             offenLeeren();
             aktiv = false;
             direkt = false;
+            direktNachIk = false;
         }
 
         private void zeilenumbruch() {
@@ -652,8 +671,14 @@ final class KvNumberScanner {
             boolean verfolgt = sperrZustand != SPERR_KEINE;
             sperrZustand = SPERR_KEINE;
             sperrLaenge = 0;
-            if (!verfolgt || aktiv || laenge < MIN_SPERR_BUCHSTABEN || laenge > MAX_KONTEXTWORT
+            if (!verfolgt || laenge < MIN_SPERR_BUCHSTABEN || laenge > MAX_KONTEXTWORT
                     || !kontextLaenge[laenge] || !istKontextwort(laenge)) {
+                return;
+            }
+            if (aktiv) {
+                if (laenge == MIN_SPERR_BUCHSTABEN) {
+                    ikBeiLaufendemKontext();
+                }
                 return;
             }
             if (laenge == MIN_SPERR_BUCHSTABEN) {
@@ -663,6 +688,16 @@ final class KvNumberScanner {
             abbildWiederherstellen();
             offenNachgestelltAusgeben();
             kontextBeginnen(CONFIDENCE_SPERRSCHRIFT, false);
+        }
+
+        /**
+         * 14h: {@code I K} bei laufendem Kontext. Die zwei Einzelbuchstaben wurden als Fuellwoerter gezaehlt; sie
+         * werden zurueckgegeben (ein Wort der Art, kein Fuellwort), und ein Nachsatzwort unmittelbar dahinter ist
+         * kein Fuellwort. Deckel, {@code direkt} und {@code nurDirekt} bleiben unveraendert.
+         */
+        private void ikBeiLaufendemKontext() {
+            woerter = Math.max(0, woerter - MIN_SPERR_BUCHSTABEN);
+            direktNachIk = true;
         }
 
         /** Merkt die offenen Segmente samt Luecken-Merkern (sechs Werte) zu Beginn einer moeglichen Sperrfolge. */
@@ -702,7 +737,7 @@ final class KvNumberScanner {
             fensterLaenge = 0;
             teilstueckAnfaenge = 0;
             buchstaben = 0;
-            kontextImLauf = direkt; // direkt: ein Nachsatzwort darf folgen
+            kontextImLauf = direkt || direktNachIk; // ein Nachsatzwort darf folgen
             seitKontext = 0;
             restBuchstabe = false;
             restWiderspruch = false;

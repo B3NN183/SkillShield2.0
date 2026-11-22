@@ -3,6 +3,7 @@ package de.skillshield.core.recognizer.kv;
 import static de.skillshield.core.SynthetischeKvNummern.LAENGE_7;
 import static de.skillshield.core.recognizer.kv.KvTestHilfen.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -1045,6 +1046,165 @@ class KvSperrschriftTest {
         assertEquals(4, klein.size());
         for (Finding f : klein) {
             assertEquals(ZWEI, f.confidence());
+            assertEquals("ik", f.source());
+        }
+    }
+
+    // ------------------------------------------------------------------ T-7a: Grenze 14h geschlossen
+
+    /** Nachsatzformen hinter {@code IK: Praxis I K}, jede mit gueltiger IK und dem Kontext 0,80 (Pflichtfall a). */
+    private static final String[] T7A_NACHSATZ = {" Nr ", "-Nr. ", "-Nummer ", " Nummer ", ": Nr ", "-Nr: ", " Nr.: ",
+        " Nr = ", " Nr. Nr "};
+
+    @Test
+    void t7a_a_weitereNachsatzformenHinterLaufendemKontext_fundMitKontextKonfidenz() {
+        for (String nachsatz : T7A_NACHSATZ) {
+            String vor = "IK: Praxis I K" + nachsatz;
+            assertEin(IK, vor, IKN, "", WAHRSCHEINLICH, "ik");
+            assertEin(IK, "IKNR, der I K" + nachsatz, IKN, "", WAHRSCHEINLICH, "ik");
+        }
+    }
+
+    @Test
+    void t7a_b_punktform() {
+        assertEin(IK, "IK: Praxis I.K. Nr. ", IKN, "", WAHRSCHEINLICH, "ik");
+        assertEin(IK, "IK: Praxis I.K.-Nr. ", IKN, "", WAHRSCHEINLICH, "ik");
+        assertEin(IK, "IK: Praxis I-K Nr ", IKN, "", WAHRSCHEINLICH, "ik");
+    }
+
+    @Test
+    void t7a_c_kontextOhneDoppelpunktUeberZeileOderAnderesKontextwort() {
+        String[] vor = {"IK Praxis I K Nr ", "IK:\nPraxis I K Nr ", "IK-Nr.: Praxis I K Nr ", "IK: Hallo I K Nr ",
+            "IK: Praxis i k nr ", "Institutionskennzeichen: Praxis I K Nr ", "IKNR Praxis I K Nr ",
+            "I K N R Praxis I K Nr "};
+        for (String v : vor) {
+            assertEin(IK, v, IKN, "", WAHRSCHEINLICH, "ik");
+        }
+    }
+
+    @Test
+    void t7a_d_nachgestellterKontextDavor() {
+        folgeNachNummer(IKN + ", IK\nPraxis I K-Nr. " + IKN2, new Erw(IKN, KOMMA), new Erw(IKN2, WAHRSCHEINLICH));
+        folgeNachNummer(IKN + " IK\nPraxis I K-Nr. " + IKN2, new Erw(IKN, WAHRSCHEINLICH),
+                new Erw(IKN2, WAHRSCHEINLICH));
+    }
+
+    @Test
+    void t7a_e_aufzaehlungDahinter_wieInDerBestandsformOhneNachsatzwort() {
+        for (String trenner : new String[] {" und ", ", "}) {
+            List<Finding> mit = scan(IK, "IK: Praxis I K Nr " + IKN + trenner + IKN2);
+            List<Finding> ohne = scan(IK, "IK: Praxis I K " + IKN + trenner + IKN2);
+            assertEquals(2, ohne.size(), "Bestandsform");
+            assertEquals(2, mit.size(), "mit Nachsatzwort");
+            for (int i = 0; i < 2; i++) {
+                assertEquals(ohne.get(i).originalValue(), mit.get(i).originalValue());
+                assertEquals(WAHRSCHEINLICH, mit.get(i).confidence());
+                assertEquals(ohne.get(i).confidence(), mit.get(i).confidence());
+                assertEquals(ohne.get(i).source(), mit.get(i).source());
+            }
+        }
+    }
+
+    @Test
+    void t7a_f_ohneVorwortMitEinemFuellwort() {
+        assertEin(IK, "IK: I K Nr der ", IKN, "", WAHRSCHEINLICH, "ik");
+        assertEin(IK, "IK: I K Nr der Firma ", IKN, "", WAHRSCHEINLICH, "ik");
+        assertEin(IK, "IK: I K Nr ", IKN, "", WAHRSCHEINLICH, "ik");
+    }
+
+    @Test
+    void t7a_ungueltigeNummerUndLaenge_behaltenIhreStufe() {
+        assertEin(IK, "IK: Praxis I K Nr ", IK.ungueltig, "", PZ_UNGUELTIG, IK.quellePruefziffer());
+        assertEin(IK, "IK: Praxis I K Nr ", LAENGE_7, "", LAENGE, IK.quelleLaenge());
+        assertEin(IK, "IK: Praxis I K-Nummer ", IK.ungueltig, "", PZ_UNGUELTIG, IK.quellePruefziffer());
+        assertEin(IK, "IK: Praxis I K-Nummer ", LAENGE_7, "", LAENGE, IK.quelleLaenge());
+    }
+
+    @Test
+    void t7a_gegenproben_keinFund() {
+        // ein viertes echtes Fuellwort
+        assertKein(IK, "IK: Praxis der Firma Nr " + IKN);
+        assertKein(IK, "IK: Praxis I K Nr der Firma Hallo " + IKN);
+        // die Befreiung gilt nur unmittelbar hinter I K
+        assertKein(IK, "IK: Praxis I K der Nr Nr " + IKN);
+        assertKein(IK, "IK: Praxis I K! Nr " + IKN);
+        assertKein(IK, "IK: Praxis I K Nr\n\n" + IKN);
+        // Kontext vor I K erloschen: das Wort hinter dem Nachsatzwort beendet den neuen Kontext
+        assertKein(IK, "IK: Praxis der I K Nr der " + IKN);
+    }
+
+    @Test
+    void t7a_punktHinterIKBeiLaufendemKontext_istKeinSatzende() {
+        // wie beim frischen Kontext von I K: der Punkt unmittelbar dahinter beendet den Kontext nicht
+        assertEin(IK, "IK: Praxis I K . ", IKN, "", WAHRSCHEINLICH, "ik");
+        assertEin(IK, "IK: I.K. . ", IKN, "", WAHRSCHEINLICH, "ik");
+        // Fund aus dem Zufallsvergleich gegen den Stand T-6: der Kontext laeuft ueber I K mit ZWSP, mehrere I.K.-Folgen
+        assertEin(IK, "I" + ZWSP + "K Nr. I.K. I.K. I.K. . ", IKN, "", WAHRSCHEINLICH, "ik");
+        // ein Satzende zwischen I K und der Nummer beendet den Kontext weiterhin
+        assertKein(IK, "IK: Praxis I K Nr . x . " + IKN);
+    }
+
+    @Test
+    void t7a_iKOhneLaufendenKontext_bleibtWieBisher() {
+        zwei("der I K Nr ", IKN, "");
+        zwei("I K Nr ", IKN, "");
+        // Kontext schon vor I K erloschen (viertes Fuellwort): I K beginnt neu, 0,50 (nicht monoton, bekannt)
+        zwei("IK: der Praxis I K Nr ", IKN, "");
+    }
+
+    @Test
+    void t7a_merkerEndetMitDemFund_nachsatzwoerterDanachZaehlenWieder() {
+        // nach dem Fund endet der Merker: Nachsatzwoerter dahinter sind Fuellwoerter (vier beenden den Kontext)
+        folgeNachNummer("IK: Praxis I K Nr " + IKN + " IK " + IKN2, new Erw(IKN, WAHRSCHEINLICH),
+                new Erw(IKN2, IK.sicher));
+        folgeNachNummer("IK: Praxis I K Nr " + IKN + " Nr Nr Nr Nr " + IKN2, new Erw(IKN, WAHRSCHEINLICH));
+        folgeNachNummer("IK: Praxis I K Nr " + IKN + " Nr Nr Nr " + IKN2, new Erw(IKN, WAHRSCHEINLICH),
+                new Erw(IKN2, WAHRSCHEINLICH));
+    }
+
+    @Test
+    void t7a_imLanrErkennerAendertSichNichts() {
+        String g = LANR_ART.gueltig;
+        assertKein(LANR_ART, "LANR: Praxis I K Nr " + g);
+        assertKein(LANR_ART, "LANR: Praxis I K-Nr. " + g);
+        assertKein(LANR_ART, "I K Nr " + g);
+        assertEin(LANR_ART, "LANR: Praxis I K ", g, "", WAHRSCHEINLICH);
+        assertEin(LANR_ART, "LANR: I K Nr ", g, "", WAHRSCHEINLICH);
+    }
+
+    @Test
+    void t7a_invarianzGegenEingestreutesZwsp() {
+        String[] basis = {"IK: Praxis I K Nr " + IKN, "IK: Praxis I.K. Nr. " + IKN, "IK:\nPraxis I K-Nr. " + IKN,
+            "IK: I K Nr der " + IKN, "IK: Praxis I K Nr " + IKN + " und " + IKN2, IKN + ", IK\nPraxis I K-Nr. " + IKN2,
+            "IK: Praxis i k nr: " + IKN};
+        for (int t = 0; t < basis.length; t++) {
+            String text = basis[t];
+            List<Finding> ohne = scan(IK, text);
+            assertFalse(ohne.isEmpty(), "Grundtext " + t);
+            for (int p = 0; p <= text.length(); p++) {
+                if (p > 0 && p < text.length() && istZiffer(text.charAt(p - 1)) && istZiffer(text.charAt(p))) {
+                    continue;
+                }
+                List<Finding> funde = scan(IK, text.substring(0, p) + ZWSP + text.substring(p));
+                assertEquals(ohne.size(), funde.size(), "Fundzahl bei Einstreuung an Stelle " + p + " in Text " + t);
+                for (int k = 0; k < ohne.size(); k++) {
+                    assertEquals(ohne.get(k).originalValue(), funde.get(k).originalValue());
+                    assertEquals(ohne.get(k).confidence(), funde.get(k).confidence(), "Konfidenz");
+                }
+            }
+        }
+    }
+
+    @Test
+    void t7a_laufzeit_laufenderKontextMitIKUndNachsatzWiederholt_jedeNummerEinFund() {
+        String baustein = "IK: Praxis I K Nr " + IKN + " ";
+        int r = wiederholungen(1_000_000, "", baustein, "");
+        assertTrue(baustein.length() * r >= 1_000_000, "Mindestlaenge");
+        laufzeit(IK, "", baustein, "", r, r + " Funde: je Wiederholung eine Nummer, alle 0,80");
+        List<Finding> klein = scan(IK, baustein.repeat(4));
+        assertEquals(4, klein.size());
+        for (Finding f : klein) {
+            assertEquals(WAHRSCHEINLICH, f.confidence());
             assertEquals("ik", f.source());
         }
     }
