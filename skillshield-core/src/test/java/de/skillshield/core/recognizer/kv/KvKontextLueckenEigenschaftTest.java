@@ -43,9 +43,10 @@ import org.junit.jupiter.api.Test;
  * <p><b>Ausgespart beim Einstreuen (bekannte, dokumentierte Ausnahmen):</b> Positionen zwischen zwei Buchstaben
  * (ein Formatzeichen mitten im Wort bildet dort einen Lauf mit mehreren Buchstaben: bei einer Sperrfolge die Teilgruppe
  * der Grenze 14a, bei einem normalen Wort ein R-1-Teilstueck, das als Kontextwort gelten oder eines zerstoeren
- * kann), Positionen im Inneren einer Nummer (Grenze 7: Ziffernkette) und die Position zwischen CR und LF (Plan
- * Kap. 11 Nr. 15: dort zaehlt der Scanner zwei Zeilenumbrueche; Vorfeature-Verhalten, offen). Positionen unmittelbar
- * vor und hinter einer Nummer sind zulaessig; Positionen innerhalb eines Surrogatpaars werden nie gewaehlt.
+ * kann) und Positionen im Inneren einer Nummer (Grenze 7: Ziffernkette). Die Position zwischen CR und LF ist nicht
+ * mehr ausgespart (Feature kv-trenner-und-umbruch, AK-6, D-1: CR, unsichtbare Zeichen, LF sind ein Umbruch); die
+ * Zaehler {@code e.zwischenCrLf*} belegen, dass dort wirklich eingestreut wird. Positionen unmittelbar vor und
+ * hinter einer Nummer sind zulaessig; Positionen innerhalb eines Surrogatpaars werden nie gewaehlt.
  *
  * <p>Testdatenregel: Nummern kommen aus {@code bilde...} (Praefix {@code 00}), den Laengenkonstanten oder sind
  * Rauschketten (hoechstens acht Ziffern oder ein Block mit {@code 00}-Praefix); der Waechter sichert jeden Text.
@@ -1058,7 +1059,8 @@ public class KvKontextLueckenEigenschaftTest {
 
     /**
      * Streut 1 bis 6 unsichtbare Zeichen ein. Ausgespart (Codepunkt-basiert): Positionen im Inneren einer Nummer,
-     * zwischen zwei Buchstaben, innerhalb eines Surrogatpaars und zwischen CR und LF (siehe Klassenbeschreibung).
+     * zwischen zwei Buchstaben und innerhalb eines Surrogatpaars (siehe Klassenbeschreibung). Die Position zwischen
+     * CR und LF ist seit kv-trenner-und-umbruch (AK-6) erlaubt.
      */
     private static Gestreut streue(Random r, String text, List<int[]> nummern) {
         List<Integer> erlaubt = new ArrayList<>();
@@ -1071,16 +1073,34 @@ public class KvKontextLueckenEigenschaftTest {
                     && Character.isLowSurrogate(text.charAt(p));
             boolean zwischenBuchstaben = !imSurrogatpaar && p > 0 && p < text.length()
                     && Character.isLetter(text.codePointBefore(p)) && Character.isLetter(text.codePointAt(p));
-            boolean zwischenCrLf = p > 0 && p < text.length() && text.charAt(p - 1) == '\r'
-                    && text.charAt(p) == '\n';
-            if (!imInneren && !imSurrogatpaar && !zwischenBuchstaben && !zwischenCrLf) {
+            if (!imInneren && !imSurrogatpaar && !zwischenBuchstaben) {
                 erlaubt.add(p);
             }
         }
-        int anzahl = 1 + r.nextInt(6);
+        int zufall = 1 + r.nextInt(6);
+        List<Integer> gewaehlt = new ArrayList<>();
+        for (int i = 0; i < zufall; i++) {
+            gewaehlt.add(erlaubt.get(r.nextInt(erlaubt.size())));
+        }
+        // Mit CR LF im Text trifft die gleichverteilte Wahl die Luecke dazwischen nur selten: dann zusaetzlich mit
+        // Wahrscheinlichkeit 3/4 ein bis drei Zeichen gezielt dorthin (AK-6). Ohne CR LF im Text (auch in (c),
+        // dessen Texte differenzTexte() liefert) werden keine Zufallszahlen verbraucht.
+        List<Integer> luecken = new ArrayList<>();
+        for (int p : erlaubt) {
+            if (p > 0 && p < text.length() && text.charAt(p - 1) == '\r' && text.charAt(p) == '\n') {
+                luecken.add(p);
+            }
+        }
+        if (!luecken.isEmpty() && r.nextInt(4) != 0) {
+            int gezielt = 1 + r.nextInt(3);
+            for (int i = 0; i < gezielt; i++) {
+                gewaehlt.add(luecken.get(r.nextInt(luecken.size())));
+            }
+        }
+        int anzahl = gewaehlt.size();
         int[] positionen = new int[anzahl];
         for (int i = 0; i < anzahl; i++) {
-            positionen[i] = erlaubt.get(r.nextInt(erlaubt.size()));
+            positionen[i] = gewaehlt.get(i);
         }
         Arrays.sort(positionen);
         StringBuilder neu = new StringBuilder();
@@ -1129,12 +1149,33 @@ public class KvKontextLueckenEigenschaftTest {
             Gestreut g = streue(r, text, b.nummern);
             st.zaehle("e.eingestreut");
             st.z.merge("e.zeichen", g.positionen().length, Integer::sum);
+            if (text.contains("\r\n")) {
+                st.zaehle("e.textMitCrLf");
+            }
+            boolean imUmbruch = false;
+            for (int p : g.positionen()) {
+                if (p > 0 && p < text.length() && text.charAt(p - 1) == '\r' && text.charAt(p) == '\n') {
+                    st.zaehle("e.zwischenCrLf");
+                    imUmbruch = true;
+                }
+            }
+            if (imUmbruch) {
+                st.zaehle("e.textMitZwischenCrLf");
+            }
             // gleiche Funde wie im ungestoerten Text (Position verschoben); dessen Fundliste ist die Konstruktion
             pruefe(art, g.text(), verschiebe(b.erwartet, g.positionen()), ort);
             st.z.merge("e.funde", b.erwartet.size(), Integer::sum);
         }
         st.mindestens("e.eingestreut", TEXTE);
         st.mindestens("e.zeichen", 2_000);
+        if (modus != 'b') {
+            // AK-6: die Texte aus (a) und (d) enthalten CR LF; (b) erzeugt keinen Umbruch mit CR. Messwerte (fester
+            // Seed), Texte mit CR LF / unsichtbare Zeichen zwischen CR und LF / Texte damit: (a) 56 / 103 / 48,
+            // (d) 49 / 79 / 41. Untergrenzen mehr als 30 % darunter.
+            st.mindestens("e.textMitCrLf", 30);
+            st.mindestens("e.zwischenCrLf", 50);
+            st.mindestens("e.textMitZwischenCrLf", 25);
+        }
         if (modus != 'd') {
             st.mindestens("e.funde", 1_000);
         }

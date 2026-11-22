@@ -95,6 +95,35 @@ public final class KvTestHilfen {
         return false;
     }
 
+    /**
+     * Unabhaengige Referenz der Umbruchzaehlung (D-1, Feature kv-trenner-und-umbruch, AK-24 (b)): Zahl der
+     * Zeilenumbrueche einer Zeichenkette aus Umbruechen, unsichtbaren Zeichen und Leerraum. CR, dann ein oder mehrere
+     * unsichtbare Zeichen (je Codepunkt), dann LF ist ein Umbruch ({@code CR LF} ebenso); jedes andere CR, LF,
+     * U+0085, U+2028 und U+2029 ist je ein Umbruch; unsichtbare Zeichen und Leerraum zaehlen nicht. Die Referenz
+     * ruft weder Scanner noch Erkenner noch eine eingefrorene Kopie auf.
+     */
+    public static int umbruchZahlReferenz(String folge) {
+        int zahl = 0;
+        int i = 0;
+        while (i < folge.length()) {
+            char c = folge.charAt(i);
+            if (c == '\r') {
+                int j = i + 1;
+                while (j < folge.length() && unsichtbar(folge.codePointAt(j))) {
+                    j += Character.charCount(folge.codePointAt(j));
+                }
+                i = j < folge.length() && folge.charAt(j) == '\n' ? j + 1 : i + 1;
+                zahl++;
+            } else {
+                if (c == '\n' || c == NEL || c == LS || c == PS) {
+                    zahl++;
+                }
+                i++;
+            }
+        }
+        return zahl;
+    }
+
     /** Kontextwort-Varianten je Art (fuer den Eigenschaftstest). */
     static final String[] KW_LANR = {"LANR", "lanr", "Lanr", "LANR-Nr.", "LANRNR", "Arztnummer", "Arzt-Nr.",
         "Arzt Nummer", "Praxis-LANR", "Lebenslange Arztnummer", "ARZT-NR", "arztnr"};
