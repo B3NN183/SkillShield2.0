@@ -24,6 +24,7 @@ import de.skillshield.core.model.FindingType;
 import de.skillshield.core.recognizer.Recognizer;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
@@ -36,6 +37,15 @@ import java.util.Random;
  * ({@link Art#vorgaenger}); {@link #verletztBestandsschutz} ist die Pruefregel (Bestandsschutz je Fund, mit der
  * Ausnahme 14g). Zusaetzlich vergleicht {@link #scan} mit dem Stand am Ende von kv-kontext-luecken
  * ({@link Art#standLuecken}); dort gilt {@link #verletztBestandsschutzOhneAusnahme} streng und ohne jede Ausnahme.
+ *
+ * <p><b>Fehlalarm-Pruefung (Teil 2, kv-trenner-und-umbruch, T-5).</b> {@link #scan} ruft zusaetzlich
+ * {@link #pruefeKeineZusaetzlichenFunde} auf: In Texten ohne {@code CR UZ+ LF} ({@link #enthaeltCrUnsichtbarLf}) und
+ * ohne Weit-Kontextwort der Art mit erweiterter Luecke ({@link #weitKontextwoerterReferenz}) muss die Fundliste des
+ * Produkts der der eingefrorenen Kopie in allen Feldern gleichen ({@link #abweichendeFunde}). In Texten mit solchem
+ * Weit-Kontextwort ist ein zusaetzlicher Fund nur zulaessig, wenn die Kopie ihn auf der
+ * {@link #wortVergleichsform Wort-Vergleichsform} liefert ({@link #fehlalarmZaehlung}). Die Referenzen
+ * ({@link #weitFolgenReferenz}), der kuenstliche Neu-Erkenner ({@link #kuenstlicherNeuErkenner}) fuer die
+ * Selbsttests und die Vergleichsform sind unabhaengig vom Produkt gebaut.
  *
  * <p><b>Regel aus T-1 (Punkt 10).</b> Kein Test bildet zur Laufzeit eine neunstellige Nummer, die nach LANR- oder
  * IK-Verfahren gueltig ist und nicht mit {@code 00} beginnt. {@link #assertKeinGueltigesNeunerfensterOhne00} liest
@@ -266,9 +276,118 @@ public final class KvTestHilfen {
             assertTrue(f.start() >= vorigesEnde, a.name + " Funde ueberlappen oder sind nicht sortiert");
             vorigesEnde = f.end();
         }
+        List<Finding> alt = a.standLuecken.detect(text);
         pruefeGegenVorgaenger(a, text, funde);
-        pruefeGegenStandLuecken(a, text, funde);
+        pruefeGegenStandLuecken(a, text, funde, alt);
+        pruefeKeineZusaetzlichenFunde(a, text, funde, alt);
         return funde;
+    }
+
+    /**
+     * Fehlalarm-Pruefstand fuer Teil 2 (kv-trenner-und-umbruch, D-8, AK-15, AK-16, T-5) mit der Fundliste der Kopie
+     * ({@code alt}, einmal berechnet): Die Zahl nach {@link #fehlalarmZaehlung} ist 0. Die Meldung nennt nie Text
+     * oder Ziffern.
+     */
+    static void pruefeKeineZusaetzlichenFunde(Art a, String text, List<Finding> neu, List<Finding> alt) {
+        int zusaetzlich = fehlalarmZahl(a, text, neu, alt);
+        assertEquals(0, zusaetzlich, a.name + " Fehlalarm Teil 2: " + zusaetzlich + " zusaetzlicher Fund gegenueber "
+                + "dem Stand Luecken (Textlaenge " + text.length() + ")");
+    }
+
+    /** Wie oben, die Fundliste der Kopie wird hier berechnet. */
+    static void pruefeKeineZusaetzlichenFunde(Art a, String text, List<Finding> neu) {
+        pruefeKeineZusaetzlichenFunde(a, text, neu, a.standLuecken.detect(text));
+    }
+
+    /** Zahl der Funde, die der Fehlalarm-Pruefstand meldet ({@link #fehlalarmZaehlung}, erster Wert). */
+    static int fehlalarmZahl(Art a, String text, List<Finding> neu) {
+        return fehlalarmZahl(a, text, neu, a.standLuecken.detect(text));
+    }
+
+    /** Wie oben mit der bereits berechneten Fundliste der Kopie. */
+    static int fehlalarmZahl(Art a, String text, List<Finding> neu, List<Finding> alt) {
+        return fehlalarmZaehlung(a, text, neu, alt)[0];
+    }
+
+    /**
+     * Die Zaehlung des Fehlalarm-Pruefstands je Text und Art, {@code {unerklaert, erklaert}}:
+     * <ul>
+     * <li>Text mit {@code CR UZ+ LF} ({@link #enthaeltCrUnsichtbarLf}): {@code {0, 0}}; dort wirkt Teil 1 (Kap. 13
+     * Hinweis 1 des Plans), und die Kopie unterscheidet sich gewollt vom Produkt.</li>
+     * <li>Text ohne Weit-Kontextwort der Art mit erweiterter Luecke ({@link #vonFehlalarmPruefungAusgenommen}
+     * ist falsch): volle Gleichheit mit der Kopie, unerklaert ist {@link #abweichendeFunde}, erklaert 0.</li>
+     * <li>Text mit einem solchen Weit-Kontextwort: Ein Fund des Produkts, den die Kopie auf dem Originaltext nicht
+     * mit gleichem Start, Ende und Typ liefert, ist <em>erklaert</em>, wenn die Kopie ihn auf der
+     * {@link #wortVergleichsform Wort-Vergleichsform} der Art (auf den Originaltext zurueckgebildet) mit gleichem
+     * Start, Ende und Typ liefert (die Konfidenz wird nicht verglichen); sonst <em>unerklaert</em> und damit ein
+     * Fehlalarm.</li>
+     * </ul>
+     */
+    static int[] fehlalarmZaehlung(Art a, String text, List<Finding> neu, List<Finding> alt) {
+        if (enthaeltCrUnsichtbarLf(text)) {
+            return new int[2];
+        }
+        if (!vonFehlalarmPruefungAusgenommen(a, text)) {
+            return new int[] {abweichendeFunde(alt, neu), 0};
+        }
+        Vergleichsform vf = wortVergleichsform(text, a);
+        List<Finding> erklaerend = vf.aufOriginal(a.standLuecken.detect(vf.text()));
+        int unerklaert = 0;
+        int erklaert = 0;
+        for (Finding f : neu) {
+            if (findeGleichenFund(f, alt) != null) {
+                continue;
+            }
+            if (findeGleichenFund(f, erklaerend) != null) {
+                erklaert++;
+            } else {
+                unerklaert++;
+            }
+        }
+        return new int[] {unerklaert, erklaert};
+    }
+
+    /**
+     * Ausgenommen von der strengen Pruefung (volle Gleichheit) sind Texte mit einem Weit-Kontextwort der Art mit
+     * mindestens einer erweiterten Luecke; dort gilt die Erklaerungsbedingung in {@link #fehlalarmZaehlung}. Texte mit
+     * {@code CR UZ+ LF} nimmt {@link #fehlalarmZaehlung} ganz aus.
+     */
+    static boolean vonFehlalarmPruefungAusgenommen(Art a, String text) {
+        return hatErweitertesWeitKontextwort(weitFolgenReferenz(text), a);
+    }
+
+    /**
+     * Zahl der Abweichungen des Produkts von der Kopie in einem nicht ausgenommenen Text (volle Gleichheit in Start,
+     * Ende, Typ, Konfidenz und Quelle, gleiche Anzahl): die Funde in {@code neu} ohne vollstaendig gleichen Fund in
+     * {@code alt} (zusaetzliche, in Konfidenz oder Quelle geaenderte) plus die fehlenden Funde, wenn {@code neu}
+     * kuerzer ist.
+     */
+    public static int abweichendeFunde(List<Finding> alt, List<Finding> neu) {
+        int zahl = 0;
+        for (Finding f : neu) {
+            boolean gleich = false;
+            for (Finding g : alt) {
+                gleich |= g.start() == f.start() && g.end() == f.end() && g.type() == f.type()
+                        && g.confidence() == f.confidence() && g.source().equals(f.source());
+            }
+            zahl += gleich ? 0 : 1;
+        }
+        return zahl + Math.max(0, alt.size() - neu.size());
+    }
+
+    /**
+     * Zahl der Funde in {@code neu}, zu denen {@code alt} keinen Fund mit gleichem Start, Ende und Typ enthaelt
+     * (AK-15: "ein zusaetzlicher Fund ist jeder Fund, der im alten Ergebnis nicht mit gleichem Typ und Bereich
+     * enthalten ist"). Fehlende Funde zaehlen hier nicht.
+     */
+    public static int zusaetzlicheFunde(List<Finding> alt, List<Finding> neu) {
+        int zahl = 0;
+        for (Finding f : neu) {
+            if (findeGleichenFund(f, alt) == null) {
+                zahl++;
+            }
+        }
+        return zahl;
     }
 
     /**
@@ -277,7 +396,11 @@ public final class KvTestHilfen {
      * Die Meldung nennt nie Text oder Ziffern.
      */
     static void pruefeGegenStandLuecken(Art a, String text, List<Finding> neu) {
-        List<Finding> alt = a.standLuecken.detect(text);
+        pruefeGegenStandLuecken(a, text, neu, a.standLuecken.detect(text));
+    }
+
+    /** Wie oben mit der bereits berechneten Fundliste der Kopie. */
+    static void pruefeGegenStandLuecken(Art a, String text, List<Finding> neu, List<Finding> alt) {
         assertFalse(verletztBestandsschutzOhneAusnahme(alt, neu), a.name + " Differenz Stand Luecken: Fund fehlt, "
                 + "hat geringere Konfidenz oder andere Quelle (Textlaenge " + text.length() + ", " + alt.size()
                 + " alte Funde)");
@@ -483,8 +606,37 @@ public final class KvTestHilfen {
 
     // ------------------------------------------------------------------ Referenz fuer Sperrschrift (T-5, Orakel)
 
-    private static final List<String> SPERR_WOERTER_LANR = List.of("lanr", "lanrnr", "arztnummer", "arztnr");
+    /** Die Kontextwoerter der LANR ab vier Buchstaben, gefaltet (gemeinsam fuer Sperrschrift und Weit-Folgen). */
+    private static final List<String> WOERTER_LANR = List.of("lanr", "lanrnr", "arztnummer", "arztnr");
+    /** Die Kontextwoerter der IK ab vier Buchstaben, gefaltet (das Zwei-Buchstaben-Wort fehlt hier, D-4). */
+    private static final List<String> WOERTER_IK_LANG = List.of("iknr", "iknummer", "institutionskennzeichen");
     private static final List<String> SPERR_WOERTER_IK = List.of("ik", "iknr", "iknummer", "institutionskennzeichen");
+
+    /**
+     * Der Text ohne unsichtbare Zeichen (je Codepunkt) mit Abbildung auf den Originaltext.
+     *
+     * @param cp die Codepunkte ohne unsichtbare Zeichen
+     * @param ursprung je Codepunkt der Index seines ersten Zeichens im Originaltext
+     * @param n Zahl der Codepunkte
+     */
+    private record OhneUz(int[] cp, int[] ursprung, int n) {
+    }
+
+    private static OhneUz ohneUnsichtbare(String text) {
+        int[] cp = new int[text.length()];
+        int[] ursprung = new int[text.length()];
+        int n = 0;
+        for (int i = 0; i < text.length();) {
+            int c = text.codePointAt(i);
+            if (!unsichtbar(c)) {
+                cp[n] = c;
+                ursprung[n] = i;
+                n++;
+            }
+            i += Character.charCount(c);
+        }
+        return new OhneUz(cp, ursprung, n);
+    }
 
     /**
      * Unabhaengige Referenz zu den gesperrt geschriebenen Kontextwoertern (D-1, D-2; Plan T-5). Sie nutzt weder den
@@ -498,19 +650,11 @@ public final class KvTestHilfen {
      * @return je Fund {@code {Start, Ende}} im Originaltext, vom ersten Buchstaben bis hinter den letzten
      */
     static List<int[]> sperrKontextwoerterReferenz(String text, Art a) {
-        List<String> woerter = a.lanr ? SPERR_WOERTER_LANR : SPERR_WOERTER_IK;
-        int[] cp = new int[text.length()];
-        int[] ursprung = new int[text.length()];
-        int n = 0;
-        for (int i = 0; i < text.length();) {
-            int c = text.codePointAt(i);
-            if (!unsichtbar(c)) {
-                cp[n] = c;
-                ursprung[n] = i;
-                n++;
-            }
-            i += Character.charCount(c);
-        }
+        List<String> woerter = a.lanr ? WOERTER_LANR : SPERR_WOERTER_IK;
+        OhneUz s = ohneUnsichtbare(text);
+        int[] cp = s.cp();
+        int[] ursprung = s.ursprung();
+        int n = s.n();
         List<int[]> treffer = new ArrayList<>();
         int i = 0;
         while (i < n) {
@@ -565,6 +709,344 @@ public final class KvTestHilfen {
             return (char) c;
         }
         return '?';
+    }
+
+    // ------------------------------------------------------------------ Referenz Weit-Folgen (T-5, Orakel Teil 2)
+
+    /** Luecke nach D-2 (a): genau ein Sperr-Trenner (Leerraum der Sperrschrift, Punkt, Bindestrich, U+2011, U+2013). */
+    static final int LUECKE_STRENG = 1;
+    /** Luecke nach D-2 (b): zwei oder drei Leerraumzeichen der Sperrschrift. */
+    static final int LUECKE_LEERRAUM = 2;
+    /** Luecke nach D-2 (c): ein Punkt und ein bis drei Leerraumzeichen der Sperrschrift. */
+    static final int LUECKE_PUNKT = 4;
+    /** Luecke nach D-2 (d): genau ein Tab. */
+    static final int LUECKE_TAB = 8;
+
+    /**
+     * Eine maximale Folge von Einzelbuchstaben, je durch eine Luecke nach D-2 verbunden.
+     *
+     * @param start Beginn des ersten Buchstabens im Originaltext
+     * @param ende Ende hinter dem letzten Buchstaben im Originaltext
+     * @param buchstaben Zahl der Buchstaben
+     * @param gefaltet die Buchstaben, {@code A-Z} zu {@code a-z} gefaltet, jeder andere Buchstabe als {@code ?}
+     * @param luecken Bitmenge der vorkommenden Lueckenarten ({@link #LUECKE_STRENG} usw.)
+     */
+    public record WeitFolge(int start, int ende, int buchstaben, String gefaltet, int luecken) {
+
+        /** Mindestens eine Luecke nach D-2 (b), (c) oder (d). */
+        public boolean erweitert() {
+            return (luecken & (LUECKE_LEERRAUM | LUECKE_PUNKT | LUECKE_TAB)) != 0;
+        }
+    }
+
+    /**
+     * Unabhaengige Referenz der Weit-Folgen (D-2, D-3; Plan Kap. 4.3). Sie nutzt weder Scanner noch eingefrorene
+     * Kopie und ist bewusst anders gebaut als der Zustandsautomat des Plans: Zuerst werden alle unsichtbaren Zeichen
+     * entfernt (mit Indexabbildung auf den Originaltext), dann wird zu jedem Einzelbuchstaben (Buchstabe ohne
+     * Buchstaben oder Kombinationszeichen links und rechts) die nicht leere Zeichenfolge bis zum naechsten Buchstaben
+     * als Zeichenkette gegen die Luecken (a) bis (d) geprueft; passt sie und ist der naechste Buchstabe wieder ein
+     * Einzelbuchstabe, gehoert er zur Folge. Zusaetzliche Zeichen in der Luecke (Ziffern, Umbruch, Komma, Doppelpunkt,
+     * vier Leerzeichen, zwei Tabs, Tab mit Leerzeichen, {@code .} nach Leerzeichen ...) beenden die Folge. Laufzeit
+     * egal.
+     */
+    public static List<WeitFolge> weitFolgenReferenz(String text) {
+        OhneUz s = ohneUnsichtbare(text);
+        int[] cp = s.cp();
+        int[] ursprung = s.ursprung();
+        int n = s.n();
+        List<WeitFolge> folgen = new ArrayList<>();
+        int i = 0;
+        while (i < n) {
+            if (!istEinzelbuchstabeReferenz(cp, n, i)) {
+                i++;
+                continue;
+            }
+            int letzter = i;
+            StringBuilder gefaltet = new StringBuilder().append(faltungReferenz(cp[i]));
+            int luecken = 0;
+            while (true) {
+                int j = letzter + 1;
+                while (j < n && !Character.isLetter(cp[j])) {
+                    j++;
+                }
+                if (j >= n || !istEinzelbuchstabeReferenz(cp, n, j)) {
+                    break;
+                }
+                int art = lueckenArtReferenz(cp, letzter + 1, j);
+                if (art == 0) {
+                    break;
+                }
+                luecken |= art;
+                gefaltet.append(faltungReferenz(cp[j]));
+                letzter = j;
+            }
+            folgen.add(new WeitFolge(ursprung[i], ursprung[letzter] + Character.charCount(cp[letzter]),
+                    gefaltet.length(), gefaltet.toString(), luecken));
+            i = letzter + 1;
+        }
+        return folgen;
+    }
+
+    private static boolean istLeerraum4Referenz(int c) {
+        return c == ' ' || c == NBSP || c == DUENN || c == SCHMAL_NBSP;
+    }
+
+    /** Die Art der Luecke {@code cp[von..bis)} nach D-2 ({@code LUECKE_*}), 0 wenn sie keine Luecke ist. */
+    private static int lueckenArtReferenz(int[] cp, int von, int bis) {
+        int laenge = bis - von;
+        if (laenge == 1) {
+            int c = cp[von];
+            if (c == '\t') {
+                return LUECKE_TAB;
+            }
+            boolean streng = istLeerraum4Referenz(c) || c == '.' || c == '-' || c == GESCH_BINDESTRICH
+                    || c == HALBGEVIERT;
+            return streng ? LUECKE_STRENG : 0;
+        }
+        if (laenge > 4) {
+            return 0;
+        }
+        boolean nurLeerraum = laenge <= 3;
+        for (int k = von; k < bis; k++) {
+            nurLeerraum &= istLeerraum4Referenz(cp[k]);
+        }
+        if (nurLeerraum) {
+            return LUECKE_LEERRAUM;
+        }
+        boolean punktUndLeerraum = cp[von] == '.';
+        for (int k = von + 1; k < bis; k++) {
+            punktUndLeerraum &= istLeerraum4Referenz(cp[k]);
+        }
+        return punktUndLeerraum ? LUECKE_PUNKT : 0;
+    }
+
+    /**
+     * Die Weit-Folgen, die mit 4 bis 23 Buchstaben einem Kontextwort der Art ab vier Buchstaben gleichen (D-3; nie
+     * das Zwei-Buchstaben-Wort, D-4), je {@code {Start, Ende, erweitert}} ({@code erweitert} 1 oder 0).
+     */
+    static List<int[]> weitKontextwoerterReferenz(String text, Art a) {
+        List<int[]> treffer = new ArrayList<>();
+        for (WeitFolge f : weitFolgenReferenz(text)) {
+            if (istWeitKontextwort(f, a)) {
+                treffer.add(new int[] {f.start(), f.ende(), f.erweitert() ? 1 : 0});
+            }
+        }
+        return treffer;
+    }
+
+    private static boolean istWeitKontextwort(WeitFolge f, Art a) {
+        List<String> woerter = a.lanr ? WOERTER_LANR : WOERTER_IK_LANG;
+        return f.buchstaben() >= 4 && f.buchstaben() <= 23 && woerter.contains(f.gefaltet());
+    }
+
+    /** Gibt es in den Folgen ein Weit-Kontextwort der Art mit mindestens einer erweiterten Luecke? */
+    public static boolean hatErweitertesWeitKontextwort(List<WeitFolge> folgen, Art a) {
+        for (WeitFolge f : folgen) {
+            if (f.erweitert() && istWeitKontextwort(f, a)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Ausnahme des Fehlalarm-Pruefstands auf Scannerebene (beide Arten zugleich) von der strengen Pruefung: Der Text
+     * enthaelt {@code CR UZ+ LF} (dann wird er gar nicht geprueft) oder fuer mindestens eine der beiden Arten ein
+     * Weit-Kontextwort mit erweiterter Luecke (dann gilt die Erklaerungsbedingung mit der Wort-Vergleichsform beider
+     * Arten, {@link #wortVergleichsform}).
+     */
+    public static boolean vonFehlalarmPruefungBeiderArtenAusgenommen(String text) {
+        List<WeitFolge> folgen = weitFolgenReferenz(text);
+        return enthaeltCrUnsichtbarLf(text) || hatErweitertesWeitKontextwort(folgen, LANR_ART)
+                || hatErweitertesWeitKontextwort(folgen, IK_ART);
+    }
+
+    // ------------------------------------------------------------------ Wort-Vergleichsform (Plan 9a, D-5)
+
+    /**
+     * Die Wort-Vergleichsform eines Textes und die Abbildung ihrer Positionen auf den Originaltext.
+     *
+     * @param original der Originaltext
+     * @param text die Vergleichsform
+     * @param von je Zeichen der Vergleichsform der Anfang des Bereichs im Originaltext, den es vertritt
+     * @param bis je Zeichen der Vergleichsform das Ende dieses Bereichs
+     */
+    public record Vergleichsform(String original, String text, int[] von, int[] bis) {
+
+        /**
+         * Bildet Funde auf der Vergleichsform auf den Originaltext zurueck: Start ist der abgebildete Start, Ende
+         * das abgebildete Ende (hinter dem Bereich des letzten Zeichens); Typ, Konfidenz und Quelle bleiben.
+         */
+        public List<Finding> aufOriginal(List<Finding> funde) {
+            List<Finding> ergebnis = new ArrayList<>();
+            for (Finding f : funde) {
+                int s = von[f.start()];
+                int e = bis[f.end() - 1];
+                ergebnis.add(new Finding(f.type(), original.substring(s, e), s, e, f.confidence(), f.source()));
+            }
+            return ergebnis;
+        }
+    }
+
+    /**
+     * Die <b>Wort-Vergleichsform</b> (Plan Kap. 3.2.5, 9a): Im Originaltext werden nur die <em>erweiterten</em>
+     * Luecken (D-2 (b), (c), (d)) <em>innerhalb</em> der Weit-Kontextwoerter der angegebenen Arten, wie sie
+     * {@link #weitKontextwoerterReferenz} mit erweiterter Luecke findet, je durch genau ein Leerzeichen ersetzt. Eine
+     * Luecke ist dabei der gesamte Bereich zwischen dem Ende eines Buchstabens und dem Beginn des naechsten
+     * Buchstabens der Folge, einschliesslich darin liegender unsichtbarer Zeichen. Alles andere bleibt Zeichen fuer
+     * Zeichen unveraendert: strenge Luecken (D-2 (a)) auch im Weit-Kontextwort, alle Luecken ausserhalb der
+     * Woerter (zum Beispiel {@code I. K.} neben einem {@code L. A. N. R.}), und das Zeichen oder der Trenner direkt
+     * hinter dem letzten Buchstaben (der Schlusspunkt): {@code L.  A.  N.  R.<Tab>des} wird zu
+     * {@code L A N R.<Tab>des}. Nicht ersetzt wird <em>jede</em> erweiterte Luecke des Textes: Sonst wuerde
+     * {@code I. K. <IK>} (D-4, zwei Buchstaben) zu {@code I K <IK>} und der Fehlalarm waere "erklaert".
+     *
+     * <p>Die Abbildung fuehrt je Zeichen der Vergleichsform den Bereich im Originaltext ({@code von}, {@code bis});
+     * ein eingesetztes Leerzeichen vertritt die ganze ersetzte Luecke. Unabhaengig vom Produkt gebaut (nutzt nur die
+     * Referenzen dieser Klasse).
+     *
+     * @param arten die Arten, deren Weit-Kontextwoerter gelten (Erkennerebene: eine Art, Scannerebene: beide)
+     */
+    public static Vergleichsform wortVergleichsform(String text, Art... arten) {
+        OhneUz s = ohneUnsichtbare(text);
+        List<int[]> luecken = new ArrayList<>();
+        for (Art a : arten) {
+            for (int[] wort : weitKontextwoerterReferenz(text, a)) {
+                if (wort[2] == 1) {
+                    erweiterteLuecken(s, wort[0], wort[1], luecken);
+                }
+            }
+        }
+        luecken.sort((x, y) -> Integer.compare(x[0], y[0]));
+        StringBuilder sb = new StringBuilder();
+        int[] von = new int[text.length()];
+        int[] bis = new int[text.length()];
+        int pos = 0;
+        for (int[] l : luecken) {
+            for (; pos < l[0]; pos++) {
+                von[sb.length()] = pos;
+                bis[sb.length()] = pos + 1;
+                sb.append(text.charAt(pos));
+            }
+            von[sb.length()] = l[0];
+            bis[sb.length()] = l[1];
+            sb.append(' ');
+            pos = l[1];
+        }
+        for (; pos < text.length(); pos++) {
+            von[sb.length()] = pos;
+            bis[sb.length()] = pos + 1;
+            sb.append(text.charAt(pos));
+        }
+        return new Vergleichsform(text, sb.toString(), Arrays.copyOf(von, sb.length()),
+                Arrays.copyOf(bis, sb.length()));
+    }
+
+    /**
+     * Haengt die erweiterten Luecken der Buchstaben im Originalbereich {@code [start, ende)} an {@code aus} an, je
+     * als {@code {Anfang, Ende}} im Originaltext (von hinter dem einen bis vor den naechsten Buchstaben).
+     */
+    private static void erweiterteLuecken(OhneUz s, int start, int ende, List<int[]> aus) {
+        int voriger = -1;
+        for (int i = 0; i < s.n(); i++) {
+            if (s.ursprung()[i] < start || s.ursprung()[i] >= ende || !Character.isLetter(s.cp()[i])) {
+                continue;
+            }
+            if (voriger >= 0) {
+                int art = lueckenArtReferenz(s.cp(), voriger + 1, i);
+                if (art != 0 && art != LUECKE_STRENG) {
+                    aus.add(new int[] {s.ursprung()[voriger] + Character.charCount(s.cp()[voriger]),
+                        s.ursprung()[i]});
+                }
+            }
+            voriger = i;
+        }
+    }
+
+    // ------------------------------------------------------------------ Kuenstlicher Neu-Erkenner (Trennschaerfe)
+
+    /** Kuenstlicher Fehlalarm: ein Fund hinter {@code I. K. } (Zwei-Buchstaben-Wort, D-4). */
+    public static final int FEHLALARM_IK_INITIALEN = 0;
+    /** Kuenstlicher Fehlalarm: ein Fund hinter einem Einzelbuchstaben mit Punkt und Leerzeichen (Initialen). */
+    public static final int FEHLALARM_INITIALE = 1;
+    /** Kuenstlicher Fehlalarm: ein Fund direkt hinter einer Leerzeile ({@code LF LF}). */
+    public static final int FEHLALARM_LEERZEILE = 2;
+
+    /**
+     * Ein kuenstlicher "richtiger" Neu-Erkenner nur fuer Selbsttests: wendet {@code kopie} auf die
+     * {@link #wortVergleichsform Wort-Vergleichsform} fuer {@code arten} an und bildet die Funde auf den Originaltext
+     * zurueck. Er verhaelt sich wie ein korrektes Teil 2 (Weit-Kontextwort wirkt wie das gesperrte Kontextwort) und
+     * darf vom Fehlalarm-Pruefstand nie gemeldet werden.
+     */
+    public static Recognizer kuenstlicherRichtigerNeuErkenner(Recognizer kopie, Art... arten) {
+        return text -> {
+            Vergleichsform vf = wortVergleichsform(text, arten);
+            return vf.aufOriginal(kopie.detect(vf.text()));
+        };
+    }
+
+    /**
+     * Ein kuenstlicher "Neu"-Erkenner, der die Funde von {@code basis} unveraendert bereichsgleich liefert, aber die
+     * Konfidenz um {@code zuschlag} anhebt (hoechstens 1,0) und, wenn {@code quelle} nicht {@code null} ist, die
+     * Quelle ersetzt. Der Pruefstand muss das in nicht ausgenommenen Texten melden (volle Gleichheit).
+     */
+    public static Recognizer kuenstlicherAbweichenderNeuErkenner(Recognizer basis, double zuschlag, String quelle) {
+        return text -> {
+            List<Finding> ergebnis = new ArrayList<>();
+            for (Finding f : basis.detect(text)) {
+                ergebnis.add(new Finding(f.type(), f.originalValue(), f.start(), f.end(),
+                        Math.min(1.0, f.confidence() + zuschlag), quelle == null ? f.source() : quelle));
+            }
+            return ergebnis;
+        };
+    }
+
+    /**
+     * Ein kuenstlicher "Neu"-Erkenner nur fuer Selbsttests des Fehlalarm-Pruefstands: liefert alle Funde von
+     * {@code basis} und zusaetzlich je eine Ziffernkette mit mindestens sechs Ziffern, die hinter einem
+     * Fehlalarm-Muster steht ({@code modus}: {@link #FEHLALARM_IK_INITIALEN}, {@link #FEHLALARM_INITIALE} oder
+     * {@link #FEHLALARM_LEERZEILE}),
+     * sofern sie keinen vorhandenen Fund ueberlappt. Der Pruefstand muss diesen zusaetzlichen Fund melden.
+     */
+    public static Recognizer kuenstlicherNeuErkenner(Recognizer basis, FindingType typ, String quelle, int modus) {
+        return text -> {
+            List<Finding> alle = new ArrayList<>(basis.detect(text));
+            int s = 0;
+            while (s < text.length()) {
+                int e = s;
+                while (e < text.length() && istZiffer(text.charAt(e))) {
+                    e++;
+                }
+                if (e - s >= 6 && hinterFehlalarmMuster(text, s, modus) && !ueberlappt(alle, s, e)) {
+                    alle.add(new Finding(typ, text.substring(s, e), s, e, WAHRSCHEINLICH, quelle));
+                }
+                s = Math.max(e, s + 1);
+            }
+            alle.sort((x, y) -> Integer.compare(x.start(), y.start()));
+            return alle;
+        };
+    }
+
+    private static boolean hinterFehlalarmMuster(String text, int s, int modus) {
+        if (s > 0 && istZiffer(text.charAt(s - 1))) {
+            return false;
+        }
+        if (modus == FEHLALARM_IK_INITIALEN) {
+            return s >= 6 && text.startsWith("I. K. ", s - 6);
+        }
+        if (modus == FEHLALARM_LEERZEILE) {
+            return s >= 2 && text.startsWith("\n\n", s - 2);
+        }
+        return s >= 3 && text.charAt(s - 1) == ' ' && text.charAt(s - 2) == '.'
+                && Character.isLetter(text.charAt(s - 3)) && (s < 4 || !Character.isLetter(text.charAt(s - 4)));
+    }
+
+    private static boolean ueberlappt(List<Finding> funde, int start, int ende) {
+        for (Finding f : funde) {
+            if (f.start() < ende && start < f.end()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     static boolean istZiffer(char c) {

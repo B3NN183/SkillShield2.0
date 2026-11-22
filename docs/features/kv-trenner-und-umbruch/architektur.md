@@ -570,6 +570,40 @@ Keine.
    engineer an und meldet Test, Fall (ohne Ziffern) und Grund; keine stille Anpassung. Jede Umstellung wird im Bericht
    einzeln je Assertion genannt (AK-23).
 9. In neuen Tests die Quelle aus der Nummer ableiten (`quelleNachNummer`).
+9a. **Klarstellung der Hauptsitzung zum Einfrieren des Prüfstands (22.11.2026, nach reviewer und security in T-5):**
+    „T-5-Dateien unverändert“ bezieht sich auf den **Inhalt der Prüfstand-Teile**, nicht auf ganze Dateien.
+    Eingefroren sind ab Abnahme von T-5: `KvTrennerFehlalarmTest.java` vollständig; in `KvTestHilfen` die
+    Prüfstand-Mitglieder (`WeitFolge`, `weitFolgenReferenz`, `weitKontextwoerterReferenz`,
+    `hatErweitertesWeitKontextwort`, `zusaetzlicheFunde`, `fehlalarmZahl`, `vonFehlalarmPruefung*`,
+    `pruefeKeineZusaetzlichenFunde` samt der in T-5 Durchlauf 2 ergänzten Bedingungen, `kuenstlicherNeuErkenner`,
+    `enthaeltCrUnsichtbarLf`, der zugehörige Schritt in `scan`; aus Durchlauf 2 außerdem `wortVergleichsform`,
+    `Vergleichsform`, `erweiterteLuecken`, `lueckenArtReferenz`, `ohneUnsichtbare`/`OhneUz`, die Wortlisten
+    `WOERTER_*`/`SPERR_WOERTER_IK`, `fehlalarmZaehlung`, `abweichendeFunde`, `kuenstlicherRichtigerNeuErkenner`,
+    `kuenstlicherAbweichenderNeuErkenner`, `findeGleichenFund`, `istWeitKontextwort`,
+    `vonFehlalarmPruefungBeiderArtenAusgenommen`, `FEHLALARM_LEERZEILE`/`hinterFehlalarmMuster` – kurz: alles, wovon
+    die Fehlalarm-Prüfung abhängt; im Zweifel gilt ein Mitglied als eingefroren) und der Typ `Art`. Kap. 4.3
+    Punkt 5 beschreibt noch die erste Fassung der Prüfregel; maßgeblich sind die beiden Verschärfungen unten.
+    In `KvStandLueckenDifferenzTest` zusätzlich
+    `neuUnerklaert` und `fehlalarmScannerebene`; dort
+    die Tests `t5_*` samt ihren Mindestzahlen und Hilfen. **Erlaubt** sind reine Ergänzungen: neue Helfer (bevorzugt
+    in einer eigenen Klasse, z. B. `KvTrennerHilfen`), neue Testmethoden (z. B. `t9_…` für Fuzz 1e, die die
+    eingefrorenen Hilfen wiederverwenden). qa prüft in T-6 bis T-10, dass im Diff dieser Dateien keine Zeile der
+    eingefrorenen Teile entfernt oder geändert ist.
+    **Verschärfungen des Prüfstands in T-5 Durchlauf 2 (security):** (1) In Texten, die wegen eines erweiterten
+    Weit-Kontextworts von der Prüfung ausgenommen sind, ist ein zusätzlicher Fund nur zulässig, wenn die
+    eingefrorene Kopie auf der **Wort-Vergleichsform** (nur die erweiterten Lücken innerhalb der von der Referenz
+    gefundenen Weit-Kontextwörter der Art durch je ein Leerzeichen ersetzt; Positionen abgebildet) denselben Fund
+    (Bereich, Typ) liefert. (2) In nicht ausgenommenen Texten gilt volle Gleichheit mit der eingefrorenen Kopie
+    (Start, Ende, Typ, Konfidenz, Quelle). Schlägt (1) in T-6/T-7 bei einem vom Plan gewollten Fund an (Kap. 13
+    Hinweis 2: Kontext-Erneuerung), hält der engineer an und meldet den Fall; die Hauptsitzung entscheidet.
+    **Restlücken des Prüfstands (security, T-5 Durchlauf 2) – als reine Ergänzungen in T-6 zu schließen:**
+    (a) Fehlermodell „unsichtbares Zeichen trennt zwei Buchstaben“ (`L`+ZWSP+`A. N. R. N`, Grenze 14a) wird vom
+    eingefrorenen Satz nicht erzeugt → T-6 ergänzt eigene Nicht-Fall-Tests (neue Methode/Klasse, die
+    `fehlalarmZahl` nutzt) mit `L`+ZWSP+`A. N. R. #`, `L`+ZWSP+`A  N  R #`, `I`+ZWSP+`K. N. R. #` und einen kleinen
+    Zufallslauf mit Buchstabe+UZ+Buchstabe ohne Lücke. (b) Scannerebene vergleicht nur Abdeckung, nicht den Typ →
+    T-6 ergänzt eine neue Testmethode mit Abdeckung je KV-Typ (LANR und IK getrennt). (c) In ausgenommenen Texten
+    werden Konfidenz und Quelle erklärter Zusatzfunde nicht verglichen (D-6, Deckel 0,80) → das sichern AK-21 und
+    AK-24 (e) in T-7/T-8.
 10. **Abbruchkriterium Teil 2 (D-8) – gilt in T-6 bis T-10:** Meldet einer der Fehlalarm-Prüfungen
     (`pruefeKeineZusaetzlichenFunde` in `scan`, `KvTrennerFehlalarmTest` AK-15/AK-16, Scannerebene in
     `KvStandLueckenDifferenzTest`) einen zusätzlichen Fund, dann
@@ -754,7 +788,7 @@ de/skillshield/core/`, `test/…` = `skillshield-core/src/test/java/de/skillshie
   `L` + `.  A` (0), `L. A. N. R. <Nullnummer> ` (r, Bausteinlänge 22, r = 45 455), `L<Tab>A<Tab>N<Tab>R<Tab>
   <Nullnummer> ` (r, Bausteinlänge 18, r = 55 556), `L    A    N    R ` (0), `A. ` (0), `I. K. <Nullnummer> ` (0 im
   IK-Erkenner), Vorgriff über durchsichtige Läufe `L. ` + ZWSP × 1 000 + ` A ` wiederholt (0).
-- **Abnahme:** T-5-Prüfungen unverändert und grün (qa prüft das Diff der T-5-Dateien: es muss leer sein);
+- **Abnahme:** T-5-Prüfungen unverändert und grün (qa prüft das Diff der T-5-Dateien: es muss leer sein – siehe Klarstellung unten);
   Differenz gegen beide Kopien grün; genau die genannten Umstellungen; Javadoc nach Kap. 3.2.
 
 #### T-7: Laufender Kontext, nachgestellter Kontext, volle Kontextregeln (Produkt)

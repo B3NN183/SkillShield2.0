@@ -48,6 +48,12 @@ import org.junit.jupiter.api.Test;
  * <p>Seit T-2 (CR UZ+ LF als ein Umbruch) weicht das Produkt auf Texten mit dieser Folge ab; der fruehere
  * Uebergangstest {@code t1Uebergang_produktGleichStandLuecken} ist entfernt. An seine Stelle tritt
  * {@code t2_zusaetzlicheFundeNurInTextenMitCrUnsichtbarLf}: ohne die Folge sind die Fundlisten gleich.
+ *
+ * <p>T-5 (Fehlalarm-Pruefstand fuer Teil 2, Plan Kap. 4.3): Auf Scannerebene deckt der neue Stand auf Texten ohne
+ * {@code CR UZ+ LF} und ohne Weit-Kontextwort keine Position ab, die die Kopie nicht abdeckt
+ * ({@code t5_differenz_scannerebene_...}; in Texten mit Weit-Kontextwort sind nur Positionen zulaessig, die die Kopie
+ * auf der Wort-Vergleichsform abdeckt, Plan 9a); die Selbsttests belegen mit einem kuenstlichen Fehlalarm-Scanner,
+ * dass die Pruefung anschlaegt. Der Block steht vor Teil 2 und wird in T-6 bis T-10 nicht geaendert (Regel 8.10).
  */
 class KvStandLueckenDifferenzTest {
 
@@ -389,6 +395,164 @@ class KvStandLueckenDifferenzTest {
     void differenz_scannerebene_alterScannerLiefertKvFunde_pruefungLaeuftNichtInsLeere() {
         for (List<String> texte : List.of(teil1b(), TEIL_1C, TEIL_1D, KvDifferenzTest.korpus(), GENERATOREN)) {
             assertTrue(alteKvScannerFunde(texte) > 0, "Scanner mit der Kopie ohne KV-Funde (Pruefung liefe ins Leere)");
+        }
+    }
+
+    // ------------------------------------------------------------------ Fehlalarm Scannerebene (T-5, D-8)
+
+    /** Zahl der Positionen, die {@code neu} abdeckt, die die Kopie ({@link #ALT}) aber nicht abdeckt. */
+    private static int neuAbgedeckt(TextScanner neu, String text) {
+        boolean[] alt = abdeckung(text.length(), ALT.scan(text));
+        boolean[] jetzt = abdeckung(text.length(), neu.scan(text));
+        int zahl = 0;
+        for (int i = 0; i < text.length(); i++) {
+            zahl += jetzt[i] && !alt[i] ? 1 : 0;
+        }
+        return zahl;
+    }
+
+    /**
+     * Zahl der Positionen, die {@code neu} abdeckt, die die Kopie ({@link #ALT}) weder auf dem Originaltext noch auf
+     * der Wort-Vergleichsform beider Arten ({@link KvTestHilfen#wortVergleichsform}, auf den Originaltext
+     * zurueckgebildet) abdeckt. In einem Text ohne Weit-Kontextwort ist die Vergleichsform der Text selbst.
+     */
+    private static int neuUnerklaert(TextScanner neu, String text) {
+        boolean[] alt = abdeckung(text.length(), ALT.scan(text));
+        boolean[] jetzt = abdeckung(text.length(), neu.scan(text));
+        KvTestHilfen.Vergleichsform vf = KvTestHilfen.wortVergleichsform(text, KvTestHilfen.LANR_ART,
+                KvTestHilfen.IK_ART);
+        boolean[] erklaert = abdeckung(text.length(), vf.aufOriginal(ALT.scan(vf.text())));
+        int zahl = 0;
+        for (int i = 0; i < text.length(); i++) {
+            zahl += jetzt[i] && !alt[i] && !erklaert[i] ? 1 : 0;
+        }
+        return zahl;
+    }
+
+    /**
+     * Fehlalarm-Pruefung auf Scannerebene (Plan Kap. 4.3, 9a): Auf jedem Text ohne {@code CR UZ+ LF} deckt {@code neu}
+     * keine Position ab, die die Kopie nicht abdeckt. In Texten mit Weit-Kontextwort mit erweiterter Luecke (fuer
+     * eine der beiden Arten) gelten dabei die Positionen als abgedeckt, die die Kopie auf der Wort-Vergleichsform
+     * beider Arten abdeckt ({@link #neuUnerklaert}).
+     *
+     * @return {geprueft ohne Weit-Kontextwort, ausgenommen (CR UZ+ LF oder Weit-Kontextwort), Texte mit neu
+     *         abgedeckter unerklaerter Position, alte KV-Funde in den Texten ohne Ausnahme}
+     */
+    private static int[] fehlalarmScannerebene(TextScanner neu, List<String> texte) {
+        int[] z = new int[4];
+        for (String text : texte) {
+            boolean ausgenommen = KvTestHilfen.vonFehlalarmPruefungBeiderArtenAusgenommen(text);
+            z[ausgenommen ? 1 : 0]++;
+            if (!enthaeltCrUnsichtbarLf(text)) {
+                z[2] += neuUnerklaert(neu, text) > 0 ? 1 : 0;
+            }
+            z[3] += ausgenommen ? 0 : alteKvScannerFunde(List.of(text));
+        }
+        return z;
+    }
+
+    private static TextScanner scannerRichtig() {
+        return new TextScanner(List.of(new EmailRecognizer(), new Ipv4Recognizer(), new UrlRecognizer(),
+                new PathRecognizer(),
+                KvTestHilfen.kuenstlicherRichtigerNeuErkenner(KvStandLuecken.lanr(), KvTestHilfen.LANR_ART,
+                        KvTestHilfen.IK_ART),
+                KvTestHilfen.kuenstlicherRichtigerNeuErkenner(KvStandLuecken.ik(), KvTestHilfen.LANR_ART,
+                        KvTestHilfen.IK_ART)));
+    }
+
+    private static TextScanner scannerMitFehlalarm(int modus) {
+        return new TextScanner(List.of(new EmailRecognizer(), new Ipv4Recognizer(), new UrlRecognizer(),
+                new PathRecognizer(), KvTestHilfen.kuenstlicherNeuErkenner(KvStandLuecken.lanr(), FindingType.LANR,
+                        "lanr", modus),
+                KvTestHilfen.kuenstlicherNeuErkenner(KvStandLuecken.ik(), FindingType.IK, "ik", modus)));
+    }
+
+    /**
+     * Keine neu abgedeckte Position auf Texten ohne Weit-Kontextwort und ohne {@code CR UZ+ LF}, ueber alle Textmengen
+     * des Features (Fuzz 1, 1b, 1c, 1d, Korpus, Generatoren der Eigenschaftstests; Fuzz 1e entsteht erst in T-9).
+     * Mindestzahlen mit mehr als 30 % Abstand zu den Messwerten (je Textmenge: geprueft / ausgenommen / alte KV-Funde
+     * in den gepruefen Texten; Teil 1 enthaelt keine KV-Funde der Kopie): Teil 1 1 000 / 0 / 0, Teil 1b 1 000 / 0 /
+     * 679, Teil 1c 928 / 72 / 5 415, Teil 1d 7 / 993 / 19 (fast alle Texte haben {@code CR UZ+ LF}), Korpus 288 / 39 /
+     * 208, Generatoren 3 716 / 284 / 7 813. Die Untergrenzen stehen in {@link #MIN_GEPRUEFT} und
+     * {@link #MIN_ALTE_KV_FUNDE} (gleiche Reihenfolge).
+     */
+    @Test
+    void t5_differenz_scannerebene_keineNeuAbgedecktePositionOhneWeitKontextwort() {
+        String[] namen = {"Teil 1", "Teil 1b", "Teil 1c", "Teil 1d", "Korpus", "Generatoren"};
+        List<List<String>> mengen = List.of(teil1(), teil1b(), TEIL_1C, TEIL_1D, KvDifferenzTest.korpus(), GENERATOREN);
+        int[][] ergebnis = new int[namen.length][];
+        StringBuilder alle = new StringBuilder();
+        for (int i = 0; i < namen.length; i++) {
+            ergebnis[i] = fehlalarmScannerebene(NEU, mengen.get(i));
+            alle.append(namen[i]).append(": geprueft ").append(ergebnis[i][0]).append(", ausgenommen ")
+                    .append(ergebnis[i][1]).append(", alte KV-Funde ").append(ergebnis[i][3]).append("; ");
+        }
+        for (int i = 0; i < namen.length; i++) {
+            assertEquals(0, ergebnis[i][2], namen[i] + ": Texte mit neu abgedeckter Position; " + alle);
+        }
+        for (int i = 0; i < namen.length; i++) {
+            assertTrue(ergebnis[i][0] >= MIN_GEPRUEFT[i], namen[i] + ": zu wenig geprueft; " + alle);
+            assertTrue(ergebnis[i][3] >= MIN_ALTE_KV_FUNDE[i], namen[i] + ": zu wenig alte Funde; " + alle);
+        }
+    }
+
+    private static final int[] MIN_GEPRUEFT = {700, 700, 650, 4, 200, 2_600};
+    private static final int[] MIN_ALTE_KV_FUNDE = {0, 470, 3_700, 13, 145, 5_400};
+
+    /**
+     * Trennschaerfe: Ein kuenstlicher Neu-Scanner mit einem Fund hinter {@code I. K. } bzw. hinter Initialen wird auf
+     * Scannerebene gemeldet; Texte mit {@code CR UZ+ LF} sind ausgenommen, {@code CR LF} nicht; in Texten mit
+     * Weit-Kontextwort ist der Fund hinter dem Wort durch die Wort-Vergleichsform erklaert.
+     */
+    @Test
+    void t5_selbsttest_scannerebene_kuenstlicherFehlalarm_wirdGemeldet() {
+        String text = "Prof. I. K. " + IK_GUELTIG;
+        assertEquals(0, neuAbgedeckt(NEU, text), "Produkt hat keinen Fehlalarm");
+        TextScanner ikInitialen = scannerMitFehlalarm(KvTestHilfen.FEHLALARM_IK_INITIALEN);
+        assertTrue(neuAbgedeckt(ikInitialen, text) > 0, "kuenstlicher Fund hinter I. K. wird nicht abgedeckt");
+        int[] gemischt = fehlalarmScannerebene(ikInitialen,
+                List.of(text, "x. " + LANR_GUELTIG, "Dr. I. K. " + IK_GUELTIG));
+        assertEquals(2, gemischt[2], "geprueft mit neu abgedeckter Position");
+        TextScanner initiale = scannerMitFehlalarm(KvTestHilfen.FEHLALARM_INITIALE);
+        int[] geprueft = fehlalarmScannerebene(initiale, List.of("x. " + LANR_GUELTIG, "\r\nx. " + IK_GUELTIG));
+        assertEquals(2, geprueft[0], "beide Texte werden geprueft");
+        assertEquals(2, geprueft[2], "beide melden den kuenstlichen Fehlalarm");
+        int[] ausnahmen = fehlalarmScannerebene(initiale, List.of("L. A. N. R. " + LANR_GUELTIG,
+                "\r" + ZWSP + "\nx. " + LANR_GUELTIG, "I. K. N. R. " + IK_GUELTIG));
+        assertEquals(3, ausnahmen[1], "alle drei Texte sind ausgenommen");
+        assertEquals(0, ausnahmen[2], "ausgenommene Texte melden nichts");
+    }
+
+    /**
+     * Verschaerfung (1) aus Plan 9a auf Scannerebene: Im Text mit Weit-Kontextwort ist eine neu abgedeckte Position
+     * nur zulaessig, wenn die Kopie sie auf der Wort-Vergleichsform beider Arten abdeckt. Ein kuenstlicher Fehlalarm
+     * wird dort gemeldet, ein korrektes Teil 2 (Kopie auf der Vergleichsform) nie. Ein Weit-Wort der anderen Art
+     * verdeckt keinen Fehlalarm der einen Art: {@code I. K. <IK>} neben {@code L. A. N. R.} bleibt gemeldet.
+     */
+    @Test
+    void t5_selbsttest_scannerebene_wortVergleichsform() {
+        TextScanner leerzeile = scannerMitFehlalarm(KvTestHilfen.FEHLALARM_LEERZEILE);
+        TextScanner ikInitialen = scannerMitFehlalarm(KvTestHilfen.FEHLALARM_IK_INITIALEN);
+        List<String> fehlalarme = List.of("L. A. N. R.\n\nZwischentext hier\n\n" + LANR_GUELTIG,
+                "I. K. N. R.\n\nZwischentext hier\n\n" + IK_GUELTIG);
+        int[] erste = fehlalarmScannerebene(leerzeile, fehlalarme);
+        assertEquals(2, erste[1], "beide Texte haben ein Weit-Kontextwort");
+        assertEquals(2, erste[2], "Fund hinter der Leerzeile bleibt unerklaert");
+        List<String> neben = List.of("Prof. I. K. " + IK_GUELTIG + " Rechnung I. K. N. R.",
+                "L. A. N. R.\n\nDr. I. K. " + IK_GUELTIG, "I. K. N. R.\n\nDr. I. K. " + IK_GUELTIG);
+        int[] zweite = fehlalarmScannerebene(ikInitialen, neben);
+        assertEquals(3, zweite[1], "alle Texte haben ein Weit-Kontextwort");
+        assertEquals(3, zweite[2], "I. K. <IK> bleibt gemeldet, auch neben dem Weit-Wort der anderen Art");
+        assertFalse(KvStandLuecken.ik().detect("I K " + IK_GUELTIG).isEmpty(),
+                "Voraussetzung: volle Ersetzung aller Luecken haette den Fund erklaert");
+        TextScanner richtig = scannerRichtig();
+        List<String> korrekt = List.of("L. A. N. R. " + LANR_GUELTIG, "L.  A.  N.  R.\tdes Arztes " + LANR_GUELTIG,
+                "I. K. N. R. " + IK_GUELTIG, "I\tK\tN\tR: " + IK_GUELTIG);
+        int[] dritte = fehlalarmScannerebene(richtig, korrekt);
+        assertEquals(4, dritte[1], "alle Texte haben ein Weit-Kontextwort");
+        assertEquals(0, dritte[2], "ein korrektes Teil 2 wird nie gemeldet");
+        for (String text : korrekt) {
+            assertTrue(neuAbgedeckt(richtig, text) > 0, "das korrekte Teil 2 deckt eine zusaetzliche Position ab");
         }
     }
 
