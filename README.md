@@ -74,7 +74,7 @@ Diese (JUnit) werden mit zusätzlichem Parameter geprüft:
 mvn clean compile org.owasp:dependency-check-maven:check -Dodc.skipTestScope=false
 ```
 
-Stand 17.11.2026: 8 Artefakte, 0 Befunde.
+Stand 22.11.2026: 8 Artefakte, 0 Befunde.
 
 ### NVD-API-Key
 
