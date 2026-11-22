@@ -3,6 +3,7 @@ package de.skillshield.core;
 import static de.skillshield.core.SynthetischeKvNummern.IK_MARKER;
 import static de.skillshield.core.SynthetischeKvNummern.LANR_MARKER;
 import static de.skillshield.core.TestTexte.bs;
+import static de.skillshield.core.recognizer.kv.KvTestHilfen.ZWSP;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -716,6 +717,40 @@ class KlartextFreiheitTest {
             }
         });
         assertAusgabeKlartextfrei("KV-Kontextluecken-Test", ausgabe);
+    }
+
+    /**
+     * kv-trenner-und-umbruch Teil 1 (AK-28): Funde hinter {@code CR UZ LF} (gesperrtes und normales Kontextwort, beide
+     * Arten, auch mit zwei unsichtbaren Zeichen). Die Suchfunktion findet den Marker im Eingabetext; im Fund, in der
+     * Fundliste, in {@code source}, im pseudonymisierten Text, im Mapping und im Ergebnis der Rueckuebersetzung
+     * (jeweils {@code toString()}) und auf Standardausgabe und Fehlerausgabe steht kein Marker.
+     */
+    @Test
+    void ak28_kvUmbruch_fundeHinterCrUnsichtbaresZeichenLfSindKlartextfrei() {
+        String umbruch = "\r" + ZWSP + "\n";
+        String[] texte = {"L A N R:" + umbruch + LANR_MARKER, "LANR:" + umbruch + LANR_MARKER,
+            "IK:" + umbruch + IK_MARKER, "I K N R:" + umbruch + IK_MARKER,
+            "L A N R:\r" + ZWSP + ZWSP + "\n" + LANR_MARKER};
+        Ausgabe ausgabe = erfasse(() -> {
+            for (int i = 0; i < texte.length; i++) {
+                String text = texte[i];
+                List<Finding> funde = TextScanner.standard().scan(text);
+                assertEquals(1, funde.size(), "genau ein Fund in Text " + i);
+                Finding f = funde.get(0);
+                assertTrue(findeMarker(text).isPresent(), "Suchfunktion findet den Marker im Eingabetext " + i);
+                assertToStringKlartextfrei("KV-Finding.toString Umbruch-Text " + i, f);
+                assertToStringKlartextfrei("Liste der Funde Umbruch-Text " + i, funde);
+                assertToStringKlartextfrei("Finding.source Umbruch-Text " + i, f.source());
+                PseudonymizationResult pseudo = PSEUDONYMIZER.pseudonymize(text, funde);
+                assertTrue(findeMarker(pseudo.text()).isEmpty(), "Marker im pseudonymisierten Text " + i);
+                assertToStringKlartextfrei("PseudonymizationResult Umbruch-Text " + i, pseudo);
+                assertToStringKlartextfrei("PlaceholderMapping Umbruch-Text " + i, pseudo.mapping());
+                ReidentificationResult zurueck = REIDENTIFIER.restore(pseudo.text(), pseudo.mapping());
+                assertTrue(text.equals(zurueck.text()), "Roundtrip Umbruch-Text " + i);
+                assertToStringKlartextfrei("ReidentificationResult Umbruch-Text " + i, zurueck);
+            }
+        });
+        assertAusgabeKlartextfrei("KV-Umbruch-Test", ausgabe);
     }
 
     @Test

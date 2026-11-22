@@ -27,11 +27,9 @@ class KvUmbruchTest {
     /** Obergrenze der Konfidenz fuer eine Nummer unmittelbar hinter dem Zwei-Buchstaben-Wort {@code I K}. */
     private static final double ZWEI_BUCHSTABEN_DECKEL = 0.50;
     private static final char MARKE = '#';
-    private static final char VS1 = (char) 0xFE00;
 
-    /** Die sechs unsichtbaren Zeichen aus AK-1 und der Variantenwaehler U+FE00. */
-    private static final String[] UZ = {String.valueOf(ZWSP), String.valueOf(SHY), String.valueOf(BOM),
-        String.valueOf(WORD_JOINER), String.valueOf(LRM), String.valueOf(VS16), String.valueOf(VS1)};
+    /** Die sechs unsichtbaren Zeichen aus AK-1 und der Variantenwaehler U+FE00 (gemeinsam in KvTestHilfen). */
+    private static final String[] UZ = uzAk1Texte();
 
     private static String wort(Art a) {
         return a.lanr ? "LANR" : "IKNR";

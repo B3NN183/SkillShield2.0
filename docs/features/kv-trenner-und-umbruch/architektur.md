@@ -865,6 +865,11 @@ entfallen; AK-22 bis AK-30 gelten für Teil 1 und sind mit T-1 bis T-4 erfüllt;
 
 - **15R.** CR + Leerraum oder sichtbares Zeichen + LF, CR + Buchstabe/Kombinationszeichen + LF, jede Kombination mit
   U+0085, U+2028, U+2029 → zwei Umbrüche (T-2).
+  **Nachtrag 22.11.2026 (security, T-4):** Dazu gehören auch Zeichen, die man nicht sieht, die aber nicht unter die
+  Regel „unsichtbar“ fallen (Kategorie FORMAT oder U+FE00–FE0F): U+E0100–E01EF (Variantenwähler-Ergänzung, Mn),
+  U+034F (Combining Grapheme Joiner) und die Hangul-Füller U+3164 und U+115F (Lo). `KW:` CR + eines dieser Zeichen +
+  LF + Nummer → kein Fund (wie Grenze 10 des ersten Features). Schwere niedrig, nur bei präpariertem Text; eine
+  spätere Erweiterung der Regel „unsichtbar“ um U+E0100–E01EF und U+034F wäre die Abhilfe.
 - **14cR.** (1) Zwei-Buchstaben-Wort mit erweiterten Trennern (`I. K. N`, `I  K N`, `I<Tab>K N`) → kein Fund (D-4,
   Nutzervorgabe); (2) vier und mehr WS4, zwei und mehr Tabs, Tab mit Leerraum, Punkt mit Tab, Leerraum vor dem Punkt,
   zwei Punkte, `-`/U+2013 mit Leerraum, Zeilenumbruch, `,`, `;`, `:`, `/`, `_`, andere Unicode-Leerräume (z. B.

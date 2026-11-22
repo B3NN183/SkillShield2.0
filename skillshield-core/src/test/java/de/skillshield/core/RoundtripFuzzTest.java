@@ -15,7 +15,9 @@ import de.skillshield.core.pseudonymize.PseudonymizationResult;
 import de.skillshield.core.pseudonymize.Pseudonymizer;
 import de.skillshield.core.recognizer.Recognizer;
 import de.skillshield.core.recognizer.TextScanner;
+import de.skillshield.core.recognizer.kv.IkRecognizer;
 import de.skillshield.core.recognizer.kv.KvTestHilfen;
+import de.skillshield.core.recognizer.kv.LanrRecognizer;
 import de.skillshield.core.reidentify.ReidentificationResult;
 import de.skillshield.core.reidentify.Reidentifier;
 import java.util.ArrayList;
@@ -43,7 +45,11 @@ import org.junit.jupiter.api.Test;
  * ({@code SEED_TEXTE_KV_C}, kv-kontext-luecken T-6, eigener Generator {@link #erzeugeKvC}, Hash
  * {@link #HASH_TEIL_1C}): Sperrschrift beider Arten mit allen Trennern, {@code I K}, Komma oder Semikolon vor dem
  * Kontextwort (auch Folgen), Gegenproben und Initialen; dieselben Eigenschaften wie Teil 1b samt Schutzgarantie, dazu
- * vollstaendiges Ersetzen aller Funde. Teil 2: {@value #ANZAHL_EINGABEN} Zufallseingaben an {@code restore}.
+ * vollstaendiges Ersetzen aller Funde. Teil 1d ({@code SEED_TEXTE_KV_D}, kv-trenner-und-umbruch T-4, eigener
+ * Generator {@link #erzeugeKvD}, eigene Records {@link BlockD} und {@link FallD}, Hash {@link #HASH_TEIL_1D}): Texte
+ * mit {@code CR UZ+ LF} hinter Kontextwoertern (normal und gesperrt), {@code KW N CR UZ+ LF N2}, Gegenproben und
+ * Mischung mit Bausteinen aus 1c; dieselben Eigenschaften wie 1c, dazu der strikte Zaehler "Block ohne Scan-Abdeckung".
+ * Teil 2: {@value #ANZAHL_EINGABEN} Zufallseingaben an {@code restore}.
  *
  * <p>Der Lauf wird einmal ausgeführt ({@link #LAUF}); jede Eigenschaft ist ein eigener Test. Meldungen nennen nur
  * Startwert, Iteration und Anzahl, nie einen Text. Testdaten sind synthetisch. Nicht-ASCII-Zeichen stehen nur als
@@ -102,6 +108,7 @@ class RoundtripFuzzTest {
     private static Lauf LAUF;
     private static Lauf LAUF_KV;
     private static Lauf LAUF_KV_C;
+    private static Lauf LAUF_KV_D;
 
     // ------------------------------------------------------------------ Erzeugung
 
@@ -606,6 +613,186 @@ class RoundtripFuzzTest {
         }
     }
 
+    // ------------------------------------------------------------ Teil 1d: CR UZ+ LF (kv-trenner-und-umbruch T-4)
+
+    /** Teil 1d: eigene Startwerte, {@value #ANZAHL_TEXTE} Texte mit {@code CR UZ+ LF} und Mischbausteinen aus 1c. */
+    static final long SEED_TEXTE_KV_D = 20261124L;
+    static final long SEED_AUSWAHL_KV_D = 717171L;
+
+    /**
+     * Blockarten von Teil 1d, je ein erwarteter Fund einer gueltigen Nummer: {@code KW(:) CR UZ+ LF N} mit normalem
+     * Kontextwort, dasselbe mit gesperrt geschriebenem Kontextwort ab drei Buchstaben, und {@code KW N CR UZ+ LF N2}
+     * (die erste Nummer direkt hinter dem Kontextwort, die zweite hinter dem Umbruch).
+     */
+    static final int BLOCK_D_KW = 0;
+    static final int BLOCK_D_SPERR = 1;
+    static final int BLOCK_D_ERSTE = 2;
+    static final int BLOCK_D_ZWEITE = 3;
+    private static final int ANZAHL_BLOCKARTEN_D = 4;
+    private static final String[] BLOCK_NAMEN_D = {"kw", "sperr", "erste", "zweite"};
+    private static final int MAX_UZ_D = 3;
+    private static final String NEL_D = String.valueOf((char) 0x85);
+
+    /** Alle sieben unsichtbaren Zeichen von AK-1 und ein Zeichen ausserhalb der BMP (U+E0020, Kategorie Format). */
+    private static final String[] UZ_D = unsichtbareD();
+
+    private static String[] unsichtbareD() {
+        List<String> zeichen = new ArrayList<>(List.of(KvTestHilfen.uzAk1Texte()));
+        zeichen.add(new String(Character.toChars(0xE0020)));
+        return zeichen.toArray(new String[0]);
+    }
+
+    /**
+     * Ein erwarteter Fund einer gueltigen Nummer in einem Text von Teil 1d: Blockart ({@code BLOCK_D_*}), Art der
+     * Nummer, Zahl der unsichtbaren Zeichen im Umbruch unmittelbar vor der Nummer (0 bei {@code BLOCK_D_ERSTE}),
+     * Bereich der Nummer. {@code grenze} markiert einen Block an einer dokumentierten Grenze (siehe
+     * {@link #erzeugeTextD}); er muss keinen Scan-Fund haben.
+     */
+    record BlockD(int blockart, boolean lanr, int uz, int start, int ende, boolean grenze) {
+        BlockD markiert() {
+            return new BlockD(blockart, lanr, uz, start, ende, true);
+        }
+    }
+
+    /**
+     * Ein Text von Teil 1d mit den Bloecken seiner Konstruktion und den Namen der eingebauten Gegenproben (ohne
+     * Block, ohne Erwartung an den Scan). Eigener Typ, getrennt von {@link Fall} und {@link FallC}.
+     */
+    record FallD(String text, List<BlockD> bloecke, List<String> gegenproben) {
+    }
+
+    /** Teil 1d: Texte mit {@code CR UZ+ LF} in Fund-Bloecken, Gegenproben und Mischung mit Bausteinen aus 1c. */
+    static List<FallD> erzeugeKvD(long seed) {
+        Random r = new Random(seed);
+        List<FallD> faelle = new ArrayList<>(ANZAHL_TEXTE);
+        for (int i = 0; i < ANZAHL_TEXTE; i++) {
+            faelle.add(erzeugeTextD(r));
+        }
+        return faelle;
+    }
+
+    /**
+     * Ein Text aus 3 bis 10 Bausteinen. Die Bausteine von 1c ziehen aus einem eigenen {@code Random}, dessen Startwert
+     * je Text eine Zufallszahl des Hauptstroms ist; ihre Bloecke werden nicht erfasst. Als bekannte Grenze (14e)
+     * markiert wird genau ein Fall: ein Sperrblock ({@code BLOCK_D_SPERR}) ohne Praefix, dessen Sperrfolge
+     * unmittelbar auf den Trenner {@code " x "} des vorigen Bausteins folgt (der Einzelbuchstabe haengt an der
+     * Sperrfolge, maximale Folge {@code x L A N R}). Ein unsichtbares Zeichen zwischen Baustein und Trenner zaehlt
+     * nicht. Die Markierung zieht keine Zufallszahlen.
+     */
+    static FallD erzeugeTextD(Random r) {
+        StringBuilder sb = new StringBuilder();
+        List<BlockD> bloecke = new ArrayList<>();
+        List<String> gegenproben = new ArrayList<>();
+        Random mischung = new Random(r.nextLong());
+        int n = 3 + r.nextInt(8);
+        boolean nachX = false;
+        for (int i = 0; i < n; i++) {
+            int vorher = bloecke.size();
+            int form = kvBausteinD(r, mischung, sb, bloecke, gegenproben);
+            int bis = bloecke.size();
+            if (r.nextInt(6) == 0) {
+                sb.append(waehle(r, UNSICHTBAR_C));
+            }
+            String trenner = waehle(r, TRENNER_C);
+            for (int b = vorher; b < bis; b++) {
+                if (nachX && form == FORM_SPERR_OHNE_PRAEFIX && bloecke.get(b).blockart() == BLOCK_D_SPERR) {
+                    bloecke.set(b, bloecke.get(b).markiert());
+                }
+            }
+            nachX = " x ".equals(trenner);
+            sb.append(trenner);
+        }
+        return new FallD(sb.toString(), bloecke, gegenproben);
+    }
+
+    /** {@code CR}, {@code anzahl} zufaellige unsichtbare Zeichen, {@code LF}. */
+    private static String crUzLf(Random r, int anzahl) {
+        StringBuilder umbruch = new StringBuilder("\r");
+        for (int i = 0; i < anzahl; i++) {
+            umbruch.append(waehle(r, UZ_D));
+        }
+        return umbruch.append('\n').toString();
+    }
+
+    private static void fundNummerD(Random r, StringBuilder sb, List<BlockD> bloecke, int blockart, boolean lanr,
+            int uz) {
+        int start = sb.length();
+        sb.append(kvNummer(r, lanr));
+        bloecke.add(new BlockD(blockart, lanr, uz, start, sb.length(), false));
+    }
+
+    /**
+     * Haengt einen Baustein von Teil 1d an und liefert seine Form ({@code FORM_*} wie bei {@link #kvBausteinC});
+     * Bloecke und Gegenproben werden vermerkt.
+     */
+    private static int kvBausteinD(Random r, Random mischung, StringBuilder sb, List<BlockD> bloecke,
+            List<String> gegenproben) {
+        boolean lanr = r.nextBoolean();
+        int uz = 1 + r.nextInt(MAX_UZ_D);
+        int wahl = r.nextInt(100);
+        if (wahl < 22) {
+            sb.append(waehle(r, lanr ? KW_LANR_F : KW_IK_F)).append(r.nextBoolean() ? ":" : "")
+                    .append(crUzLf(r, uz));
+            fundNummerD(r, sb, bloecke, BLOCK_D_KW, lanr, uz);
+            return FORM_ANDERE;
+        }
+        if (wahl < 42) {
+            String praefix = waehle(r, PRAEFIX_C);
+            sb.append(praefix).append(sperrFolge(r, waehle(r, lanr ? SPERR_LANR_C : SPERR_IK_DREI_C), false))
+                    .append(r.nextBoolean() ? ":" : "").append(crUzLf(r, uz));
+            fundNummerD(r, sb, bloecke, BLOCK_D_SPERR, lanr, uz);
+            return praefix.isEmpty() ? FORM_SPERR_OHNE_PRAEFIX : FORM_ANDERE;
+        }
+        if (wahl < 57) {
+            sb.append(waehle(r, lanr ? KW_LANR_F : KW_IK_F)).append(r.nextBoolean() ? " " : ": ");
+            fundNummerD(r, sb, bloecke, BLOCK_D_ERSTE, lanr, 0);
+            sb.append(crUzLf(r, uz));
+            fundNummerD(r, sb, bloecke, BLOCK_D_ZWEITE, lanr, uz);
+            return FORM_ANDERE;
+        }
+        if (wahl < 72) {
+            gegenprobeD(r, sb, lanr, gegenproben);
+            return FORM_ANDERE;
+        }
+        kvBausteinC(mischung, sb, new ArrayList<>());
+        return FORM_ANDERE;
+    }
+
+    /**
+     * Gegenproben aus dem Plan (T-4): Leerzeile aus zwei Umbruechen, {@code I K:} mit Umbruch, Nummer vor dem
+     * Umbruch und Kontextwort danach, {@code CR} Leerzeichen {@code LF}, {@code CR} U+0085. Sie haben keinen Block:
+     * Teil 1d prueft hier nur Roundtrip, Schutzgarantie und vollstaendiges Ersetzen, keine Nicht-Erkennung (diese
+     * pruefen die Korpus- und Eigenschaftstests, ein Nachbar-Baustein kann den Kontext neu eroeffnen).
+     */
+    private static void gegenprobeD(Random r, StringBuilder sb, boolean lanr, List<String> gegenproben) {
+        String kw = waehle(r, lanr ? KW_LANR_F : KW_IK_F);
+        String nummer = kvNummer(r, lanr);
+        int uz = 1 + r.nextInt(MAX_UZ_D);
+        switch (r.nextInt(5)) {
+            case 0:
+                sb.append(kw).append(':').append(crUzLf(r, uz)).append(crUzLf(r, 1 + r.nextInt(MAX_UZ_D)))
+                        .append(nummer);
+                gegenproben.add("leerzeile");
+                break;
+            case 1:
+                sb.append("I K:").append(crUzLf(r, uz)).append(kvNummer(r, false));
+                gegenproben.add("ik-zwei");
+                break;
+            case 2:
+                sb.append(nummer).append(crUzLf(r, uz)).append(kw);
+                gegenproben.add("nummer-vor-umbruch");
+                break;
+            case 3:
+                sb.append(kw).append(':').append("\r \n").append(nummer);
+                gegenproben.add("cr-leerzeichen-lf");
+                break;
+            default:
+                sb.append(kw).append(':').append('\r').append(NEL_D).append(nummer);
+                gegenproben.add("cr-nel");
+                break;
+        }
+    }
+
     private static String url(Random r) {
         switch (r.nextInt(4)) {
             case 0:
@@ -748,6 +935,7 @@ class RoundtripFuzzTest {
         LAUF = fuehreAus();
         LAUF_KV = fuehreKvAus();
         LAUF_KV_C = fuehreKvCAus();
+        LAUF_KV_D = fuehreKvDAus();
     }
 
     private static boolean paarGetrennt(String s, int pos) {
@@ -902,6 +1090,121 @@ class RoundtripFuzzTest {
     private static boolean vonScanAbgedeckt(List<Finding> scan, BlockC block) {
         for (Finding f : scan) {
             if (f.start() <= block.start() && f.end() >= block.ende()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Teil 1d (kv-trenner-und-umbruch T-4): dieselben Eigenschaften wie Teil 1c ({@code pruefeText}: Invarianten,
+     * Schutzgarantie, Roundtrip, Waechter) plus {@link #pruefeKvD}: Klassen nach Konstruktion, Zaehler der Bloecke
+     * ohne Scan-Abdeckung und vollstaendiges Ersetzen aller Funde.
+     */
+    private static Lauf fuehreKvDAus() {
+        Lauf lauf = new Lauf(SEED_TEXTE_KV_D);
+        TextScanner scanner = TextScanner.standard();
+        Random auswahl = new Random(SEED_AUSWAHL_KV_D);
+        List<FallD> faelle = erzeugeKvD(SEED_TEXTE_KV_D);
+        for (int it = 0; it < faelle.size(); it++) {
+            FallD fall = faelle.get(it);
+            String text = fall.text();
+            if (KvTestHilfen.neunerfenster(text, "00")[1] != 0) {
+                lauf.verletzt("waechter-gueltiges-neunerfenster-ohne-00", it);
+                continue;
+            }
+            if (text.contains("[[")) {
+                lauf.verletzt("generator-doppelklammer", it);
+                continue;
+            }
+            try {
+                pruefeText(lauf, scanner, auswahl, it, new Fall(text, List.of(), false), text);
+                pruefeKvD(lauf, scanner, it, fall);
+            } catch (RuntimeException e) {
+                lauf.verletzt("ausnahme-im-lauf", it);
+            }
+        }
+        return lauf;
+    }
+
+    /**
+     * Klassen je Text, hoechstens einmal: Ein Erkenner-Kandidat (LANR und IK wie in {@code TextScanner.standard()})
+     * liegt genau auf der Nummer eines Blocks, hat die Quelle der gueltigen Nummer und die erwartete Konfidenz:
+     * 0,80 fuer Kontextwort mit {@code CR UZ+ LF} (normal oder gesperrt) und fuer die zweite Nummer hinter dem
+     * Umbruch, 0,95 (LANR) bzw. 0,92 (IK) fuer die erste Nummer direkt hinter dem Kontextwort. Gezaehlt wird nach
+     * Blockart und Art ({@code kv-umbruch-fund-<blockart>-<art>}) und nach Zahl der unsichtbaren Zeichen im Umbruch
+     * ({@code kv-umbruch-fund-uz<n>}). Je Block zaehlt {@code block-ohne-scan-abdeckung} die nicht markierten Bloecke,
+     * deren Nummernbereich von keinem Scan-Fund ganz abgedeckt ist (strikt 0 erwartet); markierte Bloecke zaehlen
+     * getrennt ({@code markiert-ohne-abdeckung}, {@code markiert-mit-abdeckung}). Danach werden alle Scan-Funde
+     * pseudonymisiert und geprueft, dass jeder Fund vollstaendig durch einen Platzhalter ersetzt ist.
+     */
+    static void pruefeKvD(Lauf lauf, TextScanner scanner, int it, FallD fall) {
+        String text = fall.text();
+        List<List<Finding>> kandidaten = List.of(STANDARD_ERKENNER.get(ERKENNER_LANR).detect(text),
+                STANDARD_ERKENNER.get(ERKENNER_IK).detect(text));
+        boolean[][] gesehen = new boolean[ANZAHL_BLOCKARTEN_D][2];
+        boolean[] uzGesehen = new boolean[MAX_UZ_D + 1];
+        for (BlockD block : fall.bloecke()) {
+            int art = block.lanr() ? 0 : 1;
+            double erwartet = block.blockart() == BLOCK_D_ERSTE ? (block.lanr() ? 0.95 : 0.92) : 0.80;
+            String quelle = block.lanr() ? LanrRecognizer.SOURCE : IkRecognizer.SOURCE;
+            for (Finding c : kandidaten.get(art)) {
+                if (c.start() == block.start() && c.end() == block.ende() && c.confidence() == erwartet
+                        && quelle.equals(c.source())) {
+                    gesehen[block.blockart()][art] = true;
+                    uzGesehen[block.uz()] = true;
+                }
+            }
+        }
+        boolean irgendwo = false;
+        for (int b = 0; b < ANZAHL_BLOCKARTEN_D; b++) {
+            boolean mindestensEineArt = false;
+            for (int a = 0; a < 2; a++) {
+                if (gesehen[b][a]) {
+                    lauf.klasse("kv-umbruch-fund-" + BLOCK_NAMEN_D[b] + "-" + (a == 0 ? "lanr" : "ik"));
+                    mindestensEineArt = true;
+                }
+            }
+            if (mindestensEineArt) {
+                lauf.klasse("kv-umbruch-fund-" + BLOCK_NAMEN_D[b]);
+                irgendwo = true;
+            }
+        }
+        for (int u = 1; u <= MAX_UZ_D; u++) {
+            if (uzGesehen[u]) {
+                lauf.klasse("kv-umbruch-fund-uz" + u);
+            }
+        }
+        if (irgendwo) {
+            lauf.klasse("kv-umbruch-fund");
+        }
+        for (String gegenprobe : fall.gegenproben()) {
+            lauf.klasse("gegenprobe-" + gegenprobe);
+        }
+        List<Finding> scan = scanner.scan(text);
+        for (BlockD block : fall.bloecke()) {
+            String art = BLOCK_NAMEN_D[block.blockart()];
+            String detail = art + "-" + (block.lanr() ? "lanr" : "ik");
+            lauf.klasse("bloecke-" + detail);
+            boolean abgedeckt = imScanAbgedeckt(scan, block.start(), block.ende());
+            if (block.grenze()) {
+                lauf.klasse("block-markiert");
+                lauf.klasse(abgedeckt ? "markiert-mit-abdeckung" : "markiert-ohne-abdeckung");
+                lauf.klasse((abgedeckt ? "markiert-mit-abdeckung-" : "markiert-ohne-abdeckung-") + art);
+            } else if (!abgedeckt) {
+                lauf.klasse("block-ohne-scan-abdeckung");
+                lauf.klasse("block-ohne-scan-abdeckung-" + detail);
+            }
+        }
+        PseudonymizationResult alle = PSEUDONYMIZER.pseudonymize(text, scan);
+        if (!alleFundeErsetzt(text, scan, alle.text())) {
+            lauf.verletzt("ak23-fund-nicht-vollstaendig-ersetzt", it);
+        }
+    }
+
+    private static boolean imScanAbgedeckt(List<Finding> scan, int start, int ende) {
+        for (Finding f : scan) {
+            if (f.start() <= start && f.end() >= ende) {
                 return true;
             }
         }
@@ -1602,6 +1905,208 @@ class RoundtripFuzzTest {
         assertEquals(69, LAUF_KV_C.klasse_("markiert-ohne-abdeckung"), "markierte Bloecke ohne Abdeckung");
         assertEquals(53, LAUF_KV_C.klasse_("markiert-ohne-abdeckung-sperr"), "davon Sperrbloecke hinter x");
         assertEquals(16, LAUF_KV_C.klasse_("markiert-ohne-abdeckung-komma"), "davon Kommabloecke vor x");
+    }
+
+    // ------------------------------------------------------------------ Teil 1d (kv-trenner-und-umbruch T-4)
+
+    /** Hashwert der Teil-1d-Textfolge (kv-trenner-und-umbruch T-4, nach dem Anlegen des Generators gemessen). */
+    static final int HASH_TEIL_1D = 0x064705DE;
+
+    private static List<String> texteTeil1d() {
+        List<String> texte = new ArrayList<>();
+        for (FallD f : erzeugeKvD(SEED_TEXTE_KV_D)) {
+            texte.add(f.text());
+        }
+        return texte;
+    }
+
+    @Test
+    void t4_teil1dTextfolgeIstUnveraendert() {
+        List<String> texte = texteTeil1d();
+        assertEquals(HASH_TEIL_1D, texte.hashCode(), "Hashwert der Teil-1d-Textfolge, Startwert " + SEED_TEXTE_KV_D
+                + ", gemessen 0x" + Integer.toHexString(texte.hashCode()));
+    }
+
+    @Test
+    void t4_teil1dZweiLaeufeMitDemselbenStartwertErzeugenDieselbeTextfolge() {
+        List<String> a = texteTeil1d();
+        assertEquals(ANZAHL_TEXTE, a.size());
+        assertTextfolgeGleich(a, texteTeil1d(), SEED_TEXTE_KV_D, "Teil 1d: Textfolge");
+        List<String> teil1c = new ArrayList<>();
+        for (FallC f : erzeugeKvC(SEED_TEXTE_KV_D)) {
+            teil1c.add(f.text());
+        }
+        assertNotEquals(a.hashCode(), teil1c.hashCode(), "Teil 1d unterscheidet sich von Teil 1c gleichen Seeds");
+        assertNotEquals(HASH_TEIL_1C, a.hashCode(), "Teil 1d unterscheidet sich von Teil 1c");
+        assertNotEquals(HASH_TEIL_1B, a.hashCode(), "Teil 1d unterscheidet sich von Teil 1b");
+        assertNotEquals(HASH_TEIL_1, a.hashCode(), "Teil 1d unterscheidet sich von Teil 1");
+    }
+
+    private static void keineD(String eigenschaft) {
+        assertEquals(0, LAUF_KV_D.anzahl(eigenschaft), "Teil 1d: " + LAUF_KV_D.meldung(eigenschaft));
+    }
+
+    @Test
+    void t4_kvD_waechterUndGeneratorSindSauber() {
+        keineD("waechter-gueltiges-neunerfenster-ohne-00");
+        keineD("generator-doppelklammer");
+    }
+
+    @Test
+    void t4_kvD_roundtripIstZeichengleichOhneMeldung() {
+        keineD("ak45-roundtrip-ungleich");
+        keineD("ak45-pseudonymisierung-wirft");
+        keineD("ak45-meldung");
+        keineD("ausnahme-im-lauf");
+    }
+
+    @Test
+    void t4_kvD_scanInvarianteUndListenInvariante() {
+        keineD("ak1-scan-invariante");
+        keineD("ak1-liste-invariante");
+    }
+
+    @Test
+    void t4_kvD_schutzgarantie_jederKandidatDerStandardErkennerIstImScanAbgedeckt() {
+        keineD("ak7a-kandidat-nicht-im-scan");
+    }
+
+    @Test
+    void t4_kvD_keinFremdtextImScanUndBereicheSindDieVerschmolzenenKandidaten() {
+        keineD("ak7e-fremdtext-im-scan");
+        keineD("ak7e-bereiche-nicht-verschmolzen");
+    }
+
+    @Test
+    void t4_kvD_keineZiffernketteEinesFundesImAusgabetext() {
+        keineD("ak23-fund-nicht-vollstaendig-ersetzt");
+    }
+
+    /**
+     * Mindestzahlen der Klassen von Teil 1d. Messwerte bei festem Seed (T-4), je Text hoechstens einmal gezaehlt,
+     * Untergrenzen mit mindestens 30 % Abstand. Fund mit der erwarteten Konfidenz je Blockart und Art: Kontextwort
+     * (KW) 773 (LANR 518, IK 531, Untergrenzen 500, 350, 350), Sperrschrift 722 (461, 473; 480, 300, 300), erste
+     * Nummer direkt hinter dem Kontextwort 664 (419, 406; 440, 280, 270), zweite Nummer hinter dem Umbruch ebenso
+     * 664 (419, 406; 440, 280, 270); Fund aus Block insgesamt 977 (650); je Zahl unsichtbarer Zeichen im Umbruch 708,
+     * 704, 736 (je 450). Bloecke je Blockart und Art (Zahl der Bloecke, nicht der Texte): KW 713 / 721 (480), Sperr
+     * 649 / 667 (430, 440), erste und zweite Nummer je 531 / 517 (350, 340). Gegenproben (Vorkommen): Leerzeile 180,
+     * {@code I K} 184, Nummer vor dem Umbruch 202, {@code CR} Leerzeichen {@code LF} 202, {@code CR} U+0085 187 (je
+     * 120). Funde je Typ im Scan LANR 918, IK 936 (600), fraglich 618 (400), Scan-Funde 1000 (650), manuelle Funde
+     * 949 (600), echte Teilmengen der Scan-Funde 898 (600).
+     */
+    @Test
+    void t4_kvD_fuzzPruftNichtInsLeere_jedeKlasseKommtVor() {
+        mindestens(LAUF_KV_D, "kv-umbruch-fund", 650);
+        mindestens(LAUF_KV_D, "kv-umbruch-fund-kw", 500);
+        mindestens(LAUF_KV_D, "kv-umbruch-fund-kw-lanr", 350);
+        mindestens(LAUF_KV_D, "kv-umbruch-fund-kw-ik", 350);
+        mindestens(LAUF_KV_D, "kv-umbruch-fund-sperr", 480);
+        mindestens(LAUF_KV_D, "kv-umbruch-fund-sperr-lanr", 300);
+        mindestens(LAUF_KV_D, "kv-umbruch-fund-sperr-ik", 300);
+        mindestens(LAUF_KV_D, "kv-umbruch-fund-erste", 440);
+        mindestens(LAUF_KV_D, "kv-umbruch-fund-erste-lanr", 280);
+        mindestens(LAUF_KV_D, "kv-umbruch-fund-erste-ik", 270);
+        mindestens(LAUF_KV_D, "kv-umbruch-fund-zweite", 440);
+        mindestens(LAUF_KV_D, "kv-umbruch-fund-zweite-lanr", 280);
+        mindestens(LAUF_KV_D, "kv-umbruch-fund-zweite-ik", 270);
+        for (int uz = 1; uz <= MAX_UZ_D; uz++) {
+            mindestens(LAUF_KV_D, "kv-umbruch-fund-uz" + uz, 450);
+        }
+        mindestens(LAUF_KV_D, "bloecke-kw-lanr", 480);
+        mindestens(LAUF_KV_D, "bloecke-kw-ik", 480);
+        mindestens(LAUF_KV_D, "bloecke-sperr-lanr", 430);
+        mindestens(LAUF_KV_D, "bloecke-sperr-ik", 440);
+        mindestens(LAUF_KV_D, "bloecke-erste-lanr", 350);
+        mindestens(LAUF_KV_D, "bloecke-erste-ik", 340);
+        mindestens(LAUF_KV_D, "bloecke-zweite-lanr", 350);
+        mindestens(LAUF_KV_D, "bloecke-zweite-ik", 340);
+        for (String gegenprobe : List.of("leerzeile", "ik-zwei", "nummer-vor-umbruch", "cr-leerzeichen-lf",
+                "cr-nel")) {
+            mindestens(LAUF_KV_D, "gegenprobe-" + gegenprobe, 120);
+        }
+        mindestens(LAUF_KV_D, "kv-fund-lanr", 600);
+        mindestens(LAUF_KV_D, "kv-fund-ik", 600);
+        mindestens(LAUF_KV_D, "kv-fraglich", 400);
+        mindestens(LAUF_KV_D, "scan-fund", 650);
+        mindestens(LAUF_KV_D, "manueller-fund", 600);
+        mindestens(LAUF_KV_D, "echte-teilmenge-der-scan-funde", 600);
+    }
+
+    /**
+     * AK-25: Der Zaehler "Block ohne Scan-Abdeckung" ist strikt 0 fuer jeden nicht markierten Block von Teil 1d,
+     * insgesamt und nach Blockart und Art. Ein Wert ungleich 0 ist ein Befund, keine Erwartung zum Anpassen.
+     */
+    @Test
+    void t4_kvD_blockOhneScanAbdeckung_istStriktNull_insgesamtUndNachBlockartUndArt() {
+        assertEquals(0, LAUF_KV_D.klasse_("block-ohne-scan-abdeckung"),
+                "Bloecke ohne Scan-Abdeckung (strikt 0), Startwert " + SEED_TEXTE_KV_D);
+        String basis = "block-ohne-scan-abdeckung-";
+        for (String blockart : BLOCK_NAMEN_D) {
+            assertEquals(0, LAUF_KV_D.klasse_(basis + blockart + "-lanr"), "Blockart " + blockart + ", LANR");
+            assertEquals(0, LAUF_KV_D.klasse_(basis + blockart + "-ik"), "Blockart " + blockart + ", IK");
+        }
+    }
+
+    /**
+     * Die markierten Bloecke (bekannte Grenze 14e: Sperrblock ohne Praefix unmittelbar hinter {@code " x "}) werden
+     * einzeln gezaehlt, damit nichts verdeckt wird. Messwerte bei festem Seed: 42 markierte Bloecke, davon 36 ohne
+     * und 6 mit Scan-Abdeckung, alle von der Blockart Sperrschrift. Eine Aenderung der Zahlen ist ein Befund.
+     */
+    @Test
+    void t4_kvD_markierteBloecke_sindEinzelnGezaehlt() {
+        assertEquals(42, LAUF_KV_D.klasse_("block-markiert"), "markierte Bloecke");
+        assertEquals(36, LAUF_KV_D.klasse_("markiert-ohne-abdeckung"), "markierte Bloecke ohne Abdeckung");
+        assertEquals(6, LAUF_KV_D.klasse_("markiert-mit-abdeckung"), "markierte Bloecke mit Abdeckung");
+        assertEquals(36, LAUF_KV_D.klasse_("markiert-ohne-abdeckung-sperr"), "davon Sperrbloecke ohne Abdeckung");
+        assertEquals(6, LAUF_KV_D.klasse_("markiert-mit-abdeckung-sperr"), "davon Sperrbloecke mit Abdeckung");
+        assertEquals(LAUF_KV_D.klasse_("block-markiert"), LAUF_KV_D.klasse_("markiert-ohne-abdeckung")
+                + LAUF_KV_D.klasse_("markiert-mit-abdeckung"), "jeder markierte Block ist einmal eingeordnet");
+        for (String blockart : List.of("kw", "erste", "zweite")) {
+            assertEquals(0, LAUF_KV_D.klasse_("markiert-ohne-abdeckung-" + blockart), "nur Sperrbloecke: " + blockart);
+            assertEquals(0, LAUF_KV_D.klasse_("markiert-mit-abdeckung-" + blockart), "nur Sperrbloecke: " + blockart);
+        }
+    }
+
+    /** Die Markierung im Generator: jeder markierte Block ist ein Sperrblock, die Zahl stimmt mit dem Lauf ueberein. */
+    @Test
+    void t4_kvD_generatorMarkiertNurSperrbloeckeUndHaeltDieZahlDesLaufs() {
+        int markiert = 0;
+        for (FallD fall : erzeugeKvD(SEED_TEXTE_KV_D)) {
+            for (BlockD block : fall.bloecke()) {
+                if (block.grenze()) {
+                    markiert++;
+                    assertEquals(BLOCK_D_SPERR, block.blockart(), "markierter Block ist kein Sperrblock");
+                }
+            }
+        }
+        assertEquals(LAUF_KV_D.klasse_("block-markiert"), markiert, "markierte Bloecke: Generator gegen Lauf");
+    }
+
+    /**
+     * Selbsttest der Zaehler: Ein abgedeckter Block, ein nicht markierter Block ohne Abdeckung und ein markierter
+     * Block ohne Abdeckung werden je in der richtigen Klasse gezaehlt (der strikte Zaehler laeuft nicht ins Leere).
+     */
+    @Test
+    void t4_kvD_selbsttest_zaehlerErkennenBlockOhneAbdeckungUndMarkierte() {
+        String vor = "LANR:\r" + KvTestHilfen.ZWSP + "\n";
+        String nummer = SynthetischeKvNummern.LANR_GUELTIG;
+        String text = vor + nummer + " Hallo Welt";
+        int ende = vor.length() + nummer.length();
+        BlockD gut = new BlockD(BLOCK_D_KW, true, 1, vor.length(), ende, false);
+        BlockD leer = new BlockD(BLOCK_D_KW, true, 1, ende + 1, ende + 6, false);
+        Lauf lauf = new Lauf(SEED_TEXTE_KV_D);
+        pruefeKvD(lauf, TextScanner.standard(), 0, new FallD(text, List.of(gut), List.of()));
+        assertEquals(0, lauf.klasse_("block-ohne-scan-abdeckung"), "abgedeckter Block");
+        assertEquals(1, lauf.klasse_("kv-umbruch-fund-kw-lanr"), "Fund mit 0,80 auf der Nummer erkannt");
+        assertEquals(1, lauf.klasse_("kv-umbruch-fund-uz1"), "ein unsichtbares Zeichen");
+        pruefeKvD(lauf, TextScanner.standard(), 1, new FallD(text, List.of(leer), List.of()));
+        assertEquals(1, lauf.klasse_("block-ohne-scan-abdeckung"), "nicht markierter Block ohne Abdeckung");
+        assertEquals(1, lauf.klasse_("block-ohne-scan-abdeckung-kw-lanr"), "nach Blockart und Art");
+        pruefeKvD(lauf, TextScanner.standard(), 2, new FallD(text, List.of(leer.markiert()), List.of()));
+        assertEquals(1, lauf.klasse_("block-ohne-scan-abdeckung"), "markierter Block zaehlt nicht dort");
+        assertEquals(1, lauf.klasse_("markiert-ohne-abdeckung"), "markierter Block ohne Abdeckung");
+        assertEquals(1, lauf.klasse_("block-markiert"), "markierter Block gezaehlt");
+        assertEquals(0, lauf.anzahl("ak23-fund-nicht-vollstaendig-ersetzt"), "Ersetzen vollstaendig");
     }
 
     @Test

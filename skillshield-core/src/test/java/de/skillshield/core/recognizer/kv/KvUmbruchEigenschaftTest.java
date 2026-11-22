@@ -3,6 +3,7 @@ package de.skillshield.core.recognizer.kv;
 import static de.skillshield.core.SynthetischeKvNummern.LAENGE_7;
 import static de.skillshield.core.recognizer.kv.KvTestHilfen.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import de.skillshield.core.model.ConfidenceLevel;
@@ -41,10 +42,9 @@ class KvUmbruchEigenschaftTest {
     private static final long SEED_IK_ZWEI = 20261303L;
     private static final int TEXTE = 1_000;
     private static final double ZWEI = 0.50;
-    private static final char VS1 = (char) 0xFE00;
 
-    /** Die sechs unsichtbaren Zeichen aus AK-1 und der Variantenwaehler U+FE00. */
-    private static final char[] UZ = {ZWSP, SHY, BOM, WORD_JOINER, LRM, VS16, VS1};
+    /** Die sechs unsichtbaren Zeichen aus AK-1 und der Variantenwaehler U+FE00 (gemeinsam in KvTestHilfen). */
+    private static final char[] UZ = UZ_AK1;
     private static final String[] TRENNER = {":", ": ", " ", " : ", "="};
     private static final String[] VORFELD = {"", "", "Rechnung ", "Praxis "};
     private static final String[] NACHFELD = {"", "", ".", " Ende"};
@@ -55,7 +55,7 @@ class KvUmbruchEigenschaftTest {
     }
 
     /** Ein erzeugter Text samt Erwartung (Start und Wert der Nummer, Konfidenz; {@code konfidenz < 0}: kein Fund). */
-    private record Probe(String text, int start, String nummer, double konfidenz, int umbrueche, boolean liste) {
+    private record Probe(String text, int start, String nummer, double konfidenz, int umbrueche) {
     }
 
     private static final class Zaehler {
@@ -151,8 +151,8 @@ class KvUmbruchEigenschaftTest {
         }
         int start = sb.length();
         sb.append(nummer).append(wahl(r, NACHFELD));
-        double deckel = deckel(k, art, umbrueche);
-        double konfidenz = deckel < 0 ? -1 : Math.min(deckel, nummernKonf);
+        double obergrenze = deckel(k, art, umbrueche);
+        double konfidenz = obergrenze < 0 ? -1 : Math.min(obergrenze, nummernKonf);
         z.zaehle("umbruch." + Math.min(umbrueche, 2));
         if (enthaeltCrUnsichtbarLf(folge)) {
             z.zaehle("crUzLf");
@@ -163,7 +163,7 @@ class KvUmbruchEigenschaftTest {
         }
         z.zaehle(konfidenz < 0 ? "keinFund" : "fund");
         z.zaehle("nummer." + (nummernKonf == 1.0 ? "gueltig" : nummernKonf == PZ_UNGUELTIG ? "ungueltig" : "laenge"));
-        return new Probe(sb.toString(), start, nummer, konfidenz, umbrueche, liste);
+        return new Probe(sb.toString(), start, nummer, konfidenz, umbrueche);
     }
 
     // ------------------------------------------------------------------ Pruefung
@@ -282,20 +282,39 @@ class KvUmbruchEigenschaftTest {
         assertEquals(1, umbruchZahlReferenz(crUzLf));
         assertEquals(2, umbruchZahlReferenz(crLeerLf));
         assertTrue(enthaeltCrUnsichtbarLf(crUzLf));
-        assertTrue(!enthaeltCrUnsichtbarLf(crLeerLf));
+        assertFalse(enthaeltCrUnsichtbarLf(crLeerLf));
     }
 
+    /**
+     * Die Tabelle {@link #deckel} (Orakel der Eigenschaftstests) stimmt an je einem festen Text pro Kontext, Art und
+     * Umbruchzahl mit dem Befund des Produkts ueberein. Der Text wird ohne Zufall gebaut; die Umbruchzahl 0, 1, 2
+     * entsteht aus keinem Umbruch, {@code CR ZWSP LF} und zweimal {@code CR ZWSP LF}.
+     */
     @Test
-    void erwartung_tabelleDerDeckelJeKontext() {
-        assertEquals(0.95, deckel(Kontext.NORMAL, LANR_ART, 0));
-        assertEquals(0.92, deckel(Kontext.NORMAL, IK_ART, 0));
-        assertEquals(WAHRSCHEINLICH, deckel(Kontext.NORMAL, LANR_ART, 1));
-        assertEquals(-1, deckel(Kontext.NORMAL, LANR_ART, 2));
-        assertEquals(WAHRSCHEINLICH, deckel(Kontext.SPERR, IK_ART, 0));
-        assertEquals(WAHRSCHEINLICH, deckel(Kontext.SPERR, IK_ART, 1));
-        assertEquals(-1, deckel(Kontext.SPERR, IK_ART, 2));
-        assertEquals(ZWEI, deckel(Kontext.IK_ZWEI, IK_ART, 0));
-        assertEquals(-1, deckel(Kontext.IK_ZWEI, IK_ART, 1));
-        assertEquals(-1, deckel(Kontext.IK_ZWEI, IK_ART, 2));
+    void erwartung_tabelleDerDeckelJeKontext_stimmtMitDemProduktAnFestenTextenUeberein() {
+        String uz = String.valueOf(ZWSP);
+        String[] folgen = {"", "\r" + uz + "\n", "\r" + uz + "\n\r" + uz + "\n"};
+        for (Kontext k : Kontext.values()) {
+            for (Art art : ARTEN) {
+                if (k == Kontext.IK_ZWEI && art != IK_ART) {
+                    continue;
+                }
+                for (int umbrueche = 0; umbrueche < folgen.length; umbrueche++) {
+                    assertEquals(umbrueche, umbruchZahlReferenz(folgen[umbrueche]), "Folge " + umbrueche);
+                    double erwartet = deckel(k, art, umbrueche);
+                    String wort = switch (k) {
+                        case NORMAL -> art.kw;
+                        case SPERR -> art.lanr ? "L A N R" : "I K N R";
+                        case IK_ZWEI -> "I K";
+                    };
+                    String vor = wort + ":" + folgen[umbrueche];
+                    if (erwartet < 0) {
+                        assertKein(art, vor + art.gueltig);
+                    } else {
+                        assertEin(art, vor, art.gueltig, "", erwartet, art.quelle);
+                    }
+                }
+            }
+        }
     }
 }

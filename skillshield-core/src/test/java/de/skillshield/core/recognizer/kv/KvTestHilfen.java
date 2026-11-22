@@ -69,6 +69,22 @@ public final class KvTestHilfen {
     static final char PS = (char) 0x2029;
     public static final char LRM = (char) 0x200E;
     public static final char EN_SPACE = (char) 0x2002;
+    public static final char VS1 = (char) 0xFE00;
+
+    /**
+     * Die sechs unsichtbaren Zeichen aus AK-1 des Features kv-trenner-und-umbruch und der Variantenwaehler U+FE00.
+     * Die Reihenfolge ist fest: Zufallsfolgen der Tests, die daraus ziehen, haengen von ihr ab.
+     */
+    static final char[] UZ_AK1 = {ZWSP, SHY, BOM, WORD_JOINER, LRM, VS16, VS1};
+
+    /** Die Zeichen von {@link #UZ_AK1} in derselben Reihenfolge, je als Zeichenkette (jedes Mal neu angelegt). */
+    public static String[] uzAk1Texte() {
+        String[] texte = new String[UZ_AK1.length];
+        for (int i = 0; i < texte.length; i++) {
+            texte[i] = String.valueOf(UZ_AK1[i]);
+        }
+        return texte;
+    }
 
     /**
      * Unabhaengig vom Produkt, je Codepunkt: Formatzeichen (Kategorie {@code FORMAT}) und Variantenwaehler
@@ -488,7 +504,7 @@ public final class KvTestHilfen {
         int n = 0;
         for (int i = 0; i < text.length();) {
             int c = text.codePointAt(i);
-            if (!istUnsichtbarReferenz(c)) {
+            if (!unsichtbar(c)) {
                 cp[n] = c;
                 ursprung[n] = i;
                 n++;
@@ -518,10 +534,6 @@ public final class KvTestHilfen {
             i = letzter + 1;
         }
         return treffer;
-    }
-
-    private static boolean istUnsichtbarReferenz(int c) {
-        return Character.getType(c) == Character.FORMAT || (c >= 0xFE00 && c <= 0xFE0F);
     }
 
     private static boolean istBuchstabeOderMarkReferenz(int c) {

@@ -33,6 +33,7 @@ import static de.skillshield.core.SynthetischeKvNummern.LANR_UNGUELTIG_ZIFFER_GE
 import static de.skillshield.core.SynthetischeKvNummern.TELEFON_PROBE;
 import static de.skillshield.core.TestTexte.bs;
 import static de.skillshield.core.recognizer.kv.KvTestHilfen.neunerfenster;
+import static de.skillshield.core.recognizer.kv.KvTestHilfen.uzAk1Texte;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -68,7 +69,9 @@ import org.junit.jupiter.params.provider.MethodSource;
  * Ausgabetext (Faelle ohne Fund sind ausgenommen, dort bleibt der Text absichtlich unveraendert), Rueckuebersetzung
  * zeichengleich ohne Meldung. Meldungen nennen nur den Fallnamen. Dazu Konsistenzfaelle (AK-20, OF-5) und die bekannte
  * Grenze 13. Die Faelle {@code kl-...} und {@code bekannteGrenze12R/14a-14g...} (kv-kontext-luecken T-6) decken
- * gesperrt geschriebene Kontextwoerter, {@code I K}, Komma vor dem Kontextwort, Gegenproben und bekannte Grenzen ab.
+ * gesperrt geschriebene Kontextwoerter, {@code I K}, Komma vor dem Kontextwort, Gegenproben und bekannte Grenzen ab;
+ * die Faelle {@code ku-...} und {@code bekannteGrenze15Rest-...} (kv-trenner-und-umbruch T-4) decken {@code CR UZ+ LF}
+ * als einen Zeilenumbruch, die Gegenproben mit zwei Umbruechen und die Restgrenze 15R ab.
  *
  * <p>Testdaten sind synthetisch ({@code *.invalid}, {@code *.example}, 192.0.2.0/24, erfundene Namen).
  * Backslashes werden über {@link TestTexte#bs(String)} geschrieben; Nicht-ASCII-, unsichtbare und typografische
@@ -881,7 +884,79 @@ class RoundtripKorpusTest {
         f.add(kvFall("tabelle-mit-tabulatoren", "Praxis\tLANR\t" + LANR_GUELTIG + "\tIK\t" + IK_GUELTIG + "\t",
                 "Praxis\tLANR\t[[LANR_1]]\tIK\t[[IK_2]]\t", "LANR,IK"));
         kvLueckenFaelle(f);
+        kvUmbruchFaelle(f);
         return f;
+    }
+
+    /**
+     * Korpusfaelle zu kv-trenner-und-umbruch Teil 1 (T-4, AK-1 bis AK-5, AK-25): {@code CR UZ+ LF} gilt wie
+     * {@code CR LF} als ein Zeilenumbruch. Je Fall mit Fund steht der erwartete pseudonymisierte Text da (Kontextwort,
+     * {@code CR}, unsichtbare Zeichen, {@code LF} bleiben zeichengleich, nur die Nummer wird ersetzt); die
+     * Gegenproben mit zwei Umbruechen sind Faelle ohne Fund ({@code kein}), darunter die Restgrenze 15R. Die
+     * unsichtbaren Zeichen kommen als {@code (char)}-Konstanten, nie als Escape.
+     */
+    private static void kvUmbruchFaelle(List<KvFall> f) {
+        String[] uzNamen = {"zwsp", "shy", "bom", "wj", "lrm", "vs16", "vs1"};
+        String[] uz = uzAk1Texte();
+        String zw = uz[0];
+        String bom = uz[2];
+        String shy = uz[1];
+        String nel = String.valueOf((char) 0x85);
+        String nb = String.valueOf((char) 0xA0);
+        String ausserhalbBmp = new String(Character.toChars(0xE0020));
+        String lanr = LANR_GUELTIG;
+        String ik = IK_GUELTIG;
+        // AK-1: jedes der sieben unsichtbaren Zeichen zwischen CR und LF, beide Arten
+        for (int i = 0; i < uz.length; i++) {
+            f.add(ein("ku-ak1-lanr-" + uzNamen[i], "LANR:\r" + uz[i] + "\n", lanr, "LANR", ""));
+            f.add(ein("ku-ak1-ik-" + uzNamen[i], "IK:\r" + uz[i] + "\n", ik, "IK", ""));
+        }
+        // AK-2: mehrere unsichtbare Zeichen, auch ausserhalb der BMP
+        f.add(ein("ku-ak2-drei-zeichen", "Arztnummer\r" + zw + bom + shy + "\n", lanr, "LANR", ""));
+        f.add(ein("ku-ak2-vier-gleiche-zeichen", "IK-Nr.:\r" + zw + zw + zw + zw + "\n", ik, "IK", ""));
+        f.add(ein("ku-ak2-ausserhalb-bmp", "LANR:\r" + ausserhalbBmp + "\n", lanr, "LANR", ""));
+        f.add(ein("ku-ak2-ohne-doppelpunkt", "LANR\r" + zw + "\n", lanr, "LANR", ""));
+        // AK-3: gesperrte Kontextwoerter ab drei Buchstaben, I K (zwei Buchstaben) bleibt ohne Fund
+        f.add(ein("ku-ak3-sperr-lanr", "L A N R:\r" + zw + "\n", lanr, "LANR", ""));
+        f.add(ein("ku-ak3-sperr-iknr", "I K N R:\r" + zw + "\n", ik, "IK", ""));
+        f.add(kein("ku-ak3-ik-zwei-buchstaben", "I K:\r" + zw + "\n" + ik));
+        f.add(kein("ku-ak3-ik-zwei-buchstaben-ohne-doppelpunkt", "I K\r" + zw + "\n" + ik));
+        // AK-4: zwei Umbrueche bleiben zwei (kein Fund), genau ein Umbruch bleibt ein Fund
+        f.add(kein("ku-ak4-cr-uz-cr", "LANR:\r" + zw + "\r" + lanr));
+        f.add(kein("ku-ak4-lf-uz-lf", "LANR:\n" + zw + "\n" + lanr));
+        f.add(kein("ku-ak4-crlf-uz-lf", "LANR:\r\n" + zw + "\n" + lanr));
+        f.add(kein("ku-ak4-cr-uz-lf-uz-lf", "LANR:\r" + zw + "\n" + zw + "\n" + lanr));
+        f.add(kein("ku-ak4-zweimal-cr-uz-lf", "LANR:\r" + zw + "\n\r" + zw + "\n" + lanr));
+        f.add(kein("ku-ak4-cr-uz-nel", "IK:\r" + zw + nel + ik));
+        f.add(kein("ku-ak4-sperr-zwei-umbrueche", "L A N R:\r" + zw + "\n\r" + zw + "\n" + lanr));
+        f.add(ein("ku-ak4-cr-uz-ohne-lf-ist-ein-umbruch", "LANR:\r" + zw + zw, lanr, "LANR", ""));
+        f.add(ein("ku-ak4-ein-umbruch-nel", "LANR:" + nel, lanr, "LANR", ""));
+        // Restgrenze 15R: Leerraum, sichtbares Zeichen oder Kombinationszeichen zwischen CR und LF, CR NEL
+        f.add(kein("bekannteGrenze15Rest-cr-leerzeichen-lf", "LANR:\r \n" + lanr));
+        f.add(kein("bekannteGrenze15Rest-cr-nbsp-lf", "LANR:\r" + nb + "\n" + lanr));
+        f.add(kein("bekannteGrenze15Rest-cr-uz-leerzeichen-lf", "LANR:\r" + zw + " \n" + lanr));
+        f.add(kein("bekannteGrenze15Rest-cr-nel", "LANR:\r" + nel + lanr));
+        f.add(kein("bekannteGrenze15Rest-cr-uz-buchstabe-lf", "LANR:\r" + zw + "A\n" + lanr));
+        String akut = String.valueOf((char) 0x301);
+        f.add(kein("bekannteGrenze15Rest-cr-uz-akut-lf", "LANR:\r" + zw + akut + "\n" + lanr));
+        // AK-5: die Folgewirkungen eines Umbruchs gelten auch fuer CR UZ+ LF
+        f.add(kein("ku-ak5a-leerzeile", "LANR:\r" + zw + "\n\r" + zw + "\n" + lanr));
+        f.add(kein("ku-ak5b-nachgestellter-kontext", lanr + "\r" + zw + "\nLANR"));
+        f.add(kein("ku-ak5b-nachgestellter-kontext-sperr", ik + "\r" + zw + "\nI K N R"));
+        f.add(kein("ku-ak5c-komma-regel", lanr + ",\r" + zw + "\nLANR"));
+        f.add(kvFall("ku-ak5d-aufzaehlung-zeilenweise", "LANR " + lanr + "\r" + zw + "\n" + LANR_GUELTIG_ZWEI,
+                "LANR [[LANR_1]]\r" + zw + "\n[[LANR_2]]", "LANR,LANR"));
+        f.add(kein("ku-ak5e-sperrfolge-vom-umbruch-unterbrochen", "L\r" + zw + "\nA N R " + lanr));
+        f.add(ein("ku-ak5e-sperrfolge-vor-dem-umbruch-vollstaendig", "L A N R\r" + zw + "\n", lanr, "LANR", ""));
+        f.add(ein("ku-ak5f-nummerierte-liste", "LANR:\r" + zw + "\n1. ", lanr, "LANR", ""));
+        // Mischung mit anderen Funden und Zeilenenden, ganze Kette
+        f.add(kvFall("ku-mischung-mail-sperr-ip", "Mail " + MAIL + ", L A N R:\r" + zw + "\n" + lanr
+                + ", Server 192.0.2.10", "Mail [[EMAIL_1]], L A N R:\r" + zw + "\n[[LANR_2]], Server [[IP_3]]",
+                "EMAIL,LANR,IP"));
+        f.add(kvFall("ku-mischung-zwei-arten", "LANR:\r" + zw + "\n" + lanr + "\nIK:\r" + shy + "\n" + ik,
+                "LANR:\r" + zw + "\n[[LANR_1]]\nIK:\r" + shy + "\n[[IK_2]]", "LANR,IK"));
+        f.add(kvFall("ku-mischung-gleiche-nummer-zweimal", "LANR:\r" + zw + "\n" + lanr + " und LANR:\r" + bom + "\n"
+                + lanr, "LANR:\r" + zw + "\n[[LANR_1]] und LANR:\r" + bom + "\n[[LANR_1]]", "LANR,LANR"));
     }
 
     /**

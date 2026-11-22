@@ -29,7 +29,7 @@ import org.junit.jupiter.api.Test;
  * Vergleich des heutigen Standes gegen die zweite eingefrorene Kopie ({@code KvNumberScannerStandLuecken}, Stand Ende
  * kv-kontext-luecken; T-1, AK-22, AK-27, AK-28). Die Kopie wird nie geaendert.
  *
- * <p>Siegel: Ein Hash ueber alle Funde der Kopie auf Fuzz-Teil 1, 1b und 1c haelt sie fest; aendert sich die Kopie
+ * <p>Siegel: Ein Hash ueber alle Funde der Kopie auf Fuzz-Teil 1, 1b, 1c und 1d haelt sie fest; aendert sich die Kopie
  * oder einer der Generatoren, schlaegt er an. Differenzpruefung: Erkennerebene je Art
  * ({@link KvTestHilfen#pruefeGegenStandLuecken}, {@link KvTestHilfen#verletztBestandsschutzOhneAusnahme}: kein Fund
  * fehlt, keine Konfidenz sinkt, gleiche Quelle, keine Ausnahme) und Scannerebene ({@code TextScanner} mit den
@@ -61,6 +61,8 @@ class KvStandLueckenDifferenzTest {
     static final int SIEGEL_LUECKEN_TEIL_1B = 0x04D9C620;
     /** Siegel ueber die Funde der Kopie auf Fuzz-Teil 1c (hexadezimal, in T-1 gemessen). */
     static final int SIEGEL_LUECKEN_TEIL_1C = 0x6CA21DC5;
+    /** Siegel ueber die Funde der Kopie auf Fuzz-Teil 1d (hexadezimal, in T-4 gemessen). */
+    static final int SIEGEL_LUECKEN_TEIL_1D = 0x8AE75156;
 
     private static final TextScanner NEU = TextScanner.standard();
     private static final TextScanner ALT = new TextScanner(List.of(new EmailRecognizer(), new Ipv4Recognizer(),
@@ -91,8 +93,18 @@ class KvStandLueckenDifferenzTest {
         return texte;
     }
 
+    private static List<String> teil1d() {
+        List<RoundtripFuzzTest.FallD> faelle = RoundtripFuzzTest.erzeugeKvD(RoundtripFuzzTest.SEED_TEXTE_KV_D);
+        List<String> texte = new ArrayList<>(faelle.size());
+        for (RoundtripFuzzTest.FallD f : faelle) {
+            texte.add(f.text());
+        }
+        return texte;
+    }
+
     /** Einmal erzeugt und von allen Tests wiederverwendet (die Listen werden nur gelesen). */
     private static final List<String> TEIL_1C = teil1c();
+    private static final List<String> TEIL_1D = teil1d();
     private static final List<String> GENERATOREN = KvKontextLueckenEigenschaftTest.differenzTexte();
 
     // ------------------------------------------------------------------ Siegel
@@ -127,6 +139,13 @@ class KvStandLueckenDifferenzTest {
         assertEquals(SIEGEL_LUECKEN_TEIL_1C, teil1c, "Siegel Teil 1c, gemessen 0x" + Integer.toHexString(teil1c));
     }
 
+    /** Eigenes Siegel fuer Teil 1d (T-4); die Siegel von Teil 1, 1b und 1c bleiben im Test davor unveraendert. */
+    @Test
+    void standLuecken_fundbildAufTeil1dIstEingefroren() {
+        int teil1d = siegel(TEIL_1D);
+        assertEquals(SIEGEL_LUECKEN_TEIL_1D, teil1d, "Siegel Teil 1d, gemessen 0x" + Integer.toHexString(teil1d));
+    }
+
     // ------------------------------------------------------------------ Uebergang
 
     /** Texte, deren Fundliste (je Art) von der der Kopie abweicht, getrennt nach mit und ohne CR UZ+ LF. */
@@ -152,8 +171,30 @@ class KvStandLueckenDifferenzTest {
         assertEquals(0, ungleicheTexte(teil1())[0], "Teil 1: Abweichung ohne die Folge");
         assertEquals(0, ungleicheTexte(teil1b())[0], "Teil 1b: Abweichung ohne die Folge");
         assertEquals(0, ungleicheTexte(TEIL_1C)[0], "Teil 1c: Abweichung ohne die Folge");
+        assertEquals(0, ungleicheTexte(TEIL_1D)[0], "Teil 1d: Abweichung ohne die Folge");
         assertEquals(0, ungleicheTexte(KvDifferenzTest.korpus())[0], "Korpus: Abweichung ohne die Folge");
         assertEquals(0, ungleicheTexte(GENERATOREN)[0], "Generatoren: Abweichung ohne die Folge");
+    }
+
+    /**
+     * Teil 1d enthaelt die Folge haeufig, und dort weicht die Fundliste des Produkts von der der Kopie ab (die
+     * zusaetzlichen Funde sind der Zweck von Teil 1); die Pruefung "ohne Folge gleich" laeuft also nicht ins Leere.
+     * Mindestzahlen mit mehr als 30 % Abstand zu den Messwerten (fester Seed): 993 Texte mit der Folge (Untergrenze
+     * 650), 1 727 Paare (Text, Art) mit der Folge und abweichender Fundliste (1 100). Die Kopie liefert auf Teil 1d
+     * 1 695 LANR- und 2 019 IK-Funde (Pruefung {@code differenz_standLueckenLiefertFunde_...}).
+     */
+    @Test
+    void t4_teil1d_folgeKommtVorUndZusaetzlicheFundeEntstehenNurMitIhr() {
+        int mitFolge = 0;
+        for (String text : TEIL_1D) {
+            if (enthaeltCrUnsichtbarLf(text)) {
+                mitFolge++;
+            }
+        }
+        int[] ungleich = ungleicheTexte(TEIL_1D);
+        assertEquals(0, ungleich[0], "Teil 1d: Abweichung ohne die Folge");
+        assertTrue(mitFolge >= 650, "Teil 1d: Texte mit der Folge " + mitFolge);
+        assertTrue(ungleich[1] >= 1_100, "Teil 1d: Paare mit der Folge und anderer Fundliste " + ungleich[1]);
     }
 
     @Test
@@ -233,6 +274,11 @@ class KvStandLueckenDifferenzTest {
     }
 
     @Test
+    void differenz_erkennerebene_teil1d() {
+        pruefeMitWaechter(TEIL_1D);
+    }
+
+    @Test
     void differenz_erkennerebene_generatorenAusDenEigenschaftstests() {
         pruefeMitWaechter(GENERATOREN);
     }
@@ -242,6 +288,7 @@ class KvStandLueckenDifferenzTest {
         for (KvTestHilfen.Art a : KvTestHilfen.ARTEN) {
             assertTrue(zaehleAlteFunde(a, teil1b()) > 0, a.name + ": Kopie ohne Funde auf Teil 1b");
             assertTrue(zaehleAlteFunde(a, TEIL_1C) > 0, a.name + ": Kopie ohne Funde auf Teil 1c");
+            assertTrue(zaehleAlteFunde(a, TEIL_1D) > 0, a.name + ": Kopie ohne Funde auf Teil 1d");
             assertTrue(zaehleAlteFunde(a, KvDifferenzTest.korpus()) > 0, a.name + ": Kopie ohne Funde im Korpus");
             assertTrue(zaehleAlteFunde(a, GENERATOREN) > 0, a.name + ": Kopie ohne Funde auf den Generatoren");
         }
@@ -324,6 +371,7 @@ class KvStandLueckenDifferenzTest {
         assertEquals(0, verloreneTexte(NEU, teil1b()), "Teil 1b: Texte mit verlorener Position");
         assertEquals(0, verloreneTexte(NEU, KvDifferenzTest.korpus()), "Korpus: Texte mit verlorener Position");
         assertEquals(0, verloreneTexte(NEU, TEIL_1C), "Teil 1c: Texte mit verlorener Position");
+        assertEquals(0, verloreneTexte(NEU, TEIL_1D), "Teil 1d: Texte mit verlorener Position");
         assertEquals(0, verloreneTexte(NEU, GENERATOREN), "Generatoren: Texte mit verlorener Position");
     }
 
@@ -333,12 +381,13 @@ class KvStandLueckenDifferenzTest {
         assertEquals(0, typVerlusteTexte(NEU, teil1b()), "Teil 1b: Texte mit KV-Position nur noch als Nicht-KV");
         assertEquals(0, typVerlusteTexte(NEU, KvDifferenzTest.korpus()), "Korpus: Texte mit Typverlust");
         assertEquals(0, typVerlusteTexte(NEU, TEIL_1C), "Teil 1c: Texte mit Typverlust");
+        assertEquals(0, typVerlusteTexte(NEU, TEIL_1D), "Teil 1d: Texte mit Typverlust");
         assertEquals(0, typVerlusteTexte(NEU, GENERATOREN), "Generatoren: Texte mit Typverlust");
     }
 
     @Test
     void differenz_scannerebene_alterScannerLiefertKvFunde_pruefungLaeuftNichtInsLeere() {
-        for (List<String> texte : List.of(teil1b(), TEIL_1C, KvDifferenzTest.korpus(), GENERATOREN)) {
+        for (List<String> texte : List.of(teil1b(), TEIL_1C, TEIL_1D, KvDifferenzTest.korpus(), GENERATOREN)) {
             assertTrue(alteKvScannerFunde(texte) > 0, "Scanner mit der Kopie ohne KV-Funde (Pruefung liefe ins Leere)");
         }
     }

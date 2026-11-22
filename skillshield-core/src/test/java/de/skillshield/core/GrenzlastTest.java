@@ -4,6 +4,7 @@ import static de.skillshield.core.SynthetischeKvNummern.IK_FORM_DOKU_IP;
 import static de.skillshield.core.SynthetischeKvNummern.IK_GUELTIG;
 import static de.skillshield.core.SynthetischeKvNummern.LANR_GUELTIG;
 import static de.skillshield.core.TestTexte.bs;
+import static de.skillshield.core.recognizer.kv.KvTestHilfen.ZWSP;
 import static de.skillshield.core.recognizer.kv.KvTestHilfen.neunerfenster;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -486,6 +487,15 @@ class GrenzlastTest {
     void ak24_kvKontextLuecken_eineMillionZeichen_dreiSchritteJeUnterZweiSekundenMitExakterFundzahl(String name,
             String praefix, String baustein, String schluss, int bausteinLaenge, int r, int sicher,
             int wahrscheinlich, int fraglich, FindingType typ) {
+        pruefeKvLastFall(name, praefix, baustein, schluss, bausteinLaenge, r, sicher, wahrscheinlich, fraglich, typ);
+    }
+
+    /**
+     * Gemeinsame Pruefung der Grenzlastfaelle ueber die ganze Kette (Aufwaermlauf, Waechter, drei Schritte je unter
+     * zwei Sekunden, exakte Fundzahl je Stufe, Typ, Roundtrip, kein Klartext bzw. unveraenderter Text ohne Fund).
+     */
+    private static void pruefeKvLastFall(String name, String praefix, String baustein, String schluss,
+            int bausteinLaenge, int r, int sicher, int wahrscheinlich, int fraglich, FindingType typ) {
         assertEquals(bausteinLaenge, baustein.length(), "Bausteinlaenge " + name);
         assertEquals(r, kvWiederholungen(praefix, baustein, schluss, MIN_ZEICHEN), "Wiederholungen " + name);
         // Aufwaermlauf (nicht gemessen) mit 10 000 Zeichen derselben Bauart
@@ -518,6 +528,56 @@ class GrenzlastTest {
         } else {
             assertTrue(text.equals(d.pseudo().text()), "Text ohne Fund veraendert " + name);
         }
+    }
+
+    // ------------------------------------------------------------------ AK-26 (g), (h): kv-trenner-und-umbruch (T-4)
+
+    /**
+     * Die Faelle (g) und (h) aus AK-26 des Features kv-trenner-und-umbruch ueber die ganze Kette (Teil 1, CR UZ+ LF).
+     * Aufbau wie bei {@link #kvKontextLueckenFaelle}: Praefix, Baustein, Schluss, Bausteinlaenge, r (Formel
+     * {@code (1 000 000 - |Praefix| - |Schluss| + |Baustein| - 1) / |Baustein|}), Funde je Stufe, Typ. Die Zahlen
+     * folgen aus den Regeln (Plan Kap. 3.1), nicht aus einem Probelauf. Die uebrigen Faelle (a) bis (f) und (i) bis
+     * (k) gehoeren zu Teil 2 (T-10) und kommen in diese Methode hinzu. Die Nummer ist eine {@code 00}-Nummer.
+     */
+    static Stream<Arguments> kvTrennerUndUmbruchFaelle() {
+        String umbruch = "\r" + ZWSP + "\n";
+        return Stream.of(
+            // (g) "LANR:" + CR ZWSP LF + Nummer + " " = 5 + 3 + 9 + 1 = 18 Zeichen, r = (1 000 000 + 17) / 18 = 55 556;
+            // je Wiederholung ein Fund: ein Umbruch zaehlt wie CR LF, der Deckel ist 0,80 (wahrscheinlich)
+            Arguments.of("g1 LANR Umbruch Nummer", "", "LANR:" + umbruch + LANR_GUELTIG + " ", "", 18, 55_556, 0,
+                55_556, 0, FindingType.LANR),
+            // (g) IK entsprechend ("IKNR:" hat ebenfalls fuenf Zeichen): 18 Zeichen, r = 55 556
+            Arguments.of("g2 IKNR Umbruch Nummer", "", "IKNR:" + umbruch + IK_GUELTIG + " ", "", 18, 55_556, 0,
+                55_556, 0, FindingType.IK),
+            // (h) "CR" + ZWSP wiederholt, insgesamt eine Million Zeichen: "\r" (1) + r ZWSP, r = (1 000 000 - 1 + 1 -
+            // 1) / 1 = 999 999; ein einziger Lauf nach dem CR, kein Kontextwort: 0 Funde
+            Arguments.of("h1 CR und unsichtbare Zeichen", "\r", String.valueOf(ZWSP), "", 1, 999_999, 0, 0, 0, null),
+            // (h) "CR ZWSP LF" = 3 Zeichen wiederholt, r = (1 000 000 + 2) / 3 = 333 334; kein Kontextwort: 0 Funde
+            Arguments.of("h2 CR UZ LF wiederholt", "", umbruch, "", 3, 333_334, 0, 0, 0, null));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("kvTrennerUndUmbruchFaelle")
+    void ak26_kvTrennerUndUmbruch_eineMillionZeichen_dreiSchritteJeUnterZweiSekundenMitExakterFundzahl(String name,
+            String praefix, String baustein, String schluss, int bausteinLaenge, int r, int sicher,
+            int wahrscheinlich, int fraglich, FindingType typ) {
+        pruefeKvLastFall(name, praefix, baustein, schluss, bausteinLaenge, r, sicher, wahrscheinlich, fraglich, typ);
+    }
+
+    /**
+     * AK-26 (h) im Wortlaut: {@code CR} gefolgt von genau einer Million unsichtbarer Zeichen (die Eingabe hat dann
+     * eine Million und ein Zeichen), ohne Kontextwort: 0 Funde, der Text bleibt unveraendert, Roundtrip gleich.
+     */
+    @Test
+    void ak26h_crGefolgtVonEinerMillionUnsichtbarerZeichen_dreiSchritteJeUnterZweiSekunden_keinFund() {
+        String uz = String.valueOf(ZWSP);
+        drei("\r" + uz.repeat(10_000), GRENZE_GROSSER_TEXT);
+        String text = "\r" + uz.repeat(1_000_000);
+        assertEquals(1_000_001, text.length(), "Textlaenge");
+        Durchlauf d = drei(text, GRENZE_PATHOLOGISCH);
+        assertEquals(0, d.funde().size(), "Fundzahl");
+        assertTrue(text.equals(d.pseudo().text()), "Text ohne Fund veraendert");
+        pruefeRoundtrip(text, d);
     }
 
     @Test

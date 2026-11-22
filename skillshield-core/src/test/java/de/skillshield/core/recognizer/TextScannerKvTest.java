@@ -16,6 +16,7 @@ import de.skillshield.core.pseudonymize.PseudonymizationResult;
 import de.skillshield.core.pseudonymize.Pseudonymizer;
 import de.skillshield.core.recognizer.general.PathRecognizer;
 import de.skillshield.core.recognizer.kv.IkRecognizer;
+import de.skillshield.core.recognizer.kv.KvTestHilfen;
 import de.skillshield.core.recognizer.kv.LanrRecognizer;
 import de.skillshield.core.reidentify.ReidentificationResult;
 import de.skillshield.core.reidentify.Reidentifier;
@@ -253,6 +254,35 @@ class TextScannerKvTest {
             assertFalse(mit.text().contains(f.originalValue()), "Nummer im Ausgabetext " + i);
             assertRoundtrip(text, mit);
         }
+    }
+
+    /**
+     * kv-trenner-und-umbruch AK-29 (Teil 1): {@code L A N R:} CR UZ LF und gueltige LANR liefert einen Fund (0,80);
+     * ohne Uebergabe bleibt der Text unveraendert, mit dem Fund wird nur die Nummer ersetzt, Kontextwort, CR, das
+     * unsichtbare Zeichen und LF bleiben zeichengleich, die Rueckuebersetzung stellt den Text her.
+     */
+    @Test
+    void kvTrennerUndUmbruch_ak29_crUzLf_fundOhneUebergabeUnveraendertMitFundNurNummerErsetzt() {
+        String vor = "L A N R:\r" + KvTestHilfen.ZWSP + "\n";
+        String text = vor + LANR_GUELTIG;
+        List<Finding> funde = scan(text);
+        assertEquals(1, funde.size(), "ein Fund");
+        Finding f = funde.get(0);
+        assertEquals(FindingType.LANR, f.type(), "Typ");
+        assertEquals(0.80, f.confidence(), "Konfidenz");
+        assertEquals(ConfidenceLevel.WAHRSCHEINLICH, f.level(), "Stufe");
+        assertEquals(vor.length(), f.start(), "Start");
+        assertEquals(text.length(), f.end(), "Ende");
+        assertTrue(LANR_GUELTIG.equals(f.originalValue()), "LANR-Wert");
+
+        // Mensch entscheidet: ohne uebergebenen Fund wird nichts ersetzt
+        PseudonymizationResult ohne = PSEUDONYMIZER.pseudonymize(text, List.of());
+        assertTrue(text.equals(ohne.text()), "Text ohne Fund veraendert");
+        // mit dem Fund wird nur die Nummer ersetzt; Kontextwort, CR, ZWSP und LF bleiben zeichengleich
+        PseudonymizationResult mit = PSEUDONYMIZER.pseudonymize(text, funde);
+        assertTrue((vor + "[[LANR_1]]").equals(mit.text()), "nur die Nummer ersetzt");
+        assertTrue(mit.text().startsWith("L A N R:\r" + KvTestHilfen.ZWSP + "\n"), "Umbruch zeichengleich");
+        assertRoundtrip(text, mit);
     }
 
     @Test
