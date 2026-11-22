@@ -42,8 +42,10 @@ import java.util.Set;
  * ist erlaubt und gehoert nicht zum Vergleich. Gesperrtes Kontextwort: eine Sperrfolge von mindestens drei
  * Buchstaben, deren gefaltete Buchstaben ({@code A-Z}) genau einem Eintrag von {@link KvArt#kontextwoerter()}
  * gleichen ({@code L A N R}, {@code L.A.N.R.}, {@code I K N R}); Vorwoerter zaehlen nicht. Das Zwei-Buchstaben-Wort
- * {@code I K} loest noch kein Ereignis aus. Da unsichtbare Zeichen immer an einem Nachbarlauf haengen oder einen
- * eigenen, die Folge beendenden Lauf bilden, kann kein eingestreutes unsichtbares Zeichen eine neue Luecke oeffnen.
+ * {@code I K} ({@code I.K.}, {@code I-K}) ist ab zwei Buchstaben ein gesperrtes Kontextwort, gilt aber nur fuer die
+ * unmittelbar folgende Nummer (siehe Zustand und Ereignisse). Da unsichtbare Zeichen immer an einem Nachbarlauf
+ * haengen oder einen eigenen, die Folge beendenden Lauf bilden, kann kein eingestreutes unsichtbares Zeichen eine
+ * neue Luecke oeffnen.
  *
  * <p><b>Ziffernketten.</b> Eine Kette besteht aus Ziffernbloecken, die durch je genau einen Gruppentrenner
  * verbunden sind, dem wieder eine Ziffer folgt. Zwei Trenner hintereinander oder ein Trenner am Ende beenden die
@@ -57,21 +59,33 @@ import java.util.Set;
  * <p><b>Zustand und Ereignisse.</b> Zustand: {@code aktiv} (ein Kontextwort erschliesst Zahlen), {@code direkt}
  * (seit dem Kontextwort kam nichts ausser Sonstigem und Nachsatzwoertern), {@code woerter} (Fuellwoerter seit
  * Kontextwort bzw. letztem Segment), {@code umbrueche} (ebenso) und die Folge der offenen Segmente samt
- * Luecken-Merkern (fuer nachgestellten Kontext), dazu der Deckel der Konfidenz des Kontexts.
+ * Luecken-Merkern (fuer nachgestellten Kontext), dazu der Deckel der Konfidenz des Kontexts und der Merker
+ * {@code nurDirekt} (der Kontext endet mit {@code direkt}, gesetzt nur durch {@code I K}).
+ * Bekannte Grenze 14g: Eine Nummer, die {@code I K} direkt erschliesst und die bisher nur ueber ein nachgestelltes
+ * Kontextwort erkannt wurde, hat jetzt hoechstens 0,50 (vorher 0,80 bzw. 0,60), die Position bleibt abgedeckt: bei
+ * {@code I K N (IK)}, {@code I K N IK}, Aufzaehlung {@code I K N1 N2 IK} (nur N1; N2 bleibt 0,80), Komma
+ * {@code I K N, IK}, Nachsatzwoertern, {@code =} oder neutralen Zeichen zwischen {@code I K} und N und
+ * {@code I K N IK M} (N 0,50, M 0,92).
  * <ul>
  * <li>Kontextwort: Sind Segmente offen und die Luecke hinter dem letzten sauber oder mit genau einem {@code ,}
  * bzw. {@code ;} (siehe unten), werden alle ausgegeben (nachgestellter Kontext). Dann {@code aktiv = direkt = true},
  * {@code woerter = umbrueche = 0}, Deckel 1,0.</li>
  * <li>Gesperrtes Kontextwort (Ereignis am Ende der Sperrfolge, vor der Verarbeitung des beendenden Zeichens bzw.
- * Laufs): Nur wenn kein Kontext {@code aktiv} ist, werden die zu Beginn der Folge offenen Segmente (Abbild aus sechs
- * Werten, die Buchstaben der Folge leeren sie sonst als Fuellwoerter) wiederhergestellt und wie beim Kontextwort
- * ausgewertet; dann {@code aktiv = direkt = true}, {@code woerter = umbrueche = 0}, Deckel
- * {@link #CONFIDENCE_SPERRSCHRIFT}. Die Buchstaben selbst werden unveraendert je als Fuellwort verarbeitet; das
- * Ereignis kommt nur hinzu. Ein laufender Kontext bleibt unveraendert. Der Verfolger hat drei Zustaende: keine Folge,
- * zuletzt ein Einzelbuchstabe, danach genau ein Sperr-Trenner. Ein Lauf hinter einem Trenner wird vorab (Vorgriff,
+ * Laufs): Nur wenn kein Kontext {@code aktiv} ist, werden bei drei und mehr Buchstaben die zu Beginn der Folge offenen
+ * Segmente (Abbild aus sechs Werten, die Buchstaben der Folge leeren sie sonst als Fuellwoerter) wiederhergestellt
+ * und wie beim Kontextwort ausgewertet; dann {@code aktiv = direkt = true}, {@code woerter = umbrueche = 0}, Deckel
+ * {@link #CONFIDENCE_SPERRSCHRIFT}. Bei genau zwei Buchstaben ({@code I K}) gibt es keinen nachgestellten Kontext
+ * (das Abbild wird verworfen), der Deckel ist {@link #CONFIDENCE_SPERRSCHRIFT_ZWEI} und der Merker {@code nurDirekt}
+ * gesetzt: Der Kontext endet ({@code aktiv = false}), sobald {@code direkt} verloren geht, also bei einem
+ * Fuellwort, einem ausgegebenen Segment (keine Aufzaehlung) und einem Zeilenumbruch; ein Nachsatzwort
+ * ({@code I K-Nr.}), {@code :}, {@code =} und Leerraum bleiben erlaubt. Die Buchstaben selbst werden
+ * unveraendert je als Fuellwort verarbeitet; das Ereignis kommt nur hinzu. Ein laufender Kontext bleibt
+ * unveraendert. Der Verfolger hat drei Zustaende: keine Folge, zuletzt ein Einzelbuchstabe, danach genau ein
+ * Sperr-Trenner. Ein Lauf hinter einem Trenner wird vorab (Vorgriff,
  * hoechstens bis zum zweiten Buchstaben) auf Einzelbuchstabe geprueft: Ist er einer, wird er angehaengt, sonst endet
  * die Folge vor seiner Verarbeitung, damit ein Nachsatzwort ({@code L A N R-Nummer}) im direkten Kontext liegt. Das
- * Abbild wird bei jedem Laufanfang ohne laufende Folge neu gespeichert.</li>
+ * Abbild wird bei jedem Laufanfang ohne laufende Folge neu gespeichert. Ein normales Kontextwort setzt Deckel 1,0
+ * und {@code nurDirekt = false} ({@code I K IK N}: 0,92).</li>
  * <li>Segment bei {@code aktiv}: wird ausgegeben; danach {@code direkt = false}, {@code woerter = umbrueche = 0}
  * (Aufzaehlung, auch zeilenweise). Segment ohne {@code aktiv}: wird offen (siehe unten).</li>
  * <li>Fuellwort (Wort, Ziffernblock ohne Segment, Nachsatzwort ausserhalb von {@code direkt}): {@code woerter++},
@@ -110,7 +124,9 @@ import java.util.Set;
  * (bei {@code direkt}; sonst {@link #CONFIDENCE_KONTEXT_ENTFERNT}, auch fuer nachgestellten Kontext; mit einem
  * {@code ,} oder {@code ;} vor dem nachgestellten Kontextwort hoechstens {@link #CONFIDENCE_KOMMA_NACHGESTELLT},
  * Quelle unveraendert; mit gesperrtem Kontextwort ab drei Buchstaben hoechstens
- * {@link #CONFIDENCE_SPERRSCHRIFT}, in jedem Zustand, die Quelle folgt weiter nur der Pruefziffer). Ungueltige
+ * {@link #CONFIDENCE_SPERRSCHRIFT}, in jedem Zustand; mit gesperrtem Kontextwort aus zwei Buchstaben ({@code I K})
+ * hoechstens {@link #CONFIDENCE_SPERRSCHRIFT_ZWEI}, auch bei gueltiger Pruefziffer; die Quelle folgt weiter nur
+ * der Pruefziffer). Ungueltige
  * Pruefziffer: {@link #CONFIDENCE_PRUEFZIFFER_UNGUELTIG}. Sechs bis zwoelf Ziffern ausser neun:
  * {@link #CONFIDENCE_LAENGE_ABWEICHEND}. Der Fundbereich ist genau das Segment (Ziffern samt inneren Trennern), nie
  * das Kontextwort und nie ein unsichtbares Zeichen; unsichtbare Zeichen veraendern keinen Index. Die Funde sind nach
@@ -162,6 +178,9 @@ final class KvNumberScanner {
     /** Deckel bei gesperrt geschriebenem Kontextwort ab drei Buchstaben (D-4). */
     static final double CONFIDENCE_SPERRSCHRIFT = 0.80;
 
+    /** Deckel bei gesperrt geschriebenem Kontextwort aus zwei Buchstaben (D-3). */
+    static final double CONFIDENCE_SPERRSCHRIFT_ZWEI = 0.50;
+
     private static final int NEUN = 9;
     private static final int MIN_LAENGE = 6;
     private static final int MAX_LAENGE = 12;
@@ -170,8 +189,13 @@ final class KvNumberScanner {
     private static final int MAX_ABKUERZUNG = 4;
     /** Laengstes Kontextwort ({@code institutionskennzeichen}) und damit Puffergroesse der Sperrfolge. */
     private static final int MAX_KONTEXTWORT = FENSTER - 1;
-    /** Kuerzeste gesperrte Folge, die ein Ereignis ausloest (zwei Buchstaben folgen in einem spaeteren Task). */
-    private static final int MIN_SPERR_BUCHSTABEN = 3;
+    /**
+     * Kuerzeste gesperrte Folge, die ein Ereignis ausloest ({@code I K}, D-3); genau diese Laenge gilt nur fuer die
+     * unmittelbar folgende Nummer.
+     */
+    private static final int MIN_SPERR_BUCHSTABEN = 2;
+    /** Kein Deckel der Konfidenz. */
+    private static final double KEIN_DECKEL = 1.0;
     private static final int SPERR_KEINE = 0;
     private static final int SPERR_BUCHSTABE = 1;
     private static final int SPERR_TRENNER = 2;
@@ -300,8 +324,10 @@ final class KvNumberScanner {
         private int woerter;
         private int umbrueche;
         private boolean zeilenanfang = true;
-        /** Deckel der Konfidenz bei {@code aktiv}: 1,0 (keiner) bzw. {@link #CONFIDENCE_SPERRSCHRIFT}. */
-        private double kontextDeckel = 1.0;
+        /** Deckel der Konfidenz bei {@code aktiv}: {@code KEIN_DECKEL}, sonst {@code CONFIDENCE_SPERRSCHRIFT*}. */
+        private double kontextDeckel = KEIN_DECKEL;
+        /** D-3: Der Kontext endet, sobald {@code direkt} verloren geht (gesetzt nur durch {@code I K}). */
+        private boolean nurDirekt;
 
         /** Offene Segmente als Tripel (Start, Ende, Ziffernzahl). */
         private int[] offenDaten = new int[12];
@@ -409,19 +435,33 @@ final class KvNumberScanner {
 
         private void kontextwort() {
             offenNachgestelltAusgeben();
+            kontextBeginnen(KEIN_DECKEL, false);
+        }
+
+        /** Beginnt einen Kontext: leert die offenen Segmente, setzt alle Kontextmerker (zentral, hier erweitern). */
+        private void kontextBeginnen(double deckel, boolean nurDirektKontext) {
             offenLeeren();
             aktiv = true;
             direkt = true;
             woerter = 0;
             umbrueche = 0;
-            kontextDeckel = 1.0;
+            kontextDeckel = deckel;
+            nurDirekt = nurDirektKontext;
+        }
+
+        /** Verliert der Kontext {@code direkt}, endet ein nur-direkter Kontext (D-3). */
+        private void direktVerloren() {
+            direkt = false;
+            if (nurDirekt) {
+                aktiv = false;
+            }
         }
 
         /** Auswertung der Luecke beim Kontextwort: gibt die offenen Segmente aus oder nicht (Bestand und D-5). */
         private void offenNachgestelltAusgeben() {
             if (offenAnzahl > 0 && !offenSchraeg && !offenUnd) {
                 if (offenKomma == 0) {
-                    offenAusgeben(1.0);
+                    offenAusgeben(KEIN_DECKEL);
                 } else if (offenKomma == 1 && !offenKlammerVorKomma) {
                     offenAusgeben(CONFIDENCE_KOMMA_NACHGESTELLT);
                 }
@@ -436,7 +476,7 @@ final class KvNumberScanner {
 
         private void fuellwort() {
             offenLeeren();
-            direkt = false;
+            direktVerloren();
             if (aktiv) {
                 woerter++;
                 if (woerter > MAX_FUELLWOERTER) {
@@ -466,7 +506,7 @@ final class KvNumberScanner {
             offenLeeren();
             if (aktiv) {
                 umbrueche++;
-                direkt = false;
+                direktVerloren();
                 if (umbrueche > 1) {
                     aktiv = false;
                 }
@@ -502,7 +542,7 @@ final class KvNumberScanner {
         private void segment(int start, int end, int anzahl) {
             if (aktiv) {
                 ausgeben(start, end, anzahl, direkt, kontextDeckel);
-                direkt = false;
+                direktVerloren();
                 woerter = 0;
                 umbrueche = 0;
             } else {
@@ -554,12 +594,7 @@ final class KvNumberScanner {
                 return ende;
             }
             sperrEnde();
-            sperrOffenAnzahl = offenAnzahl;
-            sperrOffenKlammern = offenKlammern;
-            sperrOffenKomma = offenKomma;
-            sperrOffenSchraeg = offenSchraeg;
-            sperrOffenKlammerVorKomma = offenKlammerVorKomma;
-            sperrOffenUnd = offenUnd;
+            abbildSpeichern();
             int ende = lauf(start);
             if (laufBuchstaben == 1) {
                 sperrLaenge = 0;
@@ -611,7 +646,7 @@ final class KvNumberScanner {
             return anzahl == 1 && buchstabe;
         }
 
-        /** Die Sperrfolge ist zu Ende: Ist sie ein Kontextwort ab drei Buchstaben, beginnt hier ein Kontext (D-4). */
+        /** Die Sperrfolge ist zu Ende: Ist sie ein Kontextwort ab zwei Buchstaben, beginnt hier ein Kontext. */
         private void sperrEnde() {
             int laenge = sperrLaenge;
             boolean verfolgt = sperrZustand != SPERR_KEINE;
@@ -621,19 +656,33 @@ final class KvNumberScanner {
                     || !kontextLaenge[laenge] || !istKontextwort(laenge)) {
                 return;
             }
+            if (laenge == MIN_SPERR_BUCHSTABEN) {
+                kontextBeginnen(CONFIDENCE_SPERRSCHRIFT_ZWEI, true); // kein nachgestellter Kontext, Abbild verworfen
+                return;
+            }
+            abbildWiederherstellen();
+            offenNachgestelltAusgeben();
+            kontextBeginnen(CONFIDENCE_SPERRSCHRIFT, false);
+        }
+
+        /** Merkt die offenen Segmente samt Luecken-Merkern (sechs Werte) zu Beginn einer moeglichen Sperrfolge. */
+        private void abbildSpeichern() {
+            sperrOffenAnzahl = offenAnzahl;
+            sperrOffenKlammern = offenKlammern;
+            sperrOffenKomma = offenKomma;
+            sperrOffenSchraeg = offenSchraeg;
+            sperrOffenKlammerVorKomma = offenKlammerVorKomma;
+            sperrOffenUnd = offenUnd;
+        }
+
+        /** Stellt das gemerkte Abbild der offenen Segmente wieder her (Gegenstueck zu {@link #abbildSpeichern()}). */
+        private void abbildWiederherstellen() {
             offenAnzahl = sperrOffenAnzahl;
             offenKlammern = sperrOffenKlammern;
             offenKomma = sperrOffenKomma;
             offenSchraeg = sperrOffenSchraeg;
             offenKlammerVorKomma = sperrOffenKlammerVorKomma;
             offenUnd = sperrOffenUnd;
-            offenNachgestelltAusgeben();
-            offenLeeren();
-            aktiv = true;
-            direkt = true;
-            woerter = 0;
-            umbrueche = 0;
-            kontextDeckel = CONFIDENCE_SPERRSCHRIFT;
         }
 
         /** Gleicht {@code sperrZeichen[0, laenge)} einem Kontextwort der Art? */

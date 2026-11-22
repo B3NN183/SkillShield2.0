@@ -565,6 +565,11 @@ Nach jedem Task ist `mvn verify` im Wurzelverzeichnis grün. Pfade unter `skills
 - 14f. `I K` ohne Füllwörter, Aufzählung, Umbruch, nachgestellten Kontext (D-3, bewusst).
 - 14g. Bekannte Folge: Eine Nummer, die von `I K` direkt und zugleich von einem nachgestellten Kontextwort erschlossen
   wird (`I K N (IK)`), hat 0,50 statt bisher 0,80. Abdeckung unverändert.
+  **Nachtrag 22.11.2026 (T-4, Hinweis von security):** Das gilt allgemein für jede Nummer, die `I K` direkt erschließt
+  und die bisher nur über ein nachgestelltes Kontextwort erkannt wurde: auch in einer Aufzählung (`I K N1 N2 IK`: N1
+  0,50, N2 bleibt 0,80), mit einem Komma (`I K N, IK`: 0,50 statt 0,60), mit Nachsatzwörtern, `=` oder neutralen
+  Zeichen zwischen `I K` und der Nummer sowie bei `I K N IK M` (N 0,50, M bleibt 0,92). In 1,1 Mio. Zufallstexten gab
+  es keinen anderen Mechanismus; die Abdeckung blieb in allen Fällen erhalten.
 - Alle übrigen Grenzen des Vorgängers (1–11, 13) unverändert.
 
 ## 12. Risiken

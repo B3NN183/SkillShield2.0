@@ -1,6 +1,7 @@
 package de.skillshield.core;
 
 import static de.skillshield.core.SynthetischeKvNummern.IK_GUELTIG;
+import static de.skillshield.core.SynthetischeKvNummern.LAENGE_7;
 import static de.skillshield.core.SynthetischeKvNummern.LANR_GUELTIG;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -222,8 +223,8 @@ class KvVorgaengerDifferenzTest {
     }
 
     /**
-     * Beobachtung (ohne Sollwert): Zaehlt die Texte, in denen eine alt nur von einem Nicht-KV-Fund abgedeckte
-     * Position neu von einem KV-Fund abgedeckt wird (zusaetzlicher Schutz durch die neuen Regeln).
+     * Zaehlt die Texte, in denen eine alt nur von einem Nicht-KV-Fund abgedeckte Position neu von einem KV-Fund
+     * abgedeckt wird (zusaetzlicher Schutz); nur vom Selbsttest unten benutzt, kein Sollwert auf dem Korpus.
      */
     private static int nichtKvZuKvTexte(TextScanner neu, List<String> texte) {
         int gewonnen = 0;
@@ -245,10 +246,21 @@ class KvVorgaengerDifferenzTest {
     }
 
     @Test
-    void beobachtung_nichtKvPositionenDieNeuVonKvFundAbgedecktWerden_auswertungLaeuft() {
-        int summe = nichtKvZuKvTexte(NEU, teil1()) + nichtKvZuKvTexte(NEU, teil1b())
-                + nichtKvZuKvTexte(NEU, KvDifferenzTest.korpus());
-        assertTrue(summe >= 0, "Auswertung ohne Sollwert, Texte mit neuem KV-Schutz: " + summe);
+    void selbsttest_nichtKvPositionNeuVonKvFundAbgedeckt_wirdGezaehlt() {
+        // Synthetische Dokumentations-IP: alt nur der IP-Fund. Ein Stand, der dieselbe Position mit einem staerkeren
+        // KV-Fund abdeckt (Selbsttest-Erkenner, Konfidenz 0,99 gegen 0,85 der IP), wird gezaehlt; der Standardscanner
+        // (kein Kontextwort) und der alte Scanner nicht.
+        String text = "192.0.2.1 " + LAENGE_7;
+        assertEquals(0, KvTestHilfen.neunerfenster(text, "00")[1], "Waechter Selbsttest");
+        List<Finding> alt = ALT.scan(text);
+        assertEquals(1, alt.size(), "alt: genau ein Fund");
+        assertEquals(FindingType.IP, alt.get(0).type(), "alt: Nicht-KV-Fund (IP)");
+        Recognizer staerkererKv = t -> List.of(
+                new Finding(FindingType.LANR, t.substring(0, 9), 0, 9, 0.99, "selbsttest"));
+        TextScanner neuMitKv = new TextScanner(List.of(new Ipv4Recognizer(), staerkererKv));
+        assertEquals(1, nichtKvZuKvTexte(neuMitKv, List.of(text)), "IP-Position neu von KV-Fund abgedeckt: gezaehlt");
+        assertEquals(0, nichtKvZuKvTexte(ALT, List.of(text)), "alter gegen alten Scanner: nichts gewonnen");
+        assertEquals(0, nichtKvZuKvTexte(NEU, List.of(text)), "Standardscanner ohne Kontextwort: nichts gewonnen");
     }
 
     @Test

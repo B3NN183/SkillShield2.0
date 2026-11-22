@@ -14,11 +14,13 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Tests zu gesperrt geschriebenen Kontextwoertern ab drei Buchstaben (Feature kv-kontext-luecken, Task T-3, D-1, D-2,
- * D-4, D-6, D-7, Grenze 14; AK-1 bis AK-3, AK-7 bis AK-10, AK-12, AK-13, AK-19 (LANR), AK-24 Laufzeit). Das
- * Zwei-Buchstaben-Wort {@code I K} gehoert nicht zu diesem Task. Nummern stammen aus {@code SynthetischeKvNummern};
- * jeder Text geht durch den Waechter und die Differenzpruefung gegen den Vorgaenger in {@link KvTestHilfen#scan}.
- * Je Art wird das kuerzeste gesperrt schreibbare Kontextwort ab drei Buchstaben benutzt ({@code LANR}, {@code IKNR}).
+ * Tests zu gesperrt geschriebenen Kontextwoertern (Feature kv-kontext-luecken, Task T-3 ab drei Buchstaben, D-1,
+ * D-2, D-4, D-6, D-7, Grenze 14; AK-1 bis AK-3, AK-7 bis AK-10, AK-12, AK-13, AK-19 (LANR), AK-24 Laufzeit; Task T-4
+ * das Zwei-Buchstaben-Wort {@code I K}, D-3, AK-4 bis AK-6, AK-9 (IK), AK-10, AK-11, AK-13, AK-19 (IK), Abschnitt am
+ * Ende der Klasse). Nummern stammen aus {@code SynthetischeKvNummern}; jeder Text geht durch den Waechter und die
+ * Differenzpruefung gegen den Vorgaenger in {@link KvTestHilfen#scan}. Je Art wird das kuerzeste gesperrt schreibbare
+ * Kontextwort ab drei Buchstaben benutzt ({@code LANR}, {@code IKNR}). Die Quelle der {@code I K}-Funde wird aus der
+ * Nummer abgeleitet, nie aus der Konfidenz (gueltige IK unter {@code I K}: 0,50 und Quelle {@code ik}).
  */
 class KvSperrschriftTest {
 
@@ -676,6 +678,373 @@ class KvSperrschriftTest {
             String schluss = sperr(a);
             int r = wiederholungen(1_000_000, "", baustein, schluss);
             laufzeit(a, "", baustein, schluss, r, r + " Funde: alle Nummern der offenen Folge, je 0,60");
+        }
+    }
+
+    // ------------------------------------------------------------------ T-4: Zwei-Buchstaben-Wort I K (D-3)
+
+    private static final double ZWEI = 0.50;
+    private static final Art IK = IK_ART;
+    private static final String IKN = IK_ART.gueltig;
+    private static final String IKN2 = IK_ART.gueltig2;
+
+    /** Genau ein Fund hinter {@code vor} mit 0,50 und der Quelle aus der Nummer. */
+    private static void zwei(String vor, String wert, String nach) {
+        assertEin(IK, vor, wert, nach, ZWEI, IK.quelleNachNummer(wert));
+    }
+
+    /** Funde in Reihenfolge; Quelle aus der Nummer, nicht aus der Konfidenz. */
+    private static void folgeNachNummer(String text, Erw... erwartet) {
+        List<Finding> funde = scan(IK, text);
+        assertEquals(erwartet.length, funde.size(), "Anzahl Funde");
+        int ab = 0;
+        for (int i = 0; i < erwartet.length; i++) {
+            int start = text.indexOf(erwartet[i].wert(), ab);
+            Finding f = funde.get(i);
+            assertEquals(start, f.start(), "Start " + i);
+            assertEquals(start + erwartet[i].wert().length(), f.end(), "Ende " + i);
+            assertEquals(erwartet[i].konfidenz(), f.confidence(), "Konfidenz " + i);
+            assertEquals(IK.quelleNachNummer(erwartet[i].wert()), f.source(), "Quelle " + i);
+            ab = f.end();
+        }
+    }
+
+    @Test
+    void ak4_grundfall_leerzeichenDoppelpunktPunkteBindestrichKleinschreibung_fraglich050() {
+        zwei("I K ", IKN, "");
+        zwei("I K: ", IKN, "");
+        zwei("I.K. ", IKN, "");
+        zwei("I.K.: ", IKN, "");
+        zwei("I-K ", IKN, "");
+        zwei("i k ", IKN, "");
+        zwei("I K=", IKN, "");
+        zwei("I K", IKN, "");
+    }
+
+    @Test
+    void ak4_alleAchtTrenner() {
+        for (String t : TRENNER) {
+            zwei(sperr("IK", t) + " ", IKN, "");
+            zwei(sperr("IK", t) + t, IKN, "");
+        }
+        assertKein(IK, "I.-K " + IKN);
+    }
+
+    @Test
+    void ak4_stufeQuelleUndBereich_gueltigeIkHatQuelleIkUndFraglich() {
+        String vor = "I K ";
+        List<Finding> funde = scan(IK, vor + IKN + ".");
+        assertEquals(1, funde.size());
+        Finding f = funde.get(0);
+        assertEquals(ConfidenceLevel.FRAGLICH, f.level());
+        assertEquals("ik", f.source());
+        assertEquals(ZWEI, f.confidence());
+        assertEquals(vor.length(), f.start());
+        assertEquals(vor.length() + IKN.length(), f.end(), "kein Punkt im Fund (AK-13)");
+    }
+
+    @Test
+    void ak9_ungueltigeIkUndLaengeUnterIK_quellenWieImBestand() {
+        assertEin(IK, "I K ", IK.ungueltig, "", PZ_UNGUELTIG, IK.quellePruefziffer());
+        assertEin(IK, "I.K. ", IK.ungueltig, "", PZ_UNGUELTIG, IK.quellePruefziffer());
+        assertEin(IK, "I K ", LAENGE_7, "", LAENGE, IK.quelleLaenge());
+        assertEin(IK, "I K ", gruppiert(IKN, " "), "", ZWEI, "ik");
+        assertEin(IK, "I K ", gruppiert(IK.ungueltig, "-"), "", PZ_UNGUELTIG, IK.quellePruefziffer());
+        // gleiche Konfidenz 0,50, aber unterscheidbar nur ueber die Quelle (Plan Hinweis 1)
+        assertEquals(scan(IK, "I K " + IKN).get(0).confidence(), scan(IK, "I K " + IK.ungueltig).get(0).confidence());
+        assertTrue(!scan(IK, "I K " + IKN).get(0).source().equals(scan(IK, "I K " + IK.ungueltig).get(0).source()));
+    }
+
+    @Test
+    void ak5_nachsatzwortIstErlaubt() {
+        zwei("I K-Nr. ", IKN, "");
+        zwei("I K Nr. ", IKN, "");
+        zwei("I.K.-Nr. ", IKN, "");
+        zwei("I K-Nummer ", IKN, "");
+        zwei("I K Nummer: ", IKN, "");
+        zwei("I K" + HALBGEVIERT + "Nr ", IKN, "");
+    }
+
+    @Test
+    void ak10_nachsatzwortMitUnsichtbaremZeichen() {
+        zwei("I K" + ZWSP + "-Nr. ", IKN, "");
+        zwei("I K" + ZWSP + " ", IKN, "");
+        zwei("I K-" + ZWSP + "Nummer ", IKN, "");
+        zwei("I K-N" + ZWSP + "r ", IKN, "");
+    }
+
+    @Test
+    void ak5_nurDieUnmittelbarFolgendeNummer_keineAufzaehlung() {
+        folgeNachNummer("I K " + IKN + " und " + IKN2, new Erw(IKN, ZWEI));
+        folgeNachNummer("I K " + IKN + ", " + IKN2, new Erw(IKN, ZWEI));
+        folgeNachNummer("I K " + IKN + " " + IKN2, new Erw(IKN, ZWEI));
+        folgeNachNummer("I K " + IKN + "; " + IKN2 + "; " + IK.gueltig3, new Erw(IKN, ZWEI));
+    }
+
+    @Test
+    void ak5_fuellwoerterBeendenDenKontext_keinFund() {
+        assertKein(IK, "I K der Praxis " + IKN);
+        assertKein(IK, "I K Praxis " + IKN);
+        assertKein(IK, "I K EA " + IKN);
+        assertKein(IK, "I K Nr. Praxis " + IKN);
+        assertKein(IK, "I K a b c d " + IKN);
+    }
+
+    @Test
+    void ak5_zeilenumbruchBeendetDenKontext_keinFund() {
+        assertKein(IK, "I K\n" + IKN);
+        assertKein(IK, "I K\r\n" + IKN);
+        assertKein(IK, "I K\r" + IKN);
+        assertKein(IK, "I K:\n" + IKN);
+        assertKein(IK, "I K" + LS + IKN);
+        assertKein(IK, "I K\n\n" + IKN);
+    }
+
+    @Test
+    void ak5_satzendeBeendetDenKontext_keinFund() {
+        assertKein(IK, "I K! " + IKN);
+        assertKein(IK, "I K? " + IKN);
+    }
+
+    @Test
+    void ak5_nachgestellt_keinFund() {
+        assertKein(IK, IKN + " (I K)");
+        assertKein(IK, IKN + " I K");
+        assertKein(IK, IKN + " [I.K.]");
+        assertKein(IK, IKN + " I-K");
+        assertKein(IK, IKN + " " + IKN2 + " (I K)");
+    }
+
+    @Test
+    void ak19_nummerKommaIK_keinFund() {
+        assertKein(IK, IKN + ", I K");
+        assertKein(IK, IKN + "; I K");
+        assertKein(IK, IKN + ", (I K)");
+        assertKein(IK, IKN + ", " + IKN2 + ", I K");
+        assertKein(IK, IKN + " und " + IKN2 + ", I.K.");
+    }
+
+    @Test
+    void ak6_initialenMitPunktUndLeerzeichen_keinFund() {
+        assertKein(IK, "Prof. I. K. Mustermann, Rechnung " + IKN);
+        assertKein(IK, "I. K. Mustermann, Rechnung " + IKN);
+        assertKein(IK, "I. K. " + IKN);
+        assertKein(IK, "I. K " + IKN);
+        zwei("I K. ", IKN, "");
+        assertKein(IK, "Dr. I. K. " + IKN);
+    }
+
+    @Test
+    void ak6_maximaleFolge_keinFund() {
+        assertKein(IK, "A I K " + IKN);
+        assertKein(IK, "I K E A " + IKN);
+        assertKein(IK, "I K N " + IKN);
+        assertKein(IK, "X Y I K " + IKN);
+        assertKein(IK, "Herr A I K " + IKN);
+        assertKein(IK, "I K I " + IKN);
+        assertKein(IK, "I K K " + IKN);
+    }
+
+    @Test
+    void ak6_keinOderDoppelterTrenner_keinFund() {
+        assertKein(IK, "I  K " + IKN);
+        assertKein(IK, "I\tK " + IKN);
+        assertKein(IK, "I\nK " + IKN);
+        assertKein(IK, "I\r\nK " + IKN);
+        assertKein(IK, "I,K " + IKN);
+        assertKein(IK, "I/K " + IKN);
+        assertKein(IK, "I_K " + IKN);
+        assertKein(IK, "I. K " + IKN);
+        assertKein(IK, "I .K " + IKN);
+        assertKein(IK, "I:K " + IKN);
+        assertKein(IK, "I;K " + IKN);
+    }
+
+    @Test
+    void ak6_nummerNichtUnmittelbarFolgend_keinFund() {
+        assertKein(IK, "I K Rechnung Nr " + IKN);
+        assertKein(IK, "I K eins zwei drei vier " + IKN);
+        assertKein(IK, "I K, danach " + IKN);
+        assertKein(IK, "I K: der Praxis " + IKN);
+    }
+
+    @Test
+    void ak6_keineNummerOderNurTextende_keinFund() {
+        assertKein(IK, "I K");
+        assertKein(IK, "I K ");
+        assertKein(IK, "I.K.");
+        assertKein(IK, "Text I K");
+        assertKein(IK, "I K:");
+        assertKein(IK, "I K Praxis");
+    }
+
+    @Test
+    void ak6_nichtAsciiBuchstabenUndKelvin_keinKontextwort() {
+        char kelvin = (char) 0x212A;
+        char punktlosesI = (char) 0x0131;
+        assertKein(IK, "I " + kelvin + " " + IKN);
+        assertKein(IK, punktlosesI + " K " + IKN);
+        assertKein(IK, "I K" + AKUT + " " + IKN);
+        assertKein(IK, "I" + AKUT + " K " + IKN);
+    }
+
+    @Test
+    void ak11_wortDavorBindestrichPraefixUndSatz() {
+        zwei("Praxis I K ", IKN, "");
+        zwei("Praxis-I.K. ", IKN, "");
+        zwei("Rechnung an I.K. ", IKN, " gesendet");
+        zwei("Rechnung an I.K. ", IKN, ".");
+        zwei("(I K) ", IKN, "");
+    }
+
+    @Test
+    void ak11_wasHinterDerNummerFolgtBleibtImText() {
+        List<Finding> funde = scan(IK, "Rechnung an I.K. " + IKN + " gesendet");
+        assertEquals(1, funde.size());
+        assertEquals(IKN, funde.get(0).originalValue());
+    }
+
+    @Test
+    void ak5_nachDerNummerSetztDerNaechsteKontextNeu() {
+        folgeNachNummer("I K " + IKN + " " + IK.kw + " " + IKN2, new Erw(IKN, ZWEI), new Erw(IKN2, IK.sicher));
+        folgeNachNummer("I K " + IKN + "\nI K " + IKN2, new Erw(IKN, ZWEI), new Erw(IKN2, ZWEI));
+        folgeNachNummer("I K " + IKN + " Praxis I.K. " + IKN2, new Erw(IKN, ZWEI), new Erw(IKN2, ZWEI));
+    }
+
+    @Test
+    void hinweis6_laeuftBereitsEinNormalerKontext_behaeltDieNummerDessenKonfidenz() {
+        assertEin(IK, "IK: Praxis I K ", IKN, "", WAHRSCHEINLICH, "ik");
+        assertEin(IK, "IK Praxis I K ", IKN, "", WAHRSCHEINLICH, "ik");
+        assertEin(IK, "IK I K ", IKN, "", WAHRSCHEINLICH, "ik");
+        assertEin(IK, "IK: I.K. ", IKN, "", WAHRSCHEINLICH, "ik");
+        assertEin(IK, "Institutionskennzeichen: I K ", IKN, "", WAHRSCHEINLICH, "ik");
+    }
+
+    @Test
+    void ak20_direkterBestandsfundWirdNieDurchEinDanebenstehendesIKGesenkt() {
+        assertEin(IK, "IK ", IKN, " I K", IK.sicher, "ik");
+        assertEin(IK, "I K IK ", IKN, "", IK.sicher, "ik");
+        assertEin(IK, "I K: IK-Nr. ", IKN, "", IK.sicher, "ik");
+        folgeNachNummer("IK " + IKN + ", I K " + IKN2, new Erw(IKN, IK.sicher), new Erw(IKN2, WAHRSCHEINLICH));
+        folgeNachNummer("IK " + IKN + " I K " + IKN2, new Erw(IKN, IK.sicher), new Erw(IKN2, WAHRSCHEINLICH));
+        folgeNachNummer("I K " + IKN + " IK " + IKN2, new Erw(IKN, ZWEI), new Erw(IKN2, IK.sicher));
+    }
+
+    @Test
+    void bekannteGrenze14g_nummerVonIKUndNachgestelltemKontextwort_050StattBisher080() {
+        String text = "I K " + IKN + " (IK)";
+        List<Finding> alt = IK.vorgaenger.detect(text);
+        assertEquals(1, alt.size());
+        assertEquals(WAHRSCHEINLICH, alt.get(0).confidence(), "Vorgaenger: nachgestellter Kontext 0,80");
+        assertEquals("ik", alt.get(0).source());
+        zwei("I K ", IKN, " (IK)");
+        zwei("I K ", IKN, " IK");
+        // ungueltige Nummer: war und bleibt 0,50, gleiche Abdeckung
+        assertEin(IK, "I K ", IK.ungueltig, " (IK)", PZ_UNGUELTIG, IK.quellePruefziffer());
+    }
+
+    @Test
+    void bekannteGrenze14g_weitereFormen_050StattBisher_positionBleibtAbgedeckt() {
+        // Aufzaehlung: nur die von I K direkt erschlossene Nummer sinkt, die zweite bleibt 0,80
+        String aufzaehlung = "I K " + IKN + " " + IKN2 + " IK";
+        folgeNachNummer(aufzaehlung, new Erw(IKN, ZWEI), new Erw(IKN2, WAHRSCHEINLICH));
+        assertAbdeckungGleich(aufzaehlung);
+        // ein Komma vor dem nachgestellten Kontextwort: Stand vor T-4 war 0,60 (der Vorgaenger kennt das Komma noch
+        // nicht); die Position bleibt abgedeckt, jetzt mit 0,50
+        String komma = "I K " + IKN + ", IK";
+        folgeNachNummer(komma, new Erw(IKN, ZWEI));
+        // danach ein weiteres Kontextwort mit eigener Nummer: 0,92
+        String folge = "I K " + IKN + " IK " + IKN2;
+        folgeNachNummer(folge, new Erw(IKN, ZWEI), new Erw(IKN2, IK.sicher));
+        assertAbdeckungGleich(folge);
+    }
+
+    @Test
+    void normalerKontextNachIKKontextGiltWiederVoll() {
+        // I K N1 IK N2, N3: N1 0,50 (I K), N2 0,92 (direkt hinter IK), N3 0,80 (Aufzaehlung)
+        folgeNachNummer("I K " + IKN + " IK " + IKN2 + ", " + IK.gueltig3,
+                new Erw(IKN, ZWEI), new Erw(IKN2, IK.sicher), new Erw(IK.gueltig3, WAHRSCHEINLICH));
+    }
+
+    /** Jede vom Vorgaenger abgedeckte Position bleibt abgedeckt (Fundbereiche gleich, nur Konfidenz anders). */
+    private static void assertAbdeckungGleich(String text) {
+        List<Finding> alt = IK.vorgaenger.detect(text);
+        List<Finding> neu = scan(IK, text);
+        assertEquals(alt.size(), neu.size(), "Anzahl Funde: " + text.length());
+        for (int i = 0; i < alt.size(); i++) {
+            assertEquals(alt.get(i).start(), neu.get(i).start(), "Start " + i);
+            assertEquals(alt.get(i).end(), neu.get(i).end(), "Ende " + i);
+        }
+    }
+
+    @Test
+    void bekannteGrenze14f_ikOhneFuellwoerterAufzaehlungUmbruchUndNachgestelltenKontext() {
+        assertKein(IK, "I K Praxis " + IKN);
+        assertKein(IK, "I K\n" + IKN);
+        assertKein(IK, IKN + " I K");
+        folgeNachNummer("I K " + IKN + ", " + IKN2, new Erw(IKN, ZWEI));
+    }
+
+    @Test
+    void ak9_imLanrErkennerWirktIKNicht() {
+        assertKein(LANR_ART, "I K " + LANR_ART.gueltig);
+        assertKein(LANR_ART, "I.K. " + LANR_ART.gueltig);
+        assertKein(LANR_ART, "I K-Nr. " + LANR_ART.gueltig);
+        assertEin(LANR_ART, "LANR I K ", LANR_ART.gueltig, "", WAHRSCHEINLICH);
+    }
+
+    @Test
+    void grenzfall_iKFolgtAufEineNummerOhneKontext_keinNachgestellterKontext() {
+        assertKein(IK, IKN + " I K");
+        folgeNachNummer(IKN + " I K " + IKN2, new Erw(IKN2, ZWEI));
+        folgeNachNummer(IKN + ", I K " + IKN2, new Erw(IKN2, ZWEI));
+    }
+
+    @Test
+    void grenzfall_iKUndUnsichtbareZeichen_invarianzGegenEinstreuen() {
+        String[] basis = {"I K " + IKN, "I.K.: " + IKN + ".", IKN + ", I K", "X I K " + IKN2 + " und " + IKN,
+            "I K-Nr. " + IKN, "I K Praxis " + IKN, "I K\n" + IKN, "I. K. " + IKN};
+        for (int t = 0; t < basis.length; t++) {
+            String text = basis[t];
+            List<Finding> ohne = scan(IK, text);
+            for (int p = 0; p <= text.length(); p++) {
+                if (p > 0 && p < text.length() && istZiffer(text.charAt(p - 1)) && istZiffer(text.charAt(p))) {
+                    continue;
+                }
+                List<Finding> funde = scan(IK, text.substring(0, p) + ZWSP + text.substring(p));
+                assertEquals(ohne.size(), funde.size(), "Fundzahl bei Einstreuung an Stelle " + p + " in Text " + t);
+                for (int k = 0; k < ohne.size(); k++) {
+                    assertEquals(ohne.get(k).originalValue(), funde.get(k).originalValue());
+                    assertEquals(ohne.get(k).confidence(), funde.get(k).confidence(), "Konfidenz");
+                }
+            }
+        }
+    }
+
+    @Test
+    void ak24_laufzeit_iKWiederholt_keinFund() {
+        laufzeit(IK, "", "I K ", "", 0, "0 Funde: eine einzige Folge ohne Kontextwort (Laenge ueber 23)");
+    }
+
+    @Test
+    void ak24_laufzeit_iUndKAbwechselndOhneNummer_keinFund() {
+        laufzeit(IK, "", "I ", "", 0, "0 Funde: nur I");
+        laufzeit(IK, "", "K ", "", 0, "0 Funde: nur K");
+        laufzeit(IK, "I ", "K I ", "", 0, "0 Funde: I und K abwechselnd, eine einzige Folge");
+    }
+
+    @Test
+    void ak24_laufzeit_iKMitNummerWiederholt_jedeNummerEinFundMit050() {
+        String baustein = "I K " + IKN + " ";
+        assertEquals(14, baustein.length(), "Bausteinlaenge");
+        int r = wiederholungen(1_000_000, "", baustein, "");
+        assertEquals(71_429, r, "Wiederholungen: aufgerundet 1 000 000 / 14");
+        laufzeit(IK, "", baustein, "", r, r + " Funde: je Wiederholung eine Nummer, alle 0,50");
+        List<Finding> klein = scan(IK, baustein.repeat(4));
+        assertEquals(4, klein.size());
+        for (Finding f : klein) {
+            assertEquals(ZWEI, f.confidence());
+            assertEquals("ik", f.source());
         }
     }
 }
