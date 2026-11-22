@@ -52,12 +52,12 @@ public final class KvTestHilfen {
     static final double LAENGE = 0.40;
 
     static final char NBSP = (char) 0xA0;
-    static final char SHY = (char) 0xAD;
-    static final char ZWSP = (char) 0x200B;
+    public static final char SHY = (char) 0xAD;
+    public static final char ZWSP = (char) 0x200B;
     static final char ZWNJ = (char) 0x200C;
     static final char ZWJ = (char) 0x200D;
     static final char WORD_JOINER = (char) 0x2060;
-    static final char BOM = (char) 0xFEFF;
+    public static final char BOM = (char) 0xFEFF;
     static final char VS16 = (char) 0xFE0F;
     static final char AKUT = (char) 0x0301;
     static final char DUENN = (char) 0x2009;
@@ -69,6 +69,31 @@ public final class KvTestHilfen {
     static final char PS = (char) 0x2029;
     public static final char LRM = (char) 0x200E;
     public static final char EN_SPACE = (char) 0x2002;
+
+    /**
+     * Unabhaengig vom Produkt, je Codepunkt: Formatzeichen (Kategorie {@code FORMAT}) und Variantenwaehler
+     * U+FE00 bis U+FE0F.
+     */
+    public static boolean unsichtbar(int codepunkt) {
+        return Character.getType(codepunkt) == Character.FORMAT || (codepunkt >= 0xFE00 && codepunkt <= 0xFE0F);
+    }
+
+    /**
+     * Unabhaengig vom Produkt: Gibt es ein CR, dem ein oder mehr unsichtbare Zeichen (je Codepunkt, auch ausserhalb
+     * der BMP) und dann ein LF folgen?
+     */
+    public static boolean enthaeltCrUnsichtbarLf(String text) {
+        for (int i = text.indexOf('\r'); i >= 0; i = text.indexOf('\r', i + 1)) {
+            int j = i + 1;
+            while (j < text.length() && unsichtbar(text.codePointAt(j))) {
+                j += Character.charCount(text.codePointAt(j));
+            }
+            if (j > i + 1 && j < text.length() && text.charAt(j) == '\n') {
+                return true;
+            }
+        }
+        return false;
+    }
 
     /** Kontextwort-Varianten je Art (fuer den Eigenschaftstest). */
     static final String[] KW_LANR = {"LANR", "lanr", "Lanr", "LANR-Nr.", "LANRNR", "Arztnummer", "Arzt-Nr.",

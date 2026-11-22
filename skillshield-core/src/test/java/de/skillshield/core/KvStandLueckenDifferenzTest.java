@@ -2,6 +2,10 @@ package de.skillshield.core;
 
 import static de.skillshield.core.SynthetischeKvNummern.IK_GUELTIG;
 import static de.skillshield.core.SynthetischeKvNummern.LANR_GUELTIG;
+import static de.skillshield.core.recognizer.kv.KvTestHilfen.BOM;
+import static de.skillshield.core.recognizer.kv.KvTestHilfen.SHY;
+import static de.skillshield.core.recognizer.kv.KvTestHilfen.ZWSP;
+import static de.skillshield.core.recognizer.kv.KvTestHilfen.enthaeltCrUnsichtbarLf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -41,8 +45,9 @@ import org.junit.jupiter.api.Test;
  * <p>Die Hilfen {@code siegel}, {@code texte}, {@code teil1c} und {@code abdeckung} stehen bewusst noch einmal hier
  * und nicht gemeinsam mit {@code KvVorgaengerDifferenzTest}: Der Vorgaengertest bleibt unveraendert.
  *
- * <p>Der Uebergangstest {@code t1Uebergang_produktGleichStandLuecken} haelt fest, dass das Produkt bis zur ersten
- * Verhaltensaenderung der Kopie gleicht; er wird mit dieser Aenderung (T-2) entfernt.
+ * <p>Seit T-2 (CR UZ+ LF als ein Umbruch) weicht das Produkt auf Texten mit dieser Folge ab; der fruehere
+ * Uebergangstest {@code t1Uebergang_produktGleichStandLuecken} ist entfernt. An seine Stelle tritt
+ * {@code t2_zusaetzlicheFundeNurInTextenMitCrUnsichtbarLf}: ohne die Folge sind die Fundlisten gleich.
  */
 class KvStandLueckenDifferenzTest {
 
@@ -124,26 +129,50 @@ class KvStandLueckenDifferenzTest {
 
     // ------------------------------------------------------------------ Uebergang
 
-    private static int ungleicheTexte(List<String> texte) {
-        int ungleich = 0;
+    /** Texte, deren Fundliste (je Art) von der der Kopie abweicht, getrennt nach mit und ohne CR UZ+ LF. */
+    private static int[] ungleicheTexte(List<String> texte) {
+        int[] zaehler = new int[2];
         for (String text : texte) {
+            boolean mitFolge = enthaeltCrUnsichtbarLf(text);
             for (KvTestHilfen.Art a : KvTestHilfen.ARTEN) {
                 if (!a.erkenner.detect(text).equals(a.standLuecken.detect(text))) {
-                    ungleich++;
+                    zaehler[mitFolge ? 1 : 0]++;
                 }
             }
         }
-        return ungleich;
+        return zaehler;
     }
 
-    /** Wird mit der ersten Verhaltensaenderung des Produkts (T-2) entfernt. */
+    /**
+     * T-2 (Teil 1 wirkt nur auf CR UZ+ LF): Auf jedem Text ohne diese Folge sind die Fundlisten des Produkts und der
+     * eingefrorenen Kopie gleich (zusaetzliche Funde gibt es nur mit der Folge).
+     */
     @Test
-    void t1Uebergang_produktGleichStandLuecken() {
-        assertEquals(0, ungleicheTexte(teil1()), "Teil 1: Texte mit abweichender Fundliste");
-        assertEquals(0, ungleicheTexte(teil1b()), "Teil 1b: Texte mit abweichender Fundliste");
-        assertEquals(0, ungleicheTexte(TEIL_1C), "Teil 1c: Texte mit abweichender Fundliste");
-        assertEquals(0, ungleicheTexte(KvDifferenzTest.korpus()), "Korpus: Texte mit abweichender Fundliste");
-        assertEquals(0, ungleicheTexte(GENERATOREN), "Generatoren: Texte mit abweichender Fundliste");
+    void t2_zusaetzlicheFundeNurInTextenMitCrUnsichtbarLf() {
+        assertEquals(0, ungleicheTexte(teil1())[0], "Teil 1: Abweichung ohne die Folge");
+        assertEquals(0, ungleicheTexte(teil1b())[0], "Teil 1b: Abweichung ohne die Folge");
+        assertEquals(0, ungleicheTexte(TEIL_1C)[0], "Teil 1c: Abweichung ohne die Folge");
+        assertEquals(0, ungleicheTexte(KvDifferenzTest.korpus())[0], "Korpus: Abweichung ohne die Folge");
+        assertEquals(0, ungleicheTexte(GENERATOREN)[0], "Generatoren: Abweichung ohne die Folge");
+    }
+
+    @Test
+    void t2_selbsttest_folgeWirdErkanntUndWirktAufDieFundliste() {
+        assertTrue(enthaeltCrUnsichtbarLf("a\r" + ZWSP + "\nb"));
+        assertTrue(enthaeltCrUnsichtbarLf("\r" + SHY + BOM + "\n"));
+        assertFalse(enthaeltCrUnsichtbarLf("a\r\nb"));
+        assertFalse(enthaeltCrUnsichtbarLf("a\r" + ZWSP + " \nb"));
+        assertFalse(enthaeltCrUnsichtbarLf("a\r" + ZWSP));
+        String ausserhalbBmp = new String(Character.toChars(0xE0020));
+        String ausserhalbBmp2 = new String(Character.toChars(0x1D173));
+        assertTrue(enthaeltCrUnsichtbarLf("a\r" + ausserhalbBmp + "\nb"));
+        assertTrue(enthaeltCrUnsichtbarLf("\r" + ZWSP + ausserhalbBmp + ausserhalbBmp2 + "\n"));
+        assertFalse(enthaeltCrUnsichtbarLf("a\r" + ausserhalbBmp + " \nb"));
+        int[] ausserhalb = ungleicheTexte(List.of("LANR:\r" + ausserhalbBmp + "\n" + LANR_GUELTIG));
+        assertEquals(1, ausserhalb[1], "Produkt gleicht der Kopie trotz CR UZ LF ausserhalb der BMP");
+        int[] zaehler = ungleicheTexte(List.of("LANR:\r" + ZWSP + "\n" + LANR_GUELTIG));
+        assertEquals(0, zaehler[0], "Folge ohne Folge gezaehlt");
+        assertEquals(1, zaehler[1], "Produkt gleicht der Kopie trotz CR UZ LF (Pruefung liefe ins Leere)");
     }
 
     // ------------------------------------------------------------------ Differenz Erkennerebene

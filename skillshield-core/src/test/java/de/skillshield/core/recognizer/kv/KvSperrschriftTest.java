@@ -1278,14 +1278,36 @@ class KvSperrschriftTest {
     }
 
     @Test
-    void bekannteGrenze15_crUnsichtbaresZeichenLf_zaehltAlsZweiUmbrueche_behebungNichtFreigegeben() {
-        // Behebung nicht freigegeben, Entscheidung liegt beim Nutzer: Das Verhalten stammt aus dem Vorfeature
-        // (auch im eingefrorenen Vorgaenger). Ohne das unsichtbare Zeichen gibt es den Fund mit 0,80.
+    void ak1_grenze15Geschlossen_crUnsichtbaresZeichenLfWieCrLf() {
+        // Umgestellt in T-2 (feature kv-trenner-und-umbruch, D-1): CR, unsichtbares Zeichen, LF ist ein Umbruch.
         for (Art a : ARTEN) {
             assertEin(a, a.kw + ":\r\n", a.gueltig, "", WAHRSCHEINLICH);
-            assertKein(a, a.kw + ":\r" + ZWSP + "\n" + a.gueltig);
+            assertEin(a, a.kw + ":\r" + ZWSP + "\n", a.gueltig, "", WAHRSCHEINLICH);
             assertEin(a, sperr(a) + ":\r\n", a.gueltig, "", SPERR);
-            assertKein(a, sperr(a) + ":\r" + ZWSP + "\n" + a.gueltig);
+            assertEin(a, sperr(a) + ":\r" + ZWSP + "\n", a.gueltig, "", SPERR);
+        }
+    }
+
+    @Test
+    void bekannteGrenze15Rest_crLeerraumLfUndNel_zweiUmbrueche() {
+        // Restformen von Grenze 15 (15R): nur unsichtbare Zeichen zwischen CR und LF zaehlen mit, sonst zwei Umbrueche.
+        for (Art a : ARTEN) {
+            String vor = a.kw + ":";
+            assertKein(a, vor + "\r \n" + a.gueltig);
+            assertKein(a, vor + "\r" + NBSP + "\n" + a.gueltig);
+            assertKein(a, vor + "\r" + NEL + a.gueltig);
+            assertKein(a, vor + "\r" + LS + a.gueltig);
+            assertKein(a, vor + "\r" + PS + a.gueltig);
+            assertKein(a, vor + "\r" + ZWSP + "A\n" + a.gueltig);
+            assertKein(a, vor + "\r" + ZWSP + AKUT + "\n" + a.gueltig);
+            assertKein(a, vor + "\r" + ZWSP + "\r" + a.gueltig);
+            assertKein(a, vor + "\r" + ZWSP + NEL + a.gueltig);
+            assertKein(a, vor + "\r" + ZWSP + LS + a.gueltig);
+            assertKein(a, vor + "\r" + ZWSP + PS + a.gueltig);
+            assertKein(a, vor + NEL + ZWSP + "\n" + a.gueltig);
+            assertKein(a, vor + LS + ZWSP + "\n" + a.gueltig);
+            assertKein(a, vor + PS + ZWSP + "\n" + a.gueltig);
+            assertKein(a, vor + "\r\n" + ZWSP + "\n" + a.gueltig);
         }
     }
 }

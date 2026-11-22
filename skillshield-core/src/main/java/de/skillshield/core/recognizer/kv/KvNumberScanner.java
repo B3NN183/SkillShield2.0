@@ -27,7 +27,8 @@ import java.util.Set;
  * {@link KvArt#kontextwoerter()} gleicht, oder ein Wort aus {@link KvArt#vorwoerter()}, dem nach hoechstens einem
  * {@code -}, Leerzeichen, U+00A0, U+2011 oder U+2013 die ersten Teilstuecke des naechsten Laufs als Wort {@code nr}
  * oder {@code nummer} folgen. Ein Lauf ohne Buchstaben im Sinne von {@link Character#isLetter(int)} ist neutral.
- * Zeilenumbruch: CR LF (zaehlt als einer), LF, CR, U+0085, U+2028, U+2029. Leerraum: Leerzeichen, Tab, U+00A0 und
+ * Zeilenumbruch: CR LF (zaehlt als einer), CR, ein oder mehrere unsichtbare Zeichen, LF (zaehlt ebenfalls als
+ * einer, D-1), LF, CR, U+0085, U+2028, U+2029. Leerraum: Leerzeichen, Tab, U+00A0 und
  * alle anderen Zeichen mit {@link Character#isWhitespace(int)} oder {@link Character#isSpaceChar(int)} ausser dem
  * Zeilenumbruch. Gruppentrenner in einer Ziffernkette: genau eines von Leerzeichen, U+00A0, U+2009, U+202F,
  * {@code -}, {@code .}, {@code /}.
@@ -111,7 +112,10 @@ import java.util.Set;
  * Gruppentrenner einer Kette ist, ist samt Punkt neutral (nummerierte Liste). {@code !} und {@code ?}: {@code aktiv =
  * false}.</li>
  * <li>Zeilenumbruch: bei {@code aktiv} {@code umbrueche++}, {@code direkt = false}; bei mehr als einem Umbruch
- * {@code aktiv = false} (Leerzeile).</li>
+ * {@code aktiv = false} (Leerzeile). Zaehlt ein einzelnes CR, bleibt es offen ({@code crOffen}), solange nur Laeufe
+ * aus unsichtbaren Zeichen folgen; ein LF dahinter gehoert zum selben Umbruch und wird nicht noch einmal gezaehlt.
+ * Jedes andere Zeichen, auch Leerraum, ein Buchstabe oder ein Kombinationszeichen, beendet das Offene: {@code CR UZ
+ * CR}, {@code CR UZ LF UZ LF}, {@code CR Leerzeichen LF} und {@code CR UZ A LF} sind zwei Umbrueche.</li>
  * </ul>
  *
  * <p><b>Offene Segmente (nachgestellter Kontext).</b> Ein Segment ohne {@code aktiv} wird an die Folge der offenen
@@ -151,9 +155,14 @@ import java.util.Set;
  * nachgestellten Kontextwort erschlossene Nummer; die Position bleibt abgedeckt), die Restformen nach 14h
  * (mehrere Vorwoerter vor {@code I K}, Fuellwort zwischen {@code I K} und Nachsatzwort, zwei Zeilenumbrueche,
  * wiederholtes {@code I K} verlaengert den Kontext; auf Scanner-Ebene kann ein Pfad-Fund mit 0,80 mit einem
- * 14g-IK-Fund mit 0,50 zu einem Fund mit 0,50 zusammengelegt werden, die Positionen bleiben abgedeckt) und 15 (CR,
- * unsichtbares Zeichen, LF zaehlen als zwei Zeilenumbrueche; die Behebung ist nicht freigegeben). Je Grenze gibt es
- * einen Test {@code bekannteGrenze...}.
+ * 14g-IK-Fund mit 0,50 zu einem Fund mit 0,50 zusammengelegt werden, die Positionen bleiben abgedeckt). Je Grenze
+ * gibt es einen Test {@code bekannteGrenze...}.
+ *
+ * <p><b>Bekannte Grenzen (Feature kv-trenner-und-umbruch).</b> Geschlossen: Grenze 15 (CR, ein oder mehrere
+ * unsichtbare Zeichen, LF zaehlen als ein Zeilenumbruch, D-1). Rest 15R, je als Test
+ * {@code bekannteGrenze15Rest...}: CR, Leerraum und LF, CR, ein Buchstabe oder Kombinationszeichen und LF, CR, ein
+ * unsichtbares Zeichen und CR, und jede Kombination mit U+0085, U+2028 oder U+2029 zaehlen weiter als zwei
+ * Zeilenumbrueche. Grenze 14c bleibt offen (Teil 2 dieses Features ist noch nicht umgesetzt).
  *
  * <p><b>Linearitaet.</b> Ein Durchlauf, keine Rekursion, kein regulaerer Ausdruck, kein Zuruecksetzen der
  * Leseposition der Hauptschleife. Jeder Lauf wird in einem Zug gelesen. Dabei fuehrt der Durchlauf nur ein Fenster
@@ -169,9 +178,12 @@ import java.util.Set;
  * sich die Vorgriffe nicht. Die Praefixsuche einer Kette liest den ersten Block ganz und danach hoechstens 13 Ziffern
  * und 13 Trenner; da der Durchlauf mindestens hinter dem ersten Block weitergeht, wird jeder Block hoechstens
  * 13-mal beruehrt. Der Zeilenanfang-Merker ({@code zeilenanfang}) wird vorwaerts mitgefuehrt, nicht rueckwaerts
- * gesucht. Der Sperr-Verfolger macht je Zeichen ausserhalb eines Laufs und je Lauf konstante Arbeit und setzt die
- * Leseposition nie zurueck: Er fuehrt einen Puffer fester Groesse (23 Buchstaben) plus Zaehler (laengere Folgen
- * koennen keinem Kontextwort gleichen) und das Abbild der offenen Segmente (sechs Werte, Wiederherstellen O(1)); der
+ * gesucht. Der Merker {@code crOffen} (CR UZ+ LF als ein Umbruch) ist ein einzelnes Flag, wird je Zeichen in
+ * konstanter Zeit gesetzt oder geloescht und braucht weder Vorgriff noch Rueckkehr; {@code CR} gefolgt von einer
+ * Million unsichtbarer Zeichen ist ein einziger Lauf. Der Sperr-Verfolger macht je Zeichen ausserhalb eines Laufs
+ * und je Lauf konstante Arbeit und setzt die Leseposition nie zurueck: Er fuehrt einen Puffer fester Groesse
+ * (23 Buchstaben) plus Zaehler (laengere Folgen koennen keinem Kontextwort gleichen) und das Abbild der
+ * offenen Segmente (sechs Werte, Wiederherstellen O(1)); der
  * Vergleich mit den Kontextwoertern geschieht einmal je Folgenende mit hoechstens 23 Zeichen und acht Eintraegen.
  * Jedes offene Segment wird hoechstens einmal ausgegeben, weil das Ereignis die Folge leert. Der Vorgriff auf
  * Einzelbuchstabe liest nur den einen Lauf hinter einem Sperr-Trenner (bis zum zweiten Buchstaben oder Laufende) und
@@ -357,6 +369,11 @@ final class KvNumberScanner {
          * Fuellwort) und den Punkt (kein Satzende), wie beim frischen Kontext von {@code I K}.
          */
         private boolean direktNachIk;
+        /**
+         * D-1: Ein einzelnes CR wurde als Zeilenumbruch gezaehlt; der Merker bleibt ueber Laeufe aus nur unsichtbaren
+         * Zeichen stehen, ein LF danach wird nicht noch einmal gezaehlt. Jedes andere Zeichen loescht ihn.
+         */
+        private boolean crOffen;
 
         /** Offene Segmente als Tripel (Start, Ende, Ziffernzahl). */
         private int[] offenDaten = new int[12];
@@ -418,8 +435,17 @@ final class KvNumberScanner {
                 int cp = text.codePointAt(i);
                 if (istUnsichtbar(cp) || istBuchstabe(cp)) {
                     i = laufMitVerfolger(i);
+                    if (buchstaben > 0) {
+                        crOffen = false; // ein Buchstabe oder Kombinationszeichen: kein CR UZ+ LF mehr (D-1)
+                    }
                     continue;
                 }
+                if (crOffen && c == '\n') {
+                    crOffen = false; // CR UZ+ LF: Fortsetzung desselben Umbruchs, nicht noch einmal zaehlen (D-1)
+                    i++;
+                    continue;
+                }
+                crOffen = false;
                 sperrSchritt(cp);
                 if (istZiffer(c)) {
                     i = ziffernkette(i);
@@ -435,6 +461,8 @@ final class KvNumberScanner {
                         i += laenge;
                         if (cp == '\r' && i < n && text.charAt(i) == '\n') {
                             i++;
+                        } else if (cp == '\r') {
+                            crOffen = true; // ein einzelnes CR zaehlt; unsichtbare Zeichen und ein LF gehoeren dazu
                         }
                         zeilenumbruch();
                     } else {
