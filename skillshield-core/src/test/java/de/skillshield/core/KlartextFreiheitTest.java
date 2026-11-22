@@ -690,6 +690,34 @@ class KlartextFreiheitTest {
         assertEquals(TEXT, REIDENTIFIER.restore(pseudo.text(), pseudo.mapping()).text());
     }
 
+    /** Neue Formen aus kv-kontext-luecken (AK-26): gesperrtes Kontextwort, {@code I K}, Komma, Semikolon, T-7a-Form. */
+    @Test
+    void ak26_kvKontextLuecken_fundeAusGesperrtemKontextwortIKUndKommaSindKlartextfrei() {
+        String[] texte = {"L A N R " + LANR_MARKER, "I K " + IK_MARKER, LANR_MARKER + ", LANR", IK_MARKER + ", IK",
+            "I.K.: " + IK_MARKER + ".", "L-A-N-R " + LANR_MARKER, LANR_MARKER + "; IK",
+            LANR_MARKER + ", L A N R", "IK: Praxis I K Nr " + IK_MARKER};
+        Ausgabe ausgabe = erfasse(() -> {
+            for (int i = 0; i < texte.length; i++) {
+                String text = texte[i];
+                List<Finding> funde = TextScanner.standard().scan(text);
+                assertEquals(1, funde.size(), "genau ein Fund in Text " + i);
+                Finding f = funde.get(0);
+                assertTrue(findeMarker(text).isPresent(), "Suchfunktion findet den Marker im Eingabetext " + i);
+                assertToStringKlartextfrei("KV-Finding.toString Text " + i, f);
+                assertToStringKlartextfrei("Liste der Funde Text " + i, funde);
+                assertToStringKlartextfrei("Finding.source Text " + i, f.source());
+                PseudonymizationResult pseudo = PSEUDONYMIZER.pseudonymize(text, funde);
+                assertTrue(findeMarker(pseudo.text()).isEmpty(), "Marker im pseudonymisierten Text " + i);
+                assertToStringKlartextfrei("PseudonymizationResult Text " + i, pseudo);
+                assertToStringKlartextfrei("PlaceholderMapping Text " + i, pseudo.mapping());
+                ReidentificationResult zurueck = REIDENTIFIER.restore(pseudo.text(), pseudo.mapping());
+                assertTrue(text.equals(zurueck.text()), "Roundtrip Text " + i);
+                assertToStringKlartextfrei("ReidentificationResult Text " + i, zurueck);
+            }
+        });
+        assertAusgabeKlartextfrei("KV-Kontextluecken-Test", ausgabe);
+    }
+
     @Test
     void selbsttest_kvMarkerUndIhreErstenSechsZiffernWerdenGefunden() {
         assertTrue(findeMarker("x " + LANR_MARKER + " y").isPresent(), "LANR voll");

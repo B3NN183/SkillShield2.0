@@ -434,6 +434,92 @@ class GrenzlastTest {
         assertFalse(d.pseudo().text().contains(LANR_GUELTIG.substring(0, 6)), "Nummer im Ausgabetext " + name);
     }
 
+    // ------------------------------------------------------------------ AK-24: kv-kontext-luecken (T-7b)
+
+    /**
+     * Die Faelle (a) bis (i) aus AK-24 ueber die ganze Kette (Standard-Scanner, Pseudonymisierung,
+     * Rueckuebersetzung). Je Fall: Praefix, Baustein, Schluss, erwartete Wiederholungen r (Formel
+     * {@code (1 000 000 - |Praefix| - |Schluss| + |Baustein| - 1) / |Baustein|}, ganzzahlig), erwartete Fundzahl je
+     * Stufe (sicher, wahrscheinlich, fraglich) und Typ. Die Zahlen folgen aus den Regeln (Plan Kap. 3.1 bis 3.3),
+     * nicht aus einem Probelauf; die Bausteinlaenge wird je Fall geprueft.
+     */
+    static Stream<Arguments> kvKontextLueckenFaelle() {
+        String n = IK_GUELTIG;
+        String l = LANR_GUELTIG;
+        return Stream.of(
+            // (a) "L " = 2 Zeichen, r = (1 000 000 + 1) / 2 = 500 000; eine einzige Einzelbuchstabenfolge: 0 Funde
+            Arguments.of("a L Leerzeichen", "", "L ", "", 2, 500_000, 0, 0, 0, null),
+            // (b) "I K " = 4 Zeichen, r = (1 000 000 + 3) / 4 = 250 000; eine Folge ohne Nummer: 0 Funde
+            Arguments.of("b I K", "", "I K ", "", 4, 250_000, 0, 0, 0, null),
+            // (c) "I." = 2 Zeichen, r = 500 000; 0 Funde
+            Arguments.of("c I Punkt", "", "I.", "", 2, 500_000, 0, 0, 0, null),
+            // (d) "L-A-N-R " = 8 Zeichen, r = (1 000 000 + 7) / 8 = 125 000; eine einzige Folge, nie ein Wort: 0
+            Arguments.of("d L-A-N-R", "", "L-A-N-R ", "", 8, 125_000, 0, 0, 0, null),
+            // (e) "L A N R " + LANR + " " = 8 + 9 + 1 = 18 Zeichen, r = (1 000 000 + 17) / 18 = 55 556 (> 50 000);
+            // je Wiederholung ein Fund, gueltig, gesperrtes Kontextwort ab drei Buchstaben: 0,80 wahrscheinlich
+            Arguments.of("e L A N R Nummer", "", "L A N R " + l + " ", "", 18, 55_556, 0, 55_556, 0,
+                FindingType.LANR),
+            // (f) "I K " + IK + " " = 4 + 9 + 1 = 14 Zeichen, r = (1 000 000 + 13) / 14 = 71 429; je Wiederholung
+            // ein Fund 0,50 (I K: Deckel 0,50): fraglich
+            Arguments.of("f I K Nummer", "", "I K " + n + " ", "", 14, 71_429, 0, 0, 71_429, FindingType.IK),
+            // (g1) IK + ", " = 11 Zeichen, r = (1 000 000 + 10) / 11 = 90 910; ohne Kontextwort: 0 Funde
+            Arguments.of("g1 Nummer Komma ohne Kontextwort", "", n + ", ", "", 11, 90_910, 0, 0, 0, null),
+            // (g2) wie g1 mit Schluss "IK" (2 Zeichen): r = (1 000 000 - 2 + 10) / 11 = 90 909; alle Nummern der
+            // offenen Folge werden mit dem Deckel 0,60 ausgegeben (Komma vor dem Kontextwort): 90 909 fraglich
+            Arguments.of("g2 Nummer Komma mit IK am Ende", "", n + ", ", "IK", 11, 90_909, 0, 0, 90_909,
+                FindingType.IK),
+            // (h) IK + ", IK " = 9 + 5 = 14 Zeichen, r = 71 429; die erste Nummer steht vor dem Kontextwort mit Komma
+            // (0,60 fraglich), jede weitere steht direkt hinter dem Kontextwort der vorigen Wiederholung (0,92 sicher):
+            // 1 fraglich und 71 428 sicher
+            Arguments.of("h Nummer Komma IK wiederholt", "", n + ", IK ", "", 14, 71_429, 71_428, 0, 1,
+                FindingType.IK),
+            // (i1) "L" + 999 999 Leerzeichen: Einzelbuchstabe, danach nur Leerraum: 0 Funde
+            Arguments.of("i1 L und Leerzeichen", "L", " ", "", 1, 999_999, 0, 0, 0, null),
+            // (i2) "L A N R" (7) + 999 993 Leerzeichen: Kontextwort ohne Nummer: 0 Funde
+            Arguments.of("i2 L A N R und Leerzeichen", "L A N R", " ", "", 1, 999_993, 0, 0, 0, null),
+            // (i3) "L" + ".A" = 2 Zeichen, r = (1 000 000 - 1 + 1) / 2 = 500 000; Einzelbuchstabenkette: 0 Funde
+            Arguments.of("i3 L Punkt A", "L", ".A", "", 2, 500_000, 0, 0, 0, null));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("kvKontextLueckenFaelle")
+    void ak24_kvKontextLuecken_eineMillionZeichen_dreiSchritteJeUnterZweiSekundenMitExakterFundzahl(String name,
+            String praefix, String baustein, String schluss, int bausteinLaenge, int r, int sicher,
+            int wahrscheinlich, int fraglich, FindingType typ) {
+        assertEquals(bausteinLaenge, baustein.length(), "Bausteinlaenge " + name);
+        assertEquals(r, kvWiederholungen(praefix, baustein, schluss, MIN_ZEICHEN), "Wiederholungen " + name);
+        // Aufwaermlauf (nicht gemessen) mit 10 000 Zeichen derselben Bauart
+        String warm = kvText(praefix, baustein, schluss, 10_000);
+        assertEquals(0, neunerfenster(warm, "00")[1], "Waechter Aufwaermtext " + name);
+        drei(warm, GRENZE_GROSSER_TEXT);
+
+        String text = kvText(praefix, baustein, schluss, MIN_ZEICHEN);
+        assertTrue(text.length() >= MIN_ZEICHEN, "Textlaenge " + text.length());
+        assertEquals(0, neunerfenster(text, "00")[1], "Waechter " + name);
+
+        Durchlauf d = drei(text, GRENZE_PATHOLOGISCH);
+        List<Finding> funde = d.funde();
+        assertEquals(sicher + wahrscheinlich + fraglich, funde.size(), "Fundzahl " + name);
+        assertEquals(sicher, funde.stream().filter(f -> f.level() == ConfidenceLevel.SICHER).count(),
+                "Stufe sicher " + name);
+        assertEquals(wahrscheinlich,
+                funde.stream().filter(f -> f.level() == ConfidenceLevel.WAHRSCHEINLICH).count(),
+                "Stufe wahrscheinlich " + name);
+        assertEquals(fraglich, funde.stream().filter(f -> f.level() == ConfidenceLevel.FRAGLICH).count(),
+                "Stufe fraglich " + name);
+        for (Finding f : funde) {
+            assertEquals(typ, f.type(), "Typ " + name);
+        }
+        pruefeRoundtrip(text, d);
+        // kein Klartext der gefundenen Nummern im Ausgabetext (bei 0 Funden bleibt der Text unveraendert)
+        if (typ != null) {
+            String nummer = FindingType.LANR.equals(typ) ? LANR_GUELTIG : IK_GUELTIG;
+            assertFalse(d.pseudo().text().contains(nummer.substring(0, 6)), "Nummer im Ausgabetext " + name);
+        } else {
+            assertTrue(text.equals(d.pseudo().text()), "Text ohne Fund veraendert " + name);
+        }
+    }
+
     @Test
     void ak21_nachtragA_sehrVieleOffeneSegmenteDieErstEinKontextwortAmEndeAusgibt() {
         // Text: r mal "<LANR>, " (11 Zeichen), dann "<LANR> (LANR)" (16 Zeichen). Ohne Kontextwort bleiben alle

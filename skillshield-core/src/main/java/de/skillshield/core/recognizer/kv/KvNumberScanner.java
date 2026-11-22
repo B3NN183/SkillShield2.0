@@ -141,6 +141,20 @@ import java.util.Set;
  * das Kontextwort und nie ein unsichtbares Zeichen; unsichtbare Zeichen veraendern keinen Index. Die Funde sind nach
  * Position sortiert und ueberlappen nicht, jedes Segment wird hoechstens einmal ausgegeben.
  *
+ * <p><b>Bekannte Grenzen (Feature kv-kontext-luecken, Plan Kap. 11).</b> Geschlossen: Grenze 12 (Komma und Semikolon
+ * vor dem nachgestellten Kontextwort) und Grenze 14 (gesperrte Schreibweise) des Vorgaengers, jeweils in den Grenzen
+ * der Regeln D-1 bis D-5, dazu 14h ({@code IK: Praxis I K Nr N}). Verbleibend: 12R ({@code und} und {@code /} vor dem
+ * nachgestellten Kontextwort), 14a (Teilgruppen wie {@code LA NR}), 14b (gesperrtes Vor- und Nachsatzwort), 14c
+ * (Initialen mit Punkt und Leerzeichen, Tab, Zeilenumbruch, zwei Trenner), 14d (unmittelbar wiederholte Sperrschrift
+ * ist eine Folge), 14e (Einzelbuchstabe direkt vor oder hinter der Folge), 14f ({@code I K} ohne Fuellwoerter,
+ * Aufzaehlung, Umbruch, nachgestellten Kontext), 14g (0,50 statt 0,80 fuer eine von {@code I K} und einem
+ * nachgestellten Kontextwort erschlossene Nummer; die Position bleibt abgedeckt), die Restformen nach 14h
+ * (mehrere Vorwoerter vor {@code I K}, Fuellwort zwischen {@code I K} und Nachsatzwort, zwei Zeilenumbrueche,
+ * wiederholtes {@code I K} verlaengert den Kontext; auf Scanner-Ebene kann ein Pfad-Fund mit 0,80 mit einem
+ * 14g-IK-Fund mit 0,50 zu einem Fund mit 0,50 zusammengelegt werden, die Positionen bleiben abgedeckt) und 15 (CR,
+ * unsichtbares Zeichen, LF zaehlen als zwei Zeilenumbrueche; die Behebung ist nicht freigegeben). Je Grenze gibt es
+ * einen Test {@code bekannteGrenze...}.
+ *
  * <p><b>Linearitaet.</b> Ein Durchlauf, keine Rekursion, kein regulaerer Ausdruck, kein Zuruecksetzen der
  * Leseposition der Hauptschleife. Jeder Lauf wird in einem Zug gelesen. Dabei fuehrt der Durchlauf nur ein Fenster
  * der letzten 24 Buchstaben des Laufs (laengere Teilstuecke koennen keinem Eintrag gleichen, das laengste Kontextwort
@@ -508,7 +522,6 @@ final class KvNumberScanner {
             boolean abkuerzung = index == laufEnde && laufBuchstaben >= 1 && laufBuchstaben <= MAX_ABKUERZUNG;
             if (aktiv && !direkt && !direktNachIk && !abkuerzung) {
                 aktiv = false;
-                direktNachIk = false;
             }
         }
 
@@ -694,6 +707,10 @@ final class KvNumberScanner {
          * 14h: {@code I K} bei laufendem Kontext. Die zwei Einzelbuchstaben wurden als Fuellwoerter gezaehlt; sie
          * werden zurueckgegeben (ein Wort der Art, kein Fuellwort), und ein Nachsatzwort unmittelbar dahinter ist
          * kein Fuellwort. Deckel, {@code direkt} und {@code nurDirekt} bleiben unveraendert.
+         *
+         * <p>Reichweite: Wiederholtes {@code I K} mit einem neutralen Zeichen dazwischen ({@code IK: I K, I K, N})
+         * verlaengert den laufenden Kontext, weil jedes {@code I K} die Fuellwoerter zurueckgibt. Das kostet keinen
+         * Schutz; es kann einen Fehlalarm mit 0,80 erzeugen (Plan Kap. 11, "Restformen nach T-7a", Punkt 5).
          */
         private void ikBeiLaufendemKontext() {
             woerter = Math.max(0, woerter - MIN_SPERR_BUCHSTABEN);

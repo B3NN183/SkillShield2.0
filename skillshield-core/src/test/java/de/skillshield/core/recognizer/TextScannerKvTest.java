@@ -14,6 +14,9 @@ import de.skillshield.core.model.Finding;
 import de.skillshield.core.model.FindingType;
 import de.skillshield.core.pseudonymize.PseudonymizationResult;
 import de.skillshield.core.pseudonymize.Pseudonymizer;
+import de.skillshield.core.recognizer.general.PathRecognizer;
+import de.skillshield.core.recognizer.kv.IkRecognizer;
+import de.skillshield.core.recognizer.kv.LanrRecognizer;
 import de.skillshield.core.reidentify.ReidentificationResult;
 import de.skillshield.core.reidentify.Reidentifier;
 import java.util.List;
@@ -137,6 +140,119 @@ class TextScannerKvTest {
         PseudonymizationResult ergebnis = PSEUDONYMIZER.pseudonymize(text, funde);
         assertRoundtrip(text, ergebnis);
         assertEquals(6, ergebnis.mapping().size());
+    }
+
+    @Test
+    void kvKontextLuecken_ak21_ikNummerKommaLanr_imGesamtergebnisGenauEinFundTypIkSicher() {
+        // Der LANR-Erkenner liefert fuer "N, LANR" einen Kandidaten ueber dieselbe Nummer (die IK-Nummer hat als LANR
+        // keine gueltige Pruefziffer: 0,50, Quelle Pruefziffer; mit gueltiger Pruefziffer waere es 0,60). Der
+        // IK-Kandidat (direkt hinter "IK", 0,92) gewinnt die Konfliktregel: genau ein Fund, Typ IK, Bereich genau
+        // die Nummer.
+        String vor = "IK ";
+        String text = vor + IK_GUELTIG + ", LANR";
+        List<Finding> kandidatenLanr = new LanrRecognizer().detect(text);
+        assertEquals(1, kandidatenLanr.size(), "LANR-Kandidat auf Erkennerebene");
+        assertEquals(0.50, kandidatenLanr.get(0).confidence());
+        assertEquals(vor.length(), kandidatenLanr.get(0).start());
+        assertEquals(vor.length() + IK_GUELTIG.length(), kandidatenLanr.get(0).end());
+
+        List<Finding> funde = scan(text);
+        assertEquals(1, funde.size());
+        Finding f = funde.get(0);
+        assertEquals(FindingType.IK, f.type());
+        assertEquals(0.92, f.confidence());
+        assertEquals(ConfidenceLevel.SICHER, f.level());
+        assertEquals(vor.length(), f.start());
+        assertEquals(vor.length() + IK_GUELTIG.length(), f.end());
+        assertTrue(IK_GUELTIG.equals(f.originalValue()), "IK-Wert");
+        PseudonymizationResult ergebnis = PSEUDONYMIZER.pseudonymize(text, funde);
+        assertEquals("IK [[IK_1]], LANR", ergebnis.text());
+        assertRoundtrip(text, ergebnis);
+    }
+
+    @Test
+    void kvKontextLuecken_ak21_ikNummerKommaLanrMitLanrKandidat060_typwechselZuLanrPositionAbgedeckt() {
+        // Die Nummer hat als LANR eine gueltige Pruefziffer (LANR-Kandidat 0,60), als IK nicht (IK-Kandidat direkt
+        // hinter "IK" mit ungueltiger Pruefziffer: 0,50). Beide Kandidaten haben denselben Bereich; nach der
+        // Staerke des ConflictResolver (Konfidenz absteigend) gilt der IK-Kandidat als im LANR-Kandidaten enthalten.
+        // Ergebnis: genau ein Fund, Typ LANR (Typwechsel gegenueber dem Fall mit gueltiger IK-Nummer), 0,60
+        // "fraglich"; die Position ist in jedem Fall abgedeckt. Ein Typwechsel ist im Plan (Kap. 13, Hinweis 10)
+        // nicht ausdruecklich beschrieben; die Schutzgarantie (Position abgedeckt) bleibt erhalten.
+        String vor = "IK ";
+        String text = vor + LANR_GUELTIG + ", LANR";
+        List<Finding> lanr = new LanrRecognizer().detect(text);
+        assertEquals(1, lanr.size(), "LANR-Kandidat auf Erkennerebene");
+        assertEquals(0.60, lanr.get(0).confidence());
+        List<Finding> ik = new IkRecognizer().detect(text);
+        assertEquals(1, ik.size(), "IK-Kandidat auf Erkennerebene");
+        assertEquals(0.50, ik.get(0).confidence());
+
+        List<Finding> funde = scan(text);
+        assertEquals(1, funde.size());
+        Finding f = funde.get(0);
+        assertEquals(FindingType.LANR, f.type());
+        assertEquals(0.60, f.confidence());
+        assertEquals(ConfidenceLevel.FRAGLICH, f.level());
+        assertEquals(vor.length(), f.start());
+        assertEquals(vor.length() + LANR_GUELTIG.length(), f.end());
+        assertTrue(LANR_GUELTIG.equals(f.originalValue()), "Wert");
+        PseudonymizationResult ergebnis = PSEUDONYMIZER.pseudonymize(text, funde);
+        assertEquals("IK [[LANR_1]], LANR", ergebnis.text());
+        assertRoundtrip(text, ergebnis);
+    }
+
+    @Test
+    void bekannteGrenze_pfadFund080UndIk14gFund050_werdenZuEinemFund050ZusammengelegtPositionAbgedeckt() {
+        // Restform 6 (Plan Kap. 11): gesperrtes "i k" mit Trennern, dann ";.Nr:/" und eine gruppierte IK-Nummer.
+        // PathRecognizer: ".Nr:/" plus erste Gruppe, 0,80. IkRecognizer: die ganze Nummer, 0,50 (14g, von "i k"
+        // erschlossen). Beide ueberlappen teilweise, der ConflictResolver bildet die Vereinigung mit der Konfidenz
+        // des schwaechsten maximalen Kandidaten (0,50), Typ des staerkeren (PFAD). Stufe "fraglich", Position
+        // abgedeckt.
+        String gruppiert = IK_GUELTIG.substring(0, 3) + " " + IK_GUELTIG.substring(3, 6) + " "
+            + IK_GUELTIG.substring(6);
+        String vor = "i k ;.Nr:/";
+        String text = vor + gruppiert + " ;";
+        List<Finding> pfad = new PathRecognizer().detect(text);
+        assertEquals(1, pfad.size(), "Pfad-Kandidat");
+        assertEquals(0.80, pfad.get(0).confidence());
+        List<Finding> ik = new IkRecognizer().detect(text);
+        assertEquals(1, ik.size(), "IK-Kandidat");
+        assertEquals(0.50, ik.get(0).confidence());
+
+        List<Finding> funde = scan(text);
+        assertEquals(1, funde.size());
+        Finding f = funde.get(0);
+        assertEquals(FindingType.PFAD, f.type());
+        assertEquals(0.50, f.confidence());
+        assertEquals(ConfidenceLevel.FRAGLICH, f.level());
+        assertTrue(f.start() <= pfad.get(0).start(), "Pfad-Anfang abgedeckt");
+        assertEquals(vor.length() + gruppiert.length(), f.end(), "Ende der Nummer abgedeckt");
+    }
+
+    @Test
+    void kvKontextLuecken_ak27_ikGesperrtUndNummerKommaIk_fundVorhandenUndOhneUebergabeBleibtDerTextUnveraendert() {
+        String[] texte = {"I K " + IK_GUELTIG, IK_GUELTIG + ", IK", "L A N R " + LANR_GUELTIG,
+            LANR_GUELTIG + ", LANR"};
+        for (int i = 0; i < texte.length; i++) {
+            String text = texte[i];
+            List<Finding> funde = scan(text);
+            assertEquals(1, funde.size(), "Fund in Text " + i);
+            Finding f = funde.get(0);
+            boolean ik = i < 2;
+            assertEquals(ik ? FindingType.IK : FindingType.LANR, f.type(), "Typ in Text " + i);
+            // I K: 0,50 und Komma vor dem Kontextwort: 0,60 sind fraglich; gesperrtes LANR: 0,80 wahrscheinlich
+            ConfidenceLevel erwartet = i == 2 ? ConfidenceLevel.WAHRSCHEINLICH : ConfidenceLevel.FRAGLICH;
+            assertEquals(erwartet, f.level(), "Stufe in Text " + i);
+
+            // Mensch entscheidet: ohne uebergebenen Fund wird nichts ersetzt
+            PseudonymizationResult ohne = PSEUDONYMIZER.pseudonymize(text, List.of());
+            assertTrue(text.equals(ohne.text()), "Text ohne Fund veraendert " + i);
+            // mit dem Fund wird ersetzt, und die Rueckuebersetzung stellt den Text her
+            PseudonymizationResult mit = PSEUDONYMIZER.pseudonymize(text, funde);
+            assertFalse(text.equals(mit.text()), "Text mit Fund nicht ersetzt " + i);
+            assertFalse(mit.text().contains(f.originalValue()), "Nummer im Ausgabetext " + i);
+            assertRoundtrip(text, mit);
+        }
     }
 
     @Test

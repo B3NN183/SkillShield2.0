@@ -1110,6 +1110,8 @@ class KvSperrschriftTest {
         assertEin(IK, "IK: I K Nr der ", IKN, "", WAHRSCHEINLICH, "ik");
         assertEin(IK, "IK: I K Nr der Firma ", IKN, "", WAHRSCHEINLICH, "ik");
         assertEin(IK, "IK: I K Nr ", IKN, "", WAHRSCHEINLICH, "ik");
+        // ohne Vorwort und ohne Nachsatzwort (Hinweis 6): der Kontext behaelt seine Konfidenz
+        assertEin(IK, "IK: I K ", IKN, "", WAHRSCHEINLICH, "ik");
     }
 
     @Test
@@ -1206,6 +1208,84 @@ class KvSperrschriftTest {
         for (Finding f : klein) {
             assertEquals(WAHRSCHEINLICH, f.confidence());
             assertEquals("ik", f.source());
+        }
+    }
+
+    // ------------------------------------------------------------------ T-7b: weitere bekannte Grenzen (Plan Kap. 11)
+
+    @Test
+    void bekannteGrenze14c_initialenMitPunktUndLeerzeichenTabUmbruchZweiTrenner_keineSperrschrift() {
+        for (Art a : ARTEN) {
+            String w = wort(a);
+            // Initialenform "L. A. N. R.": Punkt und Leerzeichen sind zwei Trenner
+            assertKein(a, sperr(w, ". ") + ". " + a.gueltig);
+            // Tab und Zeilenumbruch als Trenner
+            assertKein(a, sperr(w, "\t") + " " + a.gueltig);
+            assertKein(a, sperr(w, "\n") + " " + a.gueltig);
+            // zwei Leerzeichen als Trenner
+            assertKein(a, sperr(w, "  ") + " " + a.gueltig);
+        }
+        assertKein(IK, "I. K. " + IKN);
+        assertKein(IK, "I\tK " + IKN);
+        assertKein(IK, "I\nK " + IKN);
+        assertKein(IK, "I  K " + IKN);
+    }
+
+    @Test
+    void bekannteGrenze14e_einzelbuchstabeDirektVorOderHinterDerFolge_keinKontextwort() {
+        // davor: die maximale Folge ist "A I K" bzw. "X Y I K", kein Kontextwort
+        assertKein(IK, "Herr A I K " + IKN);
+        assertKein(IK, "X Y I K " + IKN);
+        assertKein(LANR_ART, "Herr A L A N R " + LANR_ART.gueltig);
+        // dahinter, auch hinter einem gesperrten nachgestellten Kontextwort
+        assertKein(LANR_ART, "L A N R x " + LANR_ART.gueltig);
+        assertKein(LANR_ART, LANR_ART.gueltig + ", L A N R x");
+        assertKein(IK, IKN + ", I K x");
+        // und mit einem unsichtbaren Zeichen dazwischen
+        assertKein(LANR_ART, "L A N R" + ZWSP + " x " + LANR_ART.gueltig);
+        assertKein(LANR_ART, LANR_ART.gueltig + ", L A N R" + ZWSP + " x");
+        assertKein(LANR_ART, LANR_ART.gueltig + ", L A N R " + ZWSP + "x");
+    }
+
+    @Test
+    void bekannteGrenze14hRest1_mehrereVorwoerterVorIK_050StattKontext_nummerAbgedeckt() {
+        zwei("IK: Praxis Firma I K Nr ", IKN, "");
+        zwei("IK: Dr. med. Praxis I K Nr ", IKN, "");
+    }
+
+    @Test
+    void bekannteGrenze14hRest2_fuellwortZwischenIKUndNachsatzwort_keinFund() {
+        assertKein(IK, "IK: Praxis I K der Firma Nr " + IKN);
+    }
+
+    @Test
+    void bekannteGrenze14hRest3_zweiZeilenumbruecheSeitDemKontextwort_keinFund() {
+        assertKein(IK, "IK:\nPraxis I K\nNr " + IKN);
+    }
+
+    @Test
+    void bekannteGrenze14hRest4_zweiEinzelbuchstabenVorIK_keinFund() {
+        assertKein(IK, "IK: a b I K Nr " + IKN);
+    }
+
+    @Test
+    void bekannteGrenze14hRest5_wiederholtesIKMitNeutralemZeichenVerlaengertDenKontext_fehlalarmMoeglich() {
+        // jedes I K gibt seine Fuellwoerter zurueck: der Kontext laeuft beliebig lange weiter, die Nummer bekommt 0,80
+        assertEin(IK, "IK: " + "I K, ".repeat(3), IKN, "", WAHRSCHEINLICH, "ik");
+        assertEin(IK, "IK: " + "I K, ".repeat(40), IKN, "", WAHRSCHEINLICH, "ik");
+        // zum Vergleich: gewoehnliche Woerter statt I K beenden den Kontext nach drei Fuellwoertern
+        assertKein(IK, "IK: " + "x, ".repeat(5) + IKN);
+    }
+
+    @Test
+    void bekannteGrenze15_crUnsichtbaresZeichenLf_zaehltAlsZweiUmbrueche_behebungNichtFreigegeben() {
+        // Behebung nicht freigegeben, Entscheidung liegt beim Nutzer: Das Verhalten stammt aus dem Vorfeature
+        // (auch im eingefrorenen Vorgaenger). Ohne das unsichtbare Zeichen gibt es den Fund mit 0,80.
+        for (Art a : ARTEN) {
+            assertEin(a, a.kw + ":\r\n", a.gueltig, "", WAHRSCHEINLICH);
+            assertKein(a, a.kw + ":\r" + ZWSP + "\n" + a.gueltig);
+            assertEin(a, sperr(a) + ":\r\n", a.gueltig, "", SPERR);
+            assertKein(a, sperr(a) + ":\r" + ZWSP + "\n" + a.gueltig);
         }
     }
 }

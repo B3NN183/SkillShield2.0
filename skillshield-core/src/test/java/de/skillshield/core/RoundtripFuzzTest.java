@@ -1545,8 +1545,12 @@ class RoundtripFuzzTest {
      * Blockart und Art (Sperrschrift ab drei Buchstaben 659 / LANR 446 / IK 391, I K 507, Komma 698 / LANR 452 /
      * IK 461), Fund aus neuer Regel insgesamt 961 (Untergrenze 600), Funde je Typ (LANR 843, IK 940; je 500),
      * fraglich 948 (500), Scan-Funde 998 (600), manuelle Funde 944 (500), echte Teilmengen der Scan-Funde 866
-     * (500). Einzelne Zaehler sinken leicht (I K, Komma IK, manuelle Funde): Die Ursache sind Funde mit hoeherer
-     * Konfidenz; im Zufallsvergleich gegen den Stand T-6 ist kein Fund gesenkt oder verschwunden (T-7a).
+     * (500). Gegenueber dem Stand vor T-7a sinken drei Zaehler um je drei ({@code kv-sperr-zwei-fund} 510 auf 507,
+     * {@code kv-komma-fund-ik} 464 auf 461, {@code manueller-fund} 947 auf 944), zwei steigen um eins
+     * ({@code kv-fund-aus-neuer-regel} 960 auf 961, {@code kv-fraglich} 947 auf 948). Belegt ist die Erklaerung "der
+     * Block zaehlt wegen hoeherer Konfidenz nicht mehr in der Klasse" nur fuer {@code kv-sperr-zwei-fund} und
+     * {@code kv-komma-fund-ik}; {@code manueller-fund} haengt an der Zufallsauswahl (vermutlich Folgeeffekt der
+     * Auswahl, nicht belegt). Im Zufallsvergleich gegen den Stand T-6 ist kein Fund gesenkt oder verschwunden (T-7a).
      */
     @Test
     void t6_kvC_fuzzPruftNichtInsLeere_jedeKlasseKommtVor() {
