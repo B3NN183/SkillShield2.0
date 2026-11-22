@@ -46,8 +46,9 @@ import java.util.Set;
  * Kontextwort bzw. letztem Segment), {@code umbrueche} (ebenso) und die Folge der offenen Segmente samt
  * Luecken-Merkern (fuer nachgestellten Kontext).
  * <ul>
- * <li>Kontextwort: Sind Segmente offen und die Luecke hinter dem letzten sauber, werden alle ausgegeben
- * (nachgestellter Kontext). Dann {@code aktiv = direkt = true}, {@code woerter = umbrueche = 0}.</li>
+ * <li>Kontextwort: Sind Segmente offen und die Luecke hinter dem letzten sauber oder mit genau einem {@code ,}
+ * bzw. {@code ;} (siehe unten), werden alle ausgegeben (nachgestellter Kontext). Dann {@code aktiv = direkt = true},
+ * {@code woerter = umbrueche = 0}.</li>
  * <li>Segment bei {@code aktiv}: wird ausgegeben; danach {@code direkt = false}, {@code woerter = umbrueche = 0}
  * (Aufzaehlung, auch zeilenweise). Segment ohne {@code aktiv}: wird offen (siehe unten).</li>
  * <li>Fuellwort (Wort, Ziffernblock ohne Segment, Nachsatzwort ausserhalb von {@code direkt}): {@code woerter++},
@@ -72,13 +73,21 @@ import java.util.Set;
  * {@code /} oder das Wort {@code und} (ASCII, fallunabhaengig, hoechstens einmal je Luecke) stehen; sonst ersetzt es
  * die Folge. Jedes andere Ereignis (Wort, Ziffernblock ohne Segment, Satzzeichen, Zeilenumbruch, sonstiges Zeichen)
  * leert die ganze Folge. Zwischen dem letzten Segment und dem Kontextwort sind nur Leerraum, neutrale Laeufe und
- * hoechstens ein {@code (} oder {@code [} erlaubt; steht dort ein {@code ,}, {@code ;}, {@code /} oder {@code und},
- * wird beim Kontextwort nichts ausgegeben.
+ * hoechstens ein {@code (} oder {@code [} erlaubt. Die Luecke hinter dem letzten offenen Segment wird beim
+ * Kontextwort so ausgewertet: Merker sind die Zahl der {@code ,} und {@code ;} (saettigt bei 2), ein Flag fuer
+ * {@code /}, das Wort {@code und} und ein Flag "Klammer vor dem Komma". Ohne {@code ,}, {@code ;}, {@code /} und
+ * {@code und} werden alle offenen Segmente ausgegeben (Deckel 1,0). Mit genau einem {@code ,} oder {@code ;}, ohne
+ * {@code /}, {@code und} und ohne Klammer vor dem Komma werden sie ebenfalls ausgegeben, aber mit dem Deckel
+ * {@link #CONFIDENCE_KOMMA_NACHGESTELLT} (0,60; {@code N, LANR}, {@code N; (IK)}, {@code N1, N2, LANR}). In allen
+ * anderen Faellen ({@code N,, KW}, {@code N, und KW}, {@code N, / KW}, {@code N(, KW)}) wird nichts ausgegeben.
+ * Das Komma steht nie im Fundbereich.
  *
  * <p><b>Konfidenz, Stufe, Quelle.</b> Neun Ziffern mit gueltiger Pruefziffer: Konfidenz der Art, Quelle der Art
- * (bei {@code direkt}; sonst {@link #CONFIDENCE_KONTEXT_ENTFERNT}, auch fuer nachgestellten Kontext). Ungueltige
- * Pruefziffer: {@link #CONFIDENCE_PRUEFZIFFER_UNGUELTIG}. Sechs bis zwoelf Ziffern ausser neun:
- * {@link #CONFIDENCE_LAENGE_ABWEICHEND}. Der Fundbereich ist genau das Segment (Ziffern samt inneren Trennern), nie
+ * (bei {@code direkt}; sonst {@link #CONFIDENCE_KONTEXT_ENTFERNT}, auch fuer nachgestellten Kontext; mit einem
+ * {@code ,} oder {@code ;} vor dem nachgestellten Kontextwort hoechstens {@link #CONFIDENCE_KOMMA_NACHGESTELLT},
+ * Quelle unveraendert). Ungueltige Pruefziffer: {@link #CONFIDENCE_PRUEFZIFFER_UNGUELTIG}. Sechs bis zwoelf Ziffern
+ * ausser neun: {@link #CONFIDENCE_LAENGE_ABWEICHEND}.
+ * Der Fundbereich ist genau das Segment (Ziffern samt inneren Trennern), nie
  * das Kontextwort und nie ein unsichtbares Zeichen; unsichtbare Zeichen veraendern keinen Index. Die Funde sind nach
  * Position sortiert und ueberlappen nicht, jedes Segment wird hoechstens einmal ausgegeben.
  *
@@ -113,6 +122,9 @@ final class KvNumberScanner {
 
     /** Konfidenz bei einer Ziffernzahl von 6 bis 12 ausser neun. */
     static final double CONFIDENCE_LAENGE_ABWEICHEND = 0.40;
+
+    /** Deckel bei Komma oder Semikolon vor dem nachgestellten Kontextwort (D-5). */
+    static final double CONFIDENCE_KOMMA_NACHGESTELLT = 0.60;
 
     private static final int NEUN = 9;
     private static final int MIN_LAENGE = 6;
@@ -244,7 +256,11 @@ final class KvNumberScanner {
         private int[] offenDaten = new int[12];
         private int offenAnzahl;
         private int offenKlammern;
-        private boolean offenTrenner;
+        /** Luecke hinter dem letzten offenen Segment: Zahl der {@code ,} und {@code ;} (saettigt bei 2). */
+        private int offenKomma;
+        private boolean offenSchraeg;
+        /** Ein {@code ,} oder {@code ;} kam nach einer {@code (} bzw. {@code [} der Luecke. */
+        private boolean offenKlammerVorKomma;
         private boolean offenUnd;
 
         /** Ende des letzten Laufs und Zahl seiner Buchstaben (0, wenn ohne Buchstaben), fuer den Abkuerzungspunkt. */
@@ -311,15 +327,19 @@ final class KvNumberScanner {
         private void offenLeeren() {
             offenAnzahl = 0;
             offenKlammern = 0;
-            offenTrenner = false;
+            offenKomma = 0;
+            offenSchraeg = false;
+            offenKlammerVorKomma = false;
             offenUnd = false;
         }
 
         private void kontextwort() {
             if (offenAnzahl > 0) {
-                if (!offenTrenner && !offenUnd) {
-                    for (int k = 0; k < offenAnzahl; k++) {
-                        ausgeben(offenDaten[3 * k], offenDaten[3 * k + 1], offenDaten[3 * k + 2], false);
+                if (!offenSchraeg && !offenUnd) {
+                    if (offenKomma == 0) {
+                        offenAusgeben(1.0);
+                    } else if (offenKomma == 1 && !offenKlammerVorKomma) {
+                        offenAusgeben(CONFIDENCE_KOMMA_NACHGESTELLT);
                     }
                 }
                 offenLeeren();
@@ -328,6 +348,12 @@ final class KvNumberScanner {
             direkt = true;
             woerter = 0;
             umbrueche = 0;
+        }
+
+        private void offenAusgeben(double deckel) {
+            for (int k = 0; k < offenAnzahl; k++) {
+                ausgeben(offenDaten[3 * k], offenDaten[3 * k + 1], offenDaten[3 * k + 2], false, deckel);
+            }
         }
 
         private void fuellwort() {
@@ -382,8 +408,13 @@ final class KvNumberScanner {
                 if (offenKlammern > 1) {
                     offenLeeren();
                 }
-            } else if (cp == ',' || cp == ';' || cp == '/') {
-                offenTrenner = true;
+            } else if (cp == ',' || cp == ';') {
+                offenKomma = Math.min(offenKomma + 1, 2);
+                if (offenKlammern > 0) {
+                    offenKlammerVorKomma = true;
+                }
+            } else if (cp == '/') {
+                offenSchraeg = true;
             } else if (!istLeerraum(cp)) {
                 offenLeeren();
             }
@@ -392,7 +423,7 @@ final class KvNumberScanner {
         /** Ein Segment [start, end) mit {@code anzahl} Ziffern wurde gelesen. */
         private void segment(int start, int end, int anzahl) {
             if (aktiv) {
-                ausgeben(start, end, anzahl, direkt);
+                ausgeben(start, end, anzahl, direkt, 1.0);
                 direkt = false;
                 woerter = 0;
                 umbrueche = 0;
@@ -408,12 +439,14 @@ final class KvNumberScanner {
                 offenDaten[3 * offenAnzahl + 2] = anzahl;
                 offenAnzahl++;
                 offenKlammern = 0;
-                offenTrenner = false;
+                offenKomma = 0;
+                offenSchraeg = false;
+                offenKlammerVorKomma = false;
                 offenUnd = false;
             }
         }
 
-        private void ausgeben(int start, int end, int anzahl, boolean mitDirektemKontext) {
+        private void ausgeben(int start, int end, int anzahl, boolean mitDirektemKontext, double deckel) {
             double konfidenz;
             String quelle;
             if (anzahl == NEUN) {
@@ -428,6 +461,7 @@ final class KvNumberScanner {
                 konfidenz = CONFIDENCE_LAENGE_ABWEICHEND;
                 quelle = art.sourceLaengeAbweichend();
             }
+            konfidenz = Math.min(konfidenz, deckel);
             funde.add(new Finding(art.type(), text.substring(start, end), start, end, konfidenz, quelle));
         }
 

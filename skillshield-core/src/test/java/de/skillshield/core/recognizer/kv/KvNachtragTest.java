@@ -331,12 +331,10 @@ class KvNachtragTest {
     }
 
     @Test
-    void r2_auslegung_kommaUndOderUndDirektVorDemKontextwort_keinFund() {
-        // Zwischen dem letzten Segment und dem Kontextwort gilt unveraendert: nur Leerraum und hoechstens eine Klammer.
-        // Ein Komma, ";", "/" oder "und" dort verwirft die ganze Folge (Auslegung der Hauptsitzung-Regel R-2).
+    void bekannteGrenze12Rest_undOderSchraegstrichDirektVorDemKontextwort_keinFund() {
+        // Grenze 12 ist fuer ein einzelnes Komma oder Semikolon geschlossen (kv-kontext-luecken D-5, siehe
+        // KvKommaTest). Fuer "/" und "und" dort gilt unveraendert: Die ganze Folge wird verworfen.
         for (Art a : ARTEN) {
-            assertKein(a, a.gueltig + ", " + a.kw);
-            assertKein(a, a.gueltig + " " + a.gueltig2 + ", " + a.kw);
             assertKein(a, a.gueltig + " und " + a.kw);
             assertKein(a, a.gueltig + " / (" + a.kw + ")");
         }

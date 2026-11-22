@@ -55,6 +55,7 @@ class KvErkennungEigenschaftTest {
     private static final long SEED_OHNE_KONTEXT = 20261125L;
     private static final long SEED_UNSICHTBAR = 20261126L;
     private static final int TEXTE = 1_000;
+    private static final double KOMMA = 0.60;
 
     private static final char[] UNSICHTBAR = {SHY, ZWSP, ZWNJ, ZWJ, WORD_JOINER, BOM, (char) 0xFE0F, (char) 0xFE00,
         (char) 0xFE0E};
@@ -319,6 +320,34 @@ class KvErkennungEigenschaftTest {
             }
         }
 
+        /** Beginnt das Kontextwort (ohne unsichtbare Zeichen) mit einem Wort davor? Dann leert es die Folge. */
+        private boolean beginntMitWortDavor(String kw) {
+            StringBuilder ohne = new StringBuilder();
+            for (int i = 0; i < kw.length(); i++) {
+                if (!istUnsichtbar(kw.charAt(i))) {
+                    ohne.append(kw.charAt(i));
+                }
+            }
+            return ohne.indexOf("Praxis") == 0 || ohne.indexOf("Lebenslange") == 0;
+        }
+
+        private boolean istUnsichtbar(char c) {
+            for (char u : UNSICHTBAR) {
+                if (u == c) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /** Konfidenz bei genau einem Komma vor dem nachgestellten Kontextwort (D-5). */
+        double konfidenzKomma(Zahl z) {
+            if (z.ziffern().length() != 9) {
+                return LAENGE;
+            }
+            return art.gueltig(z.ziffern()) ? KOMMA : PZ_UNGUELTIG;
+        }
+
         // ---- Bloecke
 
         void blockA() {
@@ -414,10 +443,16 @@ class KvErkennungEigenschaftTest {
                     return false;
                 }
                 case 3 -> {
-                    sb.append(zahl().text());
+                    Zahl zahl = zahl();
+                    sb.append(zahl.text());
                     String[] varianten = {" ((", " ([", " [(", " (der ", ", ", ": ", "\n", ". ", " siehe "};
                     String v = wahl(varianten);
-                    sb.append(v).append(kontextwort());
+                    String kw = kontextwort();
+                    if (v.equals(", ") && !beginntMitWortDavor(kw)) {
+                        // Grenze 12 geschlossen (D-5): genau ein Komma vor dem nachgestellten Kontextwort ist ein Fund
+                        erwartet.add(new Erw(sb.length() - zahl.text().length(), zahl.text(), konfidenzKomma(zahl)));
+                    }
+                    sb.append(v).append(kw);
                     if (v.startsWith(" (") || v.startsWith(" [")) {
                         sb.append(')');
                     }

@@ -276,7 +276,8 @@ class KvKontextTest {
 
     @Test
     void ak13_anderesZeichenZwischenZahlUndKontextwort_leertOffen_keinFund() {
-        for (String z : new String[] {",", ";", ":", "-", "/", "=", "#", ")", "\"", "!", "?"}) {
+        // "," und ";" sind seit kv-kontext-luecken (D-5) Funde mit 0,60 und stehen in KvKommaTest
+        for (String z : new String[] {":", "-", "/", "=", "#", ")", "\"", "!", "?"}) {
             for (Art a : ARTEN) {
                 assertKein(a, "Nummer " + a.gueltig + " " + z + " (" + a.kw + ")");
             }

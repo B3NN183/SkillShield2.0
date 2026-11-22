@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import de.skillshield.core.RoundtripFuzzTest.Fall;
 import de.skillshield.core.model.Finding;
+import de.skillshield.core.model.FindingType;
+import de.skillshield.core.recognizer.Recognizer;
 import de.skillshield.core.recognizer.TextScanner;
 import de.skillshield.core.recognizer.general.EmailRecognizer;
 import de.skillshield.core.recognizer.general.Ipv4Recognizer;
@@ -24,10 +26,11 @@ import org.junit.jupiter.api.Test;
  * kv-kontext-luecken; T-1, AK-22, AK-25, AK-26).
  *
  * <p>Siegel: Ein Hash ueber alle Funde des Vorgaengers auf Fuzz-Teil 1 und Teil 1b haelt die Kopie fest; aendert sich
- * die Kopie oder einer der Generatoren, schlaegt er an. Uebergang (nur in T-1): Das Produkt liefert noch dieselben
- * Fundlisten wie die Kopie; der Test wird in T-2 entfernt. Differenzpruefung: Erkennerebene je Art
+ * die Kopie oder einer der Generatoren, schlaegt er an. Differenzpruefung: Erkennerebene je Art
  * ({@link KvTestHilfen#pruefeGegenVorgaenger}) und Scannerebene ({@code TextScanner} mit den Erkennern des
- * Vorgaengers gegen {@code TextScanner.standard()}: jede alt abgedeckte Position ist neu abgedeckt). Selbsttests
+ * Vorgaengers gegen {@code TextScanner.standard()}: jede alt abgedeckte Position ist neu abgedeckt, und eine alt von
+ * einem KV-Fund (LANR, IK) abgedeckte Position ist neu nicht nur von einem Nicht-KV-Fund abgedeckt; ein Typwechsel
+ * zwischen IK und LANR und die Stufenaenderung durch Zusammenlegung bleiben erlaubt). Selbsttests
  * belegen, dass die Pruefregel nicht ins Leere laeuft. Meldungen nennen nur Zahlen, nie Text oder Ziffern.
  *
  * <p>Teil 1 ist die unveraenderte Altfolge und wird (wie im {@code KvDifferenzTest}) nicht mit dem Waechter geprueft;
@@ -88,27 +91,6 @@ class KvVorgaengerDifferenzTest {
         int teil1b = siegel(teil1b());
         assertEquals(SIEGEL_TEIL_1, teil1, "Siegel Teil 1, gemessen 0x" + Integer.toHexString(teil1));
         assertEquals(SIEGEL_TEIL_1B, teil1b, "Siegel Teil 1b, gemessen 0x" + Integer.toHexString(teil1b));
-    }
-
-    // ------------------------------------------------------------------ Uebergang (wird in T-2 entfernt)
-
-    private static int ungleicheTexte(List<String> texte) {
-        int ungleich = 0;
-        for (String text : texte) {
-            for (KvTestHilfen.Art a : KvTestHilfen.ARTEN) {
-                if (!a.erkenner.detect(text).equals(a.vorgaenger.detect(text))) {
-                    ungleich++;
-                }
-            }
-        }
-        return ungleich;
-    }
-
-    @Test
-    void t1Uebergang_produktGleichVorgaenger() {
-        assertEquals(0, ungleicheTexte(teil1()), "Teil 1: Texte, in denen Produkt und Vorgaenger abweichen");
-        assertEquals(0, ungleicheTexte(teil1b()), "Teil 1b: Texte, in denen Produkt und Vorgaenger abweichen");
-        assertEquals(0, ungleicheTexte(KvDifferenzTest.korpus()), "Korpus: Texte mit Abweichung");
     }
 
     // ------------------------------------------------------------------ Differenz Erkennerebene
@@ -200,6 +182,61 @@ class KvVorgaengerDifferenzTest {
         assertEquals(0, verloreneTexte(teil1()), "Teil 1: Texte mit verlorener Position");
         assertEquals(0, verloreneTexte(teil1b()), "Teil 1b: Texte mit verlorener Position");
         assertEquals(0, verloreneTexte(KvDifferenzTest.korpus()), "Korpus: Texte mit verlorener Position");
+    }
+
+    private static boolean istKv(Finding f) {
+        return f.type() == FindingType.LANR || f.type() == FindingType.IK;
+    }
+
+    /**
+     * Zaehlt die Texte, in denen eine alt von einem KV-Fund abgedeckte Position neu zwar abgedeckt ist, aber nur von
+     * einem Fund eines Nicht-KV-Typs (die Abdeckung allein wuerde das nicht melden).
+     */
+    private static int typVerlusteTexte(TextScanner neu, List<String> texte) {
+        int verloren = 0;
+        for (String text : texte) {
+            List<Finding> neuFunde = neu.scan(text);
+            boolean[] kvNeu = abdeckung(text.length(), neuFunde.stream().filter(f -> istKv(f)).toList());
+            boolean[] alleNeu = abdeckung(text.length(), neuFunde);
+            boolean fehlt = false;
+            for (Finding f : ALT.scan(text)) {
+                if (!istKv(f)) {
+                    continue;
+                }
+                for (int i = f.start(); i < f.end(); i++) {
+                    fehlt |= !kvNeu[i] && alleNeu[i];
+                }
+            }
+            if (fehlt) {
+                verloren++;
+            }
+        }
+        return verloren;
+    }
+
+    @Test
+    void differenz_scannerebene_kvPositionWirdNieNurVonNichtKvTypAbgedeckt() {
+        assertEquals(0, typVerlusteTexte(NEU, teil1()), "Teil 1: Texte mit KV-Position nur noch als Nicht-KV");
+        assertEquals(0, typVerlusteTexte(NEU, teil1b()), "Teil 1b: Texte mit KV-Position nur noch als Nicht-KV");
+        assertEquals(0, typVerlusteTexte(NEU, KvDifferenzTest.korpus()), "Korpus: Texte mit Typverlust");
+    }
+
+    @Test
+    void selbsttest_typVerlust_wirdGemeldet() {
+        Recognizer alsEmail = text -> {
+            List<Finding> umgetypt = new ArrayList<>();
+            for (Finding f : KvTestHilfen.LANR_ART.vorgaenger.detect(text)) {
+                umgetypt.add(new Finding(FindingType.EMAIL, f.originalValue(), f.start(), f.end(), f.confidence(),
+                        f.source()));
+            }
+            return umgetypt;
+        };
+        TextScanner nurNichtKv = new TextScanner(List.of(alsEmail));
+        List<String> texte = List.of("LANR " + LANR_GUELTIG);
+        assertEquals(0, verloreneTexte(nurNichtKv, texte), "Position bleibt abgedeckt");
+        assertEquals(1, typVerlusteTexte(nurNichtKv, texte), "Abdeckung nur durch Nicht-KV-Typ wird gemeldet");
+        assertEquals(0, typVerlusteTexte(NEU, texte), "Standardscanner: KV bleibt KV");
+        assertEquals(0, typVerlusteTexte(ALT, texte), "Alter gegen alten Scanner");
     }
 
     @Test
