@@ -13,6 +13,7 @@ import static de.skillshield.core.SynthetischeKvNummern.bildeLanr;
 import static de.skillshield.core.SynthetischeKvNummern.ikGueltigReferenz;
 import static de.skillshield.core.SynthetischeKvNummern.lanrGueltigReferenz;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -30,6 +31,9 @@ import java.util.Random;
  * Gemeinsame Testhilfen der KV-Erkennungstests ({@code KvKontextTest}, {@code KvErkennungEigenschaftTest},
  * {@code KvNachtragTest}): Konstanten, die Konfiguration je Nummernart ({@link Art}) und der
  * Waechter der Testdatenregel (T-1 Punkt 10).
+ *
+ * <p><b>Differenzpruefung.</b> {@link #scan} vergleicht jedes Ergebnis zusaetzlich mit dem eingefrorenen Vorgaenger
+ * ({@link Art#vorgaenger}); {@link #verletztBestandsschutz} ist die Pruefregel (Bestandsschutz je Fund).
  *
  * <p><b>Regel aus T-1 (Punkt 10).</b> Kein Test bildet zur Laufzeit eine neunstellige Nummer, die nach LANR- oder
  * IK-Verfahren gueltig ist und nicht mit {@code 00} beginnt. {@link #assertKeinGueltigesNeunerfensterOhne00} liest
@@ -57,6 +61,8 @@ public final class KvTestHilfen {
     static final char DUENN = (char) 0x2009;
     static final char SCHMAL_NBSP = (char) 0x202F;
     static final char NEL = (char) 0x85;
+    public static final char GESCH_BINDESTRICH = (char) 0x2011;
+    public static final char HALBGEVIERT = (char) 0x2013;
     static final char LS = (char) 0x2028;
     static final char PS = (char) 0x2029;
 
@@ -67,28 +73,31 @@ public final class KvTestHilfen {
         "Institutionskennzeichen", "Praxis-IK", "INSTITUTIONSKENNZEICHEN", "iknr"};
 
     /** Konfiguration je Nummernart. */
-    static final class Art {
-        final String name;
+    public static final class Art {
+        public final String name;
         final boolean lanr;
-        final Recognizer erkenner;
+        public final Recognizer erkenner;
+        /** Erkenner des eingefrorenen Standes vor kv-kontext-luecken (Vergleich alt gegen neu). */
+        public final Recognizer vorgaenger;
         final FindingType typ;
         final String kw;
         final String kwLang;
         final String gueltig;
         final String gueltig2;
         final String gueltig3;
-        final String ungueltig;
+        public final String ungueltig;
         final double sicher;
         final String quelle;
         final String[] kws;
         final String[] fremdeKws;
 
-        Art(String name, boolean lanr, Recognizer erkenner, FindingType typ, String kw, String kwLang, String gueltig,
-                String gueltig2, String gueltig3, String ungueltig, double sicher, String quelle, String[] kws,
-                String[] fremdeKws) {
+        Art(String name, boolean lanr, Recognizer erkenner, Recognizer vorgaenger, FindingType typ, String kw,
+                String kwLang, String gueltig, String gueltig2, String gueltig3, String ungueltig, double sicher,
+                String quelle, String[] kws, String[] fremdeKws) {
             this.name = name;
             this.lanr = lanr;
             this.erkenner = erkenner;
+            this.vorgaenger = vorgaenger;
             this.typ = typ;
             this.kw = kw;
             this.kwLang = kwLang;
@@ -127,14 +136,34 @@ public final class KvTestHilfen {
             }
             return quelle;
         }
+
+        /**
+         * Die Quelle folgt nur der Nummer (Ziffernzahl und Pruefziffer), nie der Konfidenz: neun Ziffern gueltig
+         * {@code quelle}, neun ungueltig Pruefziffer-Quelle, sonst Laengen-Quelle. Auch eine gueltige Nummer mit
+         * Konfidenz 0,50 hat damit die Quelle {@code quelle}.
+         */
+        public String quelleNachNummer(String wert) {
+            StringBuilder ziffern = new StringBuilder();
+            for (int i = 0; i < wert.length(); i++) {
+                if (istZiffer(wert.charAt(i))) {
+                    ziffern.append(wert.charAt(i));
+                }
+            }
+            if (ziffern.length() != 9) {
+                return quelleLaenge();
+            }
+            return gueltig(ziffern.toString()) ? quelle : quellePruefziffer();
+        }
     }
 
-    static final Art LANR_ART = new Art("LANR", true, new LanrRecognizer(), FindingType.LANR, "LANR", "Arztnummer",
+    public static final Art LANR_ART = new Art("LANR", true, new LanrRecognizer(), KvVorgaenger.lanr(),
+            FindingType.LANR, "LANR", "Arztnummer",
             LANR_GUELTIG, LANR_GUELTIG_ZWEI, LANR_GUELTIG_FACHGRUPPE, LANR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN, 0.95,
             "lanr", KW_LANR, KW_IK);
-    static final Art IK_ART = new Art("IK", false, new IkRecognizer(), FindingType.IK, "IK", "Institutionskennzeichen",
+    public static final Art IK_ART = new Art("IK", false, new IkRecognizer(), KvVorgaenger.ik(),
+            FindingType.IK, "IK", "Institutionskennzeichen",
             IK_GUELTIG, IK_GUELTIG_ZWEI, IK_GUELTIG_DREI, IK_UNGUELTIG_KOMPLEMENT, 0.92, "ik", KW_IK, KW_LANR);
-    static final List<Art> ARTEN = List.of(LANR_ART, IK_ART);
+    public static final List<Art> ARTEN = List.of(LANR_ART, IK_ART);
 
     /** Der Text aus Codepunkten. */
     static String u(int... codepunkte) {
@@ -149,7 +178,7 @@ public final class KvTestHilfen {
 
     // ------------------------------------------------------------------ Hilfen
 
-    static List<Finding> scan(Art a, String text) {
+    public static List<Finding> scan(Art a, String text) {
         assertKeinGueltigesNeunerfensterOhne00(text, "Waechter " + a.name);
         List<Finding> funde = a.erkenner.detect(text);
         assertNotNull(funde);
@@ -160,11 +189,51 @@ public final class KvTestHilfen {
             assertTrue(f.start() >= vorigesEnde, a.name + " Funde ueberlappen oder sind nicht sortiert");
             vorigesEnde = f.end();
         }
+        pruefeGegenVorgaenger(a, text, funde);
         return funde;
     }
 
-    /** Genau ein Fund {@code wert} direkt hinter {@code vor}. */
+    /**
+     * Bestandsschutz gegen den eingefrorenen Vorgaenger auf Erkennerebene: Jeder Fund des Vorgaengers kommt im neuen
+     * Ergebnis mit gleichem Start, Ende und Typ vor, und die neue Konfidenz ist nicht kleiner, ausser der alte Fund
+     * hat die Quelle {@code ik} und eine Konfidenz bis 0,80 und der neue Fund hat die Quelle {@code ik} und genau die
+     * Konfidenz 0,50 (Plan Hinweis 7, Grenze 14g). Die Meldung nennt nie Text oder Ziffern.
+     */
+    static void pruefeGegenVorgaenger(Art a, String text, List<Finding> neu) {
+        List<Finding> alt = a.vorgaenger.detect(text);
+        assertFalse(verletztBestandsschutz(alt, neu), a.name + " Differenz alt/neu: Fund des Vorgaengers fehlt oder "
+                + "hat geringere Konfidenz (Textlaenge " + text.length() + ", " + alt.size() + " alte Funde)");
+    }
+
+    /** Die Pruefregel selbst (ohne Assertion), damit sie einen Selbsttest bekommt. */
+    public static boolean verletztBestandsschutz(List<Finding> alt, List<Finding> neu) {
+        for (Finding f : alt) {
+            Finding gleich = null;
+            for (Finding g : neu) {
+                if (g.start() == f.start() && g.end() == f.end() && g.type() == f.type()) {
+                    gleich = g;
+                    break;
+                }
+            }
+            if (gleich == null) {
+                return true;
+            }
+            boolean ausnahme = "ik".equals(f.source()) && f.confidence() <= WAHRSCHEINLICH
+                    && "ik".equals(gleich.source()) && gleich.confidence() == PZ_UNGUELTIG;
+            if (gleich.confidence() < f.confidence() && !ausnahme) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Genau ein Fund {@code wert} direkt hinter {@code vor}; die Quelle folgt der Konfidenz (Bestandsregel). */
     static void assertEin(Art a, String vor, String wert, String nach, double konfidenz) {
+        assertEin(a, vor, wert, nach, konfidenz, a.quelleFuer(konfidenz));
+    }
+
+    /** Wie oben mit ausdruecklicher Quelle, zum Beispiel {@link Art#quelleNachNummer(String)}. */
+    static void assertEin(Art a, String vor, String wert, String nach, double konfidenz, String quelle) {
         List<Finding> funde = scan(a, vor + wert + nach);
         assertEquals(1, funde.size(), a.name + " Anzahl Funde");
         Finding f = funde.get(0);
@@ -173,7 +242,7 @@ public final class KvTestHilfen {
         assertEquals(vor.length() + wert.length(), f.end(), a.name + " Ende");
         assertEquals(konfidenz, f.confidence(), a.name + " Konfidenz");
         assertEquals(ConfidenceLevel.of(konfidenz), f.level(), a.name + " Stufe");
-        assertEquals(a.quelleFuer(konfidenz), f.source(), a.name + " Quelle");
+        assertEquals(quelle, f.source(), a.name + " Quelle");
     }
 
     static void sicher(Art a, String vor, String wert, String nach) {

@@ -877,6 +877,20 @@ class RoundtripFuzzTest {
         assertEquals(HASH_TEIL_1, texte.hashCode(), "Hashwert der Teil-1-Textfolge, Startwert " + SEED_TEXTE);
     }
 
+    /** Hashwert der Teil-1b-Textfolge (kv-kontext-luecken T-1, am unveraenderten Generator gemessen). */
+    static final int HASH_TEIL_1B = 0x4D46323A;
+
+    @Test
+    void t1_teil1bTextfolgeIstUnveraendert() {
+        List<String> texte = new ArrayList<>();
+        for (Fall f : erzeugeKv(SEED_TEXTE_KV)) {
+            texte.add(f.text());
+        }
+        assertEquals(HASH_TEIL_1B, texte.hashCode(),
+                "Hashwert der Teil-1b-Textfolge, Startwert " + SEED_TEXTE_KV + ", gemessen 0x"
+                        + Integer.toHexString(texte.hashCode()));
+    }
+
     // ------------------------------------------------------------------ Teil 1b (T-7): Eigenschaften
 
     private static void keine(String eigenschaft) {

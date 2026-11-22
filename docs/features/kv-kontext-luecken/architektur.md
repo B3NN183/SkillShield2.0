@@ -316,6 +316,12 @@ lägen als Dateien mit Positionen im Repository. Die Kopie kostet rund 680 Zeile
 - Selbsttest: Eine künstlich um einen Fund verkürzte bzw. in der Konfidenz gesenkte Liste wird von der Prüffunktion
   erkannt (die Prüfung läuft nicht ins Leere).
 
+**Nachtrag 22.11.2026 (T-1, Durchlauf 2; Hinweis von security und reviewer):** Die Ausnahme in Prüfung (2) wird enger
+gefasst als oben beschrieben. Sie greift nur, wenn der **alte** Fund die Quelle `ik` und eine Konfidenz ≤ 0,80 hat
+(nie ein bisher „sicherer“ Fund) **und** der neue Fund die Quelle `ik` und die Konfidenz 0,50 hat. Der vorgesehene
+Fall (Kap. 13 Hinweis 7, Grenze 14g) bleibt erlaubt; eine Senkung von 0,92 auf 0,50 oder ein Quellenwechsel wird
+gemeldet. Zusätzlich erhält die Scanner-Ebene einen eigenen Selbsttest und eine Mindestzahl an Vorgänger-Funden.
+
 ---
 
 ## 5. Wiederverwendung
