@@ -547,6 +547,11 @@ Keine.
    Eigenschaftstests mit festem Seed und unabhängigem Orakel, keine Ausgabe).
 2. **Zeilen höchstens 120 Zeichen; schließende Klammern mehrzeiliger Blöcke, Aufrufe und Array-Initialisierer auf
    eigener Zeile.**
+   **Klarstellung der Hauptsitzung (22.11.2026, nach dem reviewer-Befund in T-1):** Gemeint ist die geschweifte
+   Klammer `}` am Blockende – sie steht nie hinter einer Anweisung auf derselben Zeile (Anlass war ein solcher Fall im
+   Vorfeature). Für runde Klammern mehrzeiliger Aufrufe und für Array-Initialisierer gilt der im Projekt
+   durchgängig verwendete Stil: die schließende Klammer darf am Ende der letzten Argumentzeile stehen (`…);`).
+   Maßstab ist die Einheitlichkeit mit dem umgebenden Bestandscode, nicht eine Umformatierung.
 3. **Keine `\uXXXX`-Escapes in neuen oder geänderten Zeilen.** Sonderzeichen als `(char) 0x…`-Konstanten aus
    `KvTestHilfen` (vorhanden: `NBSP`, `SHY`, `ZWSP`, `ZWNJ`, `ZWJ`, `WORD_JOINER`, `BOM`, `VS16`, `AKUT`, `DUENN`,
    `SCHMAL_NBSP`, `NEL`, `GESCH_BINDESTRICH`, `HALBGEVIERT`, `LS`, `PS`; neu in T-1: `LRM = (char) 0x200E`,

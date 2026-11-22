@@ -33,7 +33,9 @@ import java.util.Random;
  * Waechter der Testdatenregel (T-1 Punkt 10).
  *
  * <p><b>Differenzpruefung.</b> {@link #scan} vergleicht jedes Ergebnis zusaetzlich mit dem eingefrorenen Vorgaenger
- * ({@link Art#vorgaenger}); {@link #verletztBestandsschutz} ist die Pruefregel (Bestandsschutz je Fund).
+ * ({@link Art#vorgaenger}); {@link #verletztBestandsschutz} ist die Pruefregel (Bestandsschutz je Fund, mit der
+ * Ausnahme 14g). Zusaetzlich vergleicht {@link #scan} mit dem Stand am Ende von kv-kontext-luecken
+ * ({@link Art#standLuecken}); dort gilt {@link #verletztBestandsschutzOhneAusnahme} streng und ohne jede Ausnahme.
  *
  * <p><b>Regel aus T-1 (Punkt 10).</b> Kein Test bildet zur Laufzeit eine neunstellige Nummer, die nach LANR- oder
  * IK-Verfahren gueltig ist und nicht mit {@code 00} beginnt. {@link #assertKeinGueltigesNeunerfensterOhne00} liest
@@ -65,6 +67,8 @@ public final class KvTestHilfen {
     public static final char HALBGEVIERT = (char) 0x2013;
     static final char LS = (char) 0x2028;
     static final char PS = (char) 0x2029;
+    public static final char LRM = (char) 0x200E;
+    public static final char EN_SPACE = (char) 0x2002;
 
     /** Kontextwort-Varianten je Art (fuer den Eigenschaftstest). */
     static final String[] KW_LANR = {"LANR", "lanr", "Lanr", "LANR-Nr.", "LANRNR", "Arztnummer", "Arzt-Nr.",
@@ -79,6 +83,8 @@ public final class KvTestHilfen {
         public final Recognizer erkenner;
         /** Erkenner des eingefrorenen Standes vor kv-kontext-luecken (Vergleich alt gegen neu). */
         public final Recognizer vorgaenger;
+        /** Erkenner des eingefrorenen Standes am Ende von kv-kontext-luecken (strenge Differenz ohne Ausnahme). */
+        public final Recognizer standLuecken;
         final FindingType typ;
         final String kw;
         final String kwLang;
@@ -91,13 +97,14 @@ public final class KvTestHilfen {
         final String[] kws;
         final String[] fremdeKws;
 
-        Art(String name, boolean lanr, Recognizer erkenner, Recognizer vorgaenger, FindingType typ, String kw,
-                String kwLang, String gueltig, String gueltig2, String gueltig3, String ungueltig, double sicher,
-                String quelle, String[] kws, String[] fremdeKws) {
+        Art(String name, boolean lanr, Recognizer erkenner, Recognizer vorgaenger, Recognizer standLuecken,
+                FindingType typ, String kw, String kwLang, String gueltig, String gueltig2, String gueltig3,
+                String ungueltig, double sicher, String quelle, String[] kws, String[] fremdeKws) {
             this.name = name;
             this.lanr = lanr;
             this.erkenner = erkenner;
             this.vorgaenger = vorgaenger;
+            this.standLuecken = standLuecken;
             this.typ = typ;
             this.kw = kw;
             this.kwLang = kwLang;
@@ -157,11 +164,11 @@ public final class KvTestHilfen {
     }
 
     public static final Art LANR_ART = new Art("LANR", true, new LanrRecognizer(), KvVorgaenger.lanr(),
-            FindingType.LANR, "LANR", "Arztnummer",
+            KvStandLuecken.lanr(), FindingType.LANR, "LANR", "Arztnummer",
             LANR_GUELTIG, LANR_GUELTIG_ZWEI, LANR_GUELTIG_FACHGRUPPE, LANR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN, 0.95,
             "lanr", KW_LANR, KW_IK);
     public static final Art IK_ART = new Art("IK", false, new IkRecognizer(), KvVorgaenger.ik(),
-            FindingType.IK, "IK", "Institutionskennzeichen",
+            KvStandLuecken.ik(), FindingType.IK, "IK", "Institutionskennzeichen",
             IK_GUELTIG, IK_GUELTIG_ZWEI, IK_GUELTIG_DREI, IK_UNGUELTIG_KOMPLEMENT, 0.92, "ik", KW_IK, KW_LANR);
     public static final List<Art> ARTEN = List.of(LANR_ART, IK_ART);
 
@@ -190,7 +197,45 @@ public final class KvTestHilfen {
             vorigesEnde = f.end();
         }
         pruefeGegenVorgaenger(a, text, funde);
+        pruefeGegenStandLuecken(a, text, funde);
         return funde;
+    }
+
+    /**
+     * Strenger Bestandsschutz gegen den eingefrorenen Stand am Ende von kv-kontext-luecken: kein Fund fehlt, keine
+     * Konfidenz sinkt, die Quelle bleibt gleich, ohne jede Ausnahme ({@link #verletztBestandsschutzOhneAusnahme}).
+     * Die Meldung nennt nie Text oder Ziffern.
+     */
+    static void pruefeGegenStandLuecken(Art a, String text, List<Finding> neu) {
+        List<Finding> alt = a.standLuecken.detect(text);
+        assertFalse(verletztBestandsschutzOhneAusnahme(alt, neu), a.name + " Differenz Stand Luecken: Fund fehlt, "
+                + "hat geringere Konfidenz oder andere Quelle (Textlaenge " + text.length() + ", " + alt.size()
+                + " alte Funde)");
+    }
+
+    /** Der Fund aus {@code neu} mit gleichem Start, Ende und Typ wie {@code f}, sonst {@code null}. */
+    private static Finding findeGleichenFund(Finding f, List<Finding> neu) {
+        for (Finding g : neu) {
+            if (g.start() == f.start() && g.end() == f.end() && g.type() == f.type()) {
+                return g;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Die strenge Pruefregel (ohne Assertion, damit sie einen Selbsttest bekommt): Jeder alte Fund hat einen neuen
+     * Fund mit gleichem Start, Ende und Typ, gleicher Quelle und einer Konfidenz, die nicht kleiner ist. Keine
+     * Ausnahme, auch nicht die Senkung von 0,80 auf 0,50 bei Quelle {@code ik} (Grenze 14g des Vorgaengers).
+     */
+    public static boolean verletztBestandsschutzOhneAusnahme(List<Finding> alt, List<Finding> neu) {
+        for (Finding f : alt) {
+            Finding gleich = findeGleichenFund(f, neu);
+            if (gleich == null || gleich.confidence() < f.confidence() || !f.source().equals(gleich.source())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -208,13 +253,7 @@ public final class KvTestHilfen {
     /** Die Pruefregel selbst (ohne Assertion), damit sie einen Selbsttest bekommt. */
     public static boolean verletztBestandsschutz(List<Finding> alt, List<Finding> neu) {
         for (Finding f : alt) {
-            Finding gleich = null;
-            for (Finding g : neu) {
-                if (g.start() == f.start() && g.end() == f.end() && g.type() == f.type()) {
-                    gleich = g;
-                    break;
-                }
-            }
+            Finding gleich = findeGleichenFund(f, neu);
             if (gleich == null) {
                 return true;
             }
