@@ -444,6 +444,77 @@ reviewer und security. Verbindlich ab Durchlauf 2:
        Kombinationszeichen den Buchstaben verändert (anders als ein unsichtbares Formatzeichen).
     4. Bekannte Fehltreffer-Art (kein Schutzverlust, in Kap. 3.5 als Nr. 9 festhalten und testen): `ik` als eigenes
        Wort hinter `.` oder `-` gilt als Kontextwort (`datei.ik`, `Mus-ik` mit folgender Zahl von 6 bis 12 Ziffern).
+- **Nachtrag der Hauptsitzung (22.11.2026, nach Prüfung von T-5 Durchlauf 1; vom Nutzer am 22.11.2026 freigegeben).**
+  Dieser Nachtrag geht Kap. 3.1, 3.3 und 3.5 sowie Erweiterung 3 oben vor, wo er ihnen widerspricht.
+  - **R-1 Unsichtbare Zeichen dürfen keine Nachbarwörter verschmelzen (Sicherheitsfund, Regression gegenüber T-4).**
+    Begriffe: *unsichtbar* = Formatzeichen (`Character.FORMAT`) und Variantenwähler U+FE00–U+FE0F. *Lauf* = maximale
+    Folge aus Buchstaben und unsichtbaren Zeichen. *Teilstück* = maximale Buchstabenfolge innerhalb eines Laufs
+    (die unsichtbaren Zeichen trennen die Teilstücke).
+    1. Überall, wo Kap. 3.1 „Wort“ sagt (Kontextwort, Vorwort, Nachsatzwort), gilt jetzt: **eine zusammenhängende
+       Folge ganzer Teilstücke eines Laufs**, verglichen ohne die unsichtbaren Zeichen dazwischen. Der ganze Lauf ist
+       der Sonderfall „alle Teilstücke“. Damit sind Kontextwort: `LA` + U+00AD + `NR` (wie bisher), `Praxis` + U+200B +
+       `LANR` (Teilstück `LANR`), `das` + U+200B + `Institutions` + U+00AD + `kennzeichen` (zwei Teilstücke),
+       `Arzt` + U+200B + `Nr` (ergibt `arztnr`). Teilstückgrenzen sind Wortgrenzen: `PraxisLANR` ohne unsichtbares
+       Zeichen bleibt ohne Kontext, ebenso `LANRX`, `xLANR`, `Technik`, `IKEA`.
+    2. Nachsatzwort direkt hinter einem Kontextwort: auch als folgende Teilstücke desselben Laufs
+       (`LANR` + U+00AD + `Nummer`, `IKNR` + U+200B + `Nr`, `Institutionskennzeichen` + U+00AD + `Nr.`); es zählt
+       dann nicht als Füllwort und der Kontext bleibt `direkt`. Die Vorwort-Regel (`Arzt` + Trenner + `Nr`) gilt auch,
+       wenn das Vorwort die letzten Teilstücke eines Laufs und das Nachsatzwort die ersten Teilstücke des nächsten
+       Laufs bildet.
+    3. Füllwort-Zählung je Lauf: Teilstücke **vor** einem Kontextwort desselben Laufs wirken wie ein Füllwort (leeren
+       `offen`). Alle Teilstücke **hinter** dem letzten Kontextwort des Laufs (ohne dessen Nachsatzwort) zählen
+       zusammen als **genau ein** Füllwort. Ein Lauf ganz ohne Kontextwort zählt wie bisher als genau ein Füllwort;
+       ein Lauf ganz ohne Buchstaben bleibt neutral.
+    4. Der Test `erweiterung3_formatzeichenVerbindetBuchstaben_…` (`KvKontextTest`, bisher „kein Fund“) wird
+       umgedreht. Neue Tests je Art (LANR und IK): vorangestelltes Wort + je U+200B, U+00AD, U+2060, U+FEFF, U+200E +
+       Kontextwort → Fund mit direkter Konfidenz; angeklebtes Nachsatzwort (alle vier Beispiele aus dem Fund) → Fund
+       mit direkter Konfidenz; Kontextwort + unsichtbares Zeichen + anderes Teilstück → Fund 0.80; zwei Teilstücke
+       ergeben zusammen das Kontextwort, davor ein angeklebtes Wort; `Arzt` + U+200B + `Nr`; Gegenproben ohne
+       unsichtbares Zeichen (`PraxisLANR`, `LANRX`) → kein Fund. Zusätzlich ein Eigenschaftstest mit festem Seed
+       (1 000 Texte): Zufallswörter ohne Kontextwort, mit zufälligen unsichtbaren Zeichen an das Kontextwort geklebt
+       (Kontextwort selbst zufällig durch unsichtbare Zeichen geteilt, wahlweise angeklebtes Nachsatzwort), danach
+       Direktzeichen und Nummer → genau der erwartete Fund mit direkter Konfidenz.
+    5. Linearität (Kap. 3.4) neu belegen, im Javadoc und durch Laufzeittests mit exakter Fundzahl: ein Lauf aus sehr
+       vielen kurzen Teilstücken; ein Lauf mit sehr vielen unsichtbaren Zeichen zwischen zwei Teilstücken; viele
+       Teilstücke, die fast ein Kontextwort ergeben. Kein Zurücksetzen über mehr als eine feste Zahl Zeichen
+       (Vorschlag: Fenster der letzten 24 Buchstaben mit den Teilstückgrenzen, Vergleich am Ende jedes Teilstücks).
+  - **R-2 Mehrere Nummern vor einem nachgestellten Kontextwort.** `offen` wird eine Folge offener Segmente. Ein
+    weiteres Segment wird angehängt, wenn zwischen ihm und dem vorigen offenen Segment nur Leerraum, `,`, `;`, `/`
+    oder das Wort `und` (ASCII-fallunabhängig, höchstens einmal je Lücke) steht. Jedes andere Ereignis leert die ganze
+    Folge wie bisher (auch Zeilenumbruch, Füllwort, Ziffernblock ohne Segment). Zwischen dem **letzten** Segment und
+    dem Kontextwort gilt unverändert: nur Leerraum und höchstens eine `(`/`[`. Beim Kontextwort werden alle Segmente
+    der Folge ausgegeben (Konfidenz wie bisher für nachgestellt: gültig 0.80, sonst 0.50/0.40). Jedes Segment wird
+    höchstens einmal ausgegeben; die Funde bleiben sortiert und überlappungsfrei. Tests je Art: `N1 N2 (KW)`,
+    `N1, N2 (KW)`, `N1 und N2 (KW)`, `N1/N2 (KW)`, `N1; N2 [KW]`, drei Nummern; Gegenproben: Wort dazwischen,
+    `und und`, Zeilenumbruch dazwischen, `:` dazwischen → nur die Segmente hinter der Unterbrechung. Laufzeittest mit
+    exakter Fundzahl: sehr viele `N, ` ohne Kontextwort (kein Fund) und mit Kontextwort am Ende.
+  - **R-3 Nummerierte Listen.** Ein Ziffernblock aus ein bis zwei Ziffern, der das erste Zeichen seiner Zeile nach
+    optionalem Leerraum ist (auch am Textanfang) und dem unmittelbar `.` folgt, ohne dass der Punkt Gruppentrenner
+    einer Kette ist, ist samt Punkt **neutral**: kein Füllwort, kein Satzende. `LANR:\n1. N1\n2. N2` → zwei Funde.
+    Tests je Art, mit `\n` und `\r\n`, mit Einrückung, zweistellig (`10.`); Gegenproben: dreistelliger Block, Block
+    nicht am Zeilenanfang, Leerzeile dazwischen (Kontext endet weiterhin).
+  - **R-4 Abkürzungspunkt.** Ein `.` unmittelbar hinter einem Wort (Lauf mit Buchstaben) aus höchstens **vier**
+    Buchstaben ist kein Satzende. Das Wort zählt weiter als Füllwort. `KW: N1 (Dr. A), N2 (Dr. B)` → zwei Funde;
+    `KW e.V. N`, `KW z.B. N`, `KW Prof. N` → Fund 0.80. Gegenprobe: `.` hinter einem Wort mit fünf Buchstaben bleibt
+    Satzende; die Grenze von drei Füllwörtern gilt unverändert. (Von den Prüfern waren drei Buchstaben vorgeschlagen;
+    vier schließt `Prof.` ein, Richtung „mehr schützen“.)
+  - **Bekannte Grenzen (Kap. 3.5 ergänzt, je ein Test `bekannteGrenze…`):**
+    10. Zeichen, die Unicode als Kombinationszeichen oder Buchstaben führt, obwohl sie unsichtbar sind, werden nicht
+        übergangen: U+034F, U+180B–U+180D, U+E0100–U+E01EF (Kombinationszeichen, wirken wie Grenze 8) sowie U+3164
+        und U+2800. Im oder am Kontextwort ergeben sie keinen Kontext. Ausnahme (Prüfung Durchlauf 2): U+2800 ist ein
+        Symbol, kein Buchstabe; **am Rand** des Kontextworts trennt es nur (Kontext bleibt), **im** Wort ergibt es
+        keinen Kontext.
+    12. Aufzählungszeichen direkt vor einem nachgestellten Kontextwort (`N1, KW`, `N1 und KW`) → kein Fund (R-2,
+        wörtliche Lesart; in Durchlauf 2 von reviewer und security als plankonform bewertet, als Test festgehalten).
+    11. R-4 nimmt in Kauf, dass ein Satz, der auf ein kurzes Wort endet (`… liegt vor.`), den Kontext nicht beendet;
+        die Grenze von drei Füllwörtern begrenzt die Reichweite.
+  - **Hinweise des reviewers, in Durchlauf 2 miterledigen:**
+    1. `SynthetischeKvNummern.alleNeunstelligenNummern()` um `IK_GUELTIG_ZWEI` und `IK_GUELTIG_DREI` ergänzen; die
+       erwartete Anzahl im zugehörigen Test anpassen (zulässige Änderung an einem bestehenden Test).
+    2. Feld `lauf` der inneren Klasse `Lauf` umbenennen (z. B. `vergleichstext`).
+    3. Javadoc von `LanrRecognizer` und `IkRecognizer`: Konfidenz 0.80 bei weiterem Kontext nennen (nur Kommentar).
+    4. Gemeinsame Testhelfer von `KvKontextTest` und `KvErkennungEigenschaftTest` (Konstanten, `Art`, Wächter) in
+       eine paketinterne Testklasse auslagern; `bekannteGrenze5` mit festen Erwartungswerten.
 - **Nachtrag für alle Laufzeittests (T-3 bis T-8):** Neun gleiche Ziffern sind nach dem LANR-Verfahren immer
   rechnerisch gültig (Summe 39·x, Prüfziffer x). Wo der Plan `1 ` wiederholt nennt, wird `0 ` wiederholt verwendet
   (neun Nullen beginnen mit `00`); allgemein darf kein Laufzeittext ein Neuner-Segment ohne Präfix `00` erzeugen, das

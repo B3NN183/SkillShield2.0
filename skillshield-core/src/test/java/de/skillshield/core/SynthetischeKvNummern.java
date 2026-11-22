@@ -86,6 +86,12 @@ public final class SynthetischeKvNummern {
     /** Stellen 3-8 = 124356: 2 + 2 + 8 + 3 + (10 -> 1) + 6 = 22, Rest 2; Stelle 9 ist 1 (Ziffern vertauscht). */
     public static final String IK_UNGUELTIG_VERTAUSCHT = "001243561";
 
+    /** Stellen 3-8 = 123457: 2 + 2 + 6 + 4 + (10 -> 1) + 7 = 22, Rest 2 = Stelle 9 (fuer Aufzaehlungen, T-5). */
+    public static final String IK_GUELTIG_ZWEI = "001234572";
+
+    /** Stellen 3-8 = 123458: 2 + 2 + 6 + 4 + (10 -> 1) + 8 = 23, Rest 3 = Stelle 9 (fuer Aufzaehlungen, T-5). */
+    public static final String IK_GUELTIG_DREI = "001234583";
+
     // ------------------------------------------------------------------ Marker-Nummern (T-9)
 
     /**
@@ -164,8 +170,8 @@ public final class SynthetischeKvNummern {
     public static List<String> alleNeunstelligenNummern() {
         return List.of(LANR_GUELTIG, LANR_GUELTIG_FACHGRUPPE, LANR_GUELTIG_PRUEFZIFFER_NULL, LANR_GUELTIG_ZWEI,
                 LANR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN, LANR_UNGUELTIG_VERTAUSCHT, LANR_UNGUELTIG_ZIFFER_GEAENDERT,
-                IK_GUELTIG, IK_UNGUELTIG_KOMPLEMENT, IK_UNGUELTIG_NULL, IK_UNGUELTIG_VERTAUSCHT, LANR_MARKER,
-                IK_MARKER);
+                IK_GUELTIG, IK_GUELTIG_ZWEI, IK_GUELTIG_DREI, IK_UNGUELTIG_KOMPLEMENT, IK_UNGUELTIG_NULL,
+                IK_UNGUELTIG_VERTAUSCHT, LANR_MARKER, IK_MARKER);
     }
 
     // ------------------------------------------------------------------ unabhaengige Referenzpruefungen

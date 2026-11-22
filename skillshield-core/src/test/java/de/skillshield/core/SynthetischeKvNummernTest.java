@@ -271,7 +271,7 @@ class SynthetischeKvNummernTest {
     @Test
     void alleNeunstelligenNummernHabenPraefix00UndSindVerschieden() {
         List<String> alle = alleNeunstelligenNummern();
-        assertEquals(13, alle.size());
+        assertEquals(15, alle.size());
         assertEquals(alle.size(), new HashSet<>(alle).size());
         for (String n : alle) {
             assertTrue(istNurAsciiZiffern(n) && n.length() == 9 && n.startsWith("00"), "Laenge " + n.length());

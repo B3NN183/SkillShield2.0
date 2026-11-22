@@ -40,8 +40,8 @@ import org.junit.jupiter.api.Test;
  * Verkettung. Jeder Fund wird gegen {@code text.substring(start, end).equals(originalValue)}, Typ, Sortierung und
  * Ueberlappungsfreiheit geprueft; die Beispiel-Tests pruefen Bereich, Typ, Konfidenz, Stufe und Quelle.
  *
- * <p>Nicht Teil dieses Tasks (gehoert zu T-5): Fuellwoerter (AK-12), nachgestellter Kontext (AK-13),
- * Zeilenumbruch-Toleranz (AK-14), Aufzaehlung (AK-15) und Fund am Textanfang bei nachgestelltem Kontext (AK-16 b).
+ * <p>Fuellwoerter (AK-12), nachgestellter Kontext (AK-13), Zeilenumbruch-Toleranz (AK-14), Aufzaehlung (AK-15) und
+ * Fund am Textanfang bei nachgestelltem Kontext (AK-16 b) werden in {@code KvKontextTest} fuer beide Arten geprueft.
  *
  * <p>Regel aus T-1: Kein Test bildet zur Laufzeit eine neunstellige Nummer, die nach LANR- oder IK-Verfahren
  * gueltig ist und nicht mit {@code 00} beginnt. Die Laufzeittests nennen ihre Begruendung je Test.
@@ -318,6 +318,36 @@ class IkRecognizerTest {
         assertKeinFund("xIK " + IK_GUELTIG);
         assertKeinFund("PraxisIK " + IK_GUELTIG);
         assertKeinFund("IKs: " + IK_GUELTIG);
+    }
+
+    @Test
+    void ak11_tuerkischesGrossIMitPunkt_keinKontext() {
+        // U+0130 darf nicht zu "i" gefaltet werden (kein toLowerCase); Gegenprobe: "IK" ist Kontext
+        char grossIMitPunkt = (char) 0x0130;
+        assertKeinFund(grossIMitPunkt + "K " + IK_GUELTIG);
+        assertKeinFund(grossIMitPunkt + "k: " + IK_GUELTIG);
+        assertKeinFund("Praxis-" + grossIMitPunkt + "K " + IK_GUELTIG);
+        assertSicher("IK ", IK_GUELTIG, "");
+    }
+
+    @Test
+    void ak11_tuerkischesKleinIOhnePunkt_keinKontext() {
+        // U+0131 darf nicht zu "i" werden und "K" nicht zu "k" zusammenfallen lassen
+        char kleinIOhnePunkt = (char) 0x0131;
+        assertKeinFund(kleinIOhnePunkt + "k " + IK_GUELTIG);
+        assertKeinFund(kleinIOhnePunkt + "K: " + IK_GUELTIG);
+        assertKeinFund("Praxis-" + kleinIOhnePunkt + "k " + IK_GUELTIG);
+    }
+
+    @Test
+    void ak11_kelvinZeichen_keinKontext() {
+        // U+212A (Kelvin-Zeichen) faltet in Unicode zu "k", gehoert hier aber nicht zum ASCII-Kontextwort
+        char kelvin = (char) 0x212A;
+        assertKeinFund("I" + kelvin + " " + IK_GUELTIG);
+        assertKeinFund("i" + kelvin + ": " + IK_GUELTIG);
+        assertKeinFund("IK" + kelvin + " " + IK_GUELTIG);
+        assertKeinFund("Institutions" + kelvin + "ennzeichen " + IK_GUELTIG);
+        assertSicher("Institutionskennzeichen ", IK_GUELTIG, "");
     }
 
     @Test

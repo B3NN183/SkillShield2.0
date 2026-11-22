@@ -160,18 +160,24 @@ class KvNumberScannerKettenTest {
     }
 
     @Test
-    void kette_zweiNeunerSegmenteHintereinander_nurDasErsteIstFund_bisZurAufzaehlung() {
+    void kette_zweiNeunerSegmenteHintereinander_beideSindFunde_aufzaehlung() {
         // Kette aus 11 + 1 + 11 Zeichen: die ersten neun Ziffern sind das Segment; der Rest wird als neue Kette gelesen
-        // und ist ein Segment, aber nicht mehr im Kontext. Bis zur Aufzaehlung im Folgetask gibt es nur den ersten
-        // Fund.
+        // und ist ein Segment im weiterhin aktiven Kontext (Kap. 3.3, Aufzaehlung): zweiter Fund, nicht "direkt".
         String erste = gruppiert(LANR_GUELTIG, " ");
         String zweite = gruppiert(LANR_GUELTIG_ZWEI, " ");
-        lanrSicher("LANR ", erste, " " + zweite);
-        // Jede Kette fuer sich ist ein Segment: mit einem Kontextwort davor entstehen zwei Funde
+        List<Finding> aufzaehlung = scan(KvArt.LANR, "LANR " + erste + " " + zweite);
+        assertEquals(2, aufzaehlung.size());
+        assertEquals(erste, aufzaehlung.get(0).originalValue());
+        assertEquals(0.95, aufzaehlung.get(0).confidence());
+        assertEquals(zweite, aufzaehlung.get(1).originalValue());
+        assertEquals(0.80, aufzaehlung.get(1).confidence());
+        assertEquals(ConfidenceLevel.WAHRSCHEINLICH, aufzaehlung.get(1).level());
+        // Mit eigenem Kontextwort davor sind beide "direkt"
         List<Finding> funde = scan(KvArt.LANR, "LANR " + erste + " LANR " + zweite);
         assertEquals(2, funde.size());
         assertEquals(erste, funde.get(0).originalValue());
         assertEquals(zweite, funde.get(1).originalValue());
+        assertEquals(0.95, funde.get(1).confidence());
     }
 
     @Test
@@ -216,9 +222,17 @@ class KvNumberScannerKettenTest {
     }
 
     @Test
-    void kette_laengstesPraefixMit6Bis12_beiZuLangerKetteNurDerFittendePraefix() {
-        // 6 + 7 = 13 Ziffern: das laengste Praefix mit 6 bis 12 Ziffern ist der erste Block (6); der Rest ist kein Fund
-        lanrLaenge("LANR ", LAENGE_6, " " + LAENGE_7);
+    void kette_laengstesPraefixMit6Bis12_beiZuLangerKetteNurDerFittendePraefix_restIstNeueKetteMitEigenemFund() {
+        // 6 + 7 = 13 Ziffern: das laengste Praefix mit 6 bis 12 Ziffern ist der erste Block (6); der Rest (7 Ziffern)
+        // wird als neue Kette gelesen und ist im weiterhin aktiven Kontext (Kap. 3.3) ein zweiter Fund
+        List<Finding> funde = scan(KvArt.LANR, "LANR " + LAENGE_6 + " " + LAENGE_7);
+        assertEquals(2, funde.size());
+        assertEquals(LAENGE_6, funde.get(0).originalValue());
+        assertEquals(LAENGE_7, funde.get(1).originalValue());
+        for (Finding f : funde) {
+            assertEquals(LAENGE, f.confidence());
+            assertEquals(Q_LAENGE, f.source());
+        }
     }
 
     @Test
@@ -248,14 +262,17 @@ class KvNumberScannerKettenTest {
     }
 
     @Test
-    void kette_mehrAls12ZiffernAusBloeckenOhneFittendesPraefix_keinSegment() {
-        // 5 + 8 = 13 Ziffern: der erste Block hat nur 5, der zweite fuehrt ueber 12 hinaus
-        lanrKeinFund("LANR " + LAENGE_5 + " " + LAENGE_8);
+    void kette_mehrAls12ZiffernAusBloeckenOhneFittendesPraefix_ersterBlockIstFuellwort_restIstNeueKette() {
+        // 5 + 8 = 13 Ziffern: der erste Block hat nur 5, der zweite fuehrt ueber 12 hinaus: kein Segment, der erste
+        // Block ist ein Fuellwort. Der Rest (8 Ziffern) wird als neue Kette gelesen: Fund (Kap. 3.3, 1 Fuellwort).
+        lanrLaenge("LANR " + LAENGE_5 + " ", LAENGE_8, "");
     }
 
     @Test
-    void kette_erstesBlockUeber12Ziffern_keinSegment_undDieFolgekettenBleibenOhneKontext() {
-        lanrKeinFund("LANR " + LAENGE_13 + " " + LANR_GUELTIG);
+    void kette_erstesBlockUeber12Ziffern_keinSegment_dieFolgekettenSindFundeBeiEntferntemKontext() {
+        // Der Block mit 13 Ziffern ist ein Fuellwort; die folgende Kette ist ein Fund, nicht mehr "direkt" (0.80)
+        assertFund(KvArt.LANR, "LANR " + LAENGE_13 + " ", LANR_GUELTIG, "", 0.80, ConfidenceLevel.WAHRSCHEINLICH,
+                "lanr");
     }
 
     // ------------------------------------------------------------------ Doppeltrenner und Trenner am Ende
@@ -276,9 +293,10 @@ class KvNumberScannerKettenTest {
     }
 
     @Test
-    void kette_doppeltrennerNachDemErstenBlock_keinSegment() {
-        // nur drei Ziffern vor dem Doppeltrenner: weniger als 6, kein Segment
-        lanrKeinFund("LANR " + LANR_GUELTIG.substring(0, 3) + "  " + LANR_GUELTIG.substring(3));
+    void kette_doppeltrennerNachDemErstenBlock_ersterBlockKeinSegment_restIstNeueKette() {
+        // nur drei Ziffern vor dem Doppeltrenner: weniger als 6, kein Segment (Fuellwort). Der Rest (6 Ziffern)
+        // wird als neue Kette gelesen und ist im aktiven Kontext (Kap. 3.3) ein Fund mit Laengenabweichung.
+        lanrLaenge("LANR " + LANR_GUELTIG.substring(0, 3) + "  ", LANR_GUELTIG.substring(3), "");
     }
 
     @Test
@@ -309,16 +327,18 @@ class KvNumberScannerKettenTest {
 
     @Test
     void kette_andereLeerraumzeichenSindKeineTrenner() {
-        // U+2009 (schmales Leerzeichen), U+202F (schmales geschuetztes Leerzeichen), U+3000 (ideographisch)
-        for (int cp : new int[] {0x2009, 0x202F, 0x3000}) {
+        // U+3000 (ideographisch), U+2003 (Geviert), U+2002 (Halbgeviert); U+2009 und U+202F sind seit T-5 Trenner
+        // (Erweiterung 1 des Nachtrags, getestet in KvKontextTest)
+        for (int cp : new int[] {0x3000, 0x2003, 0x2002}) {
             lanrKeinFund("LANR " + gruppiert(LANR_GUELTIG, String.valueOf((char) cp)));
         }
     }
 
     @Test
-    void kette_buchstabeAmKettenanfang_dieKetteIstTrotzdemEineKette() {
-        // Ziffern direkt hinter einem Buchstaben: der Buchstabe ist ein Fuellwort und beendet den Kontext
-        lanrKeinFund("LANR x" + LANR_GUELTIG);
+    void kette_buchstabeAmKettenanfang_buchstabeIstFuellwort_dieKetteBleibtFund() {
+        // Ziffern direkt hinter einem Buchstaben: der Buchstabe ist ein Fuellwort (Kap. 3.3), der Kontext bleibt
+        // erhalten; die Kette ist ein Fund, nicht mehr "direkt" (0.80)
+        assertFund(KvArt.LANR, "LANR x", LANR_GUELTIG, "", 0.80, ConfidenceLevel.WAHRSCHEINLICH, "lanr");
     }
 
     @Test
@@ -390,10 +410,11 @@ class KvNumberScannerKettenTest {
     }
 
     @Test
-    void ereignisse_zeilenumbruchCrLfZaehltAlsEiner_endeDesKontexts() {
-        // Der Umbruch beendet den Kontext (Folgetask: ein Umbruch ist erlaubt); CRLF verhaelt sich wie LF
-        lanrKeinFund("LANR\r\n" + LANR_GUELTIG);
-        lanrKeinFund("LANR\n" + LANR_GUELTIG);
+    void ereignisse_zeilenumbruchCrLfZaehltAlsEiner_einUmbruchIstErlaubt() {
+        // Kap. 3.3: ein Umbruch ist erlaubt (0.80), CRLF verhaelt sich wie LF; zwei Umbrueche (Leerzeile) beenden
+        assertFund(KvArt.LANR, "LANR\r\n", LANR_GUELTIG, "", 0.80, ConfidenceLevel.WAHRSCHEINLICH, "lanr");
+        assertFund(KvArt.LANR, "LANR\n", LANR_GUELTIG, "", 0.80, ConfidenceLevel.WAHRSCHEINLICH, "lanr");
+        lanrKeinFund("LANR\r\n\r\n" + LANR_GUELTIG);
         // Nach dem Umbruch beginnt ein neues Kontextwort normal
         lanrSicher("LANR\r\nLANR ", LANR_GUELTIG, "");
     }
@@ -407,9 +428,13 @@ class KvNumberScannerKettenTest {
     }
 
     @Test
-    void ereignisse_buchstabenAusserhalbDesBmp_sindEinWort() {
-        // U+1D400 (mathematisches fettes A) ist ein Buchstabe und damit ein Fuellwort, das den Kontext beendet
+    void ereignisse_buchstabenAusserhalbDesBmp_sindEinFuellwort() {
+        // U+1D400 (mathematisches fettes A) ist ein Buchstabe und damit ein Fuellwort (Kap. 3.3): drei sind erlaubt
+        // (Fund, 0.80), das vierte beendet den Kontext
         String a = new String(Character.toChars(0x1D400));
-        lanrKeinFund("LANR " + a + " " + LANR_GUELTIG);
+        assertFund(KvArt.LANR, "LANR " + a + " ", LANR_GUELTIG, "", 0.80, ConfidenceLevel.WAHRSCHEINLICH, "lanr");
+        assertFund(KvArt.LANR, "LANR " + a + " " + a + " " + a + " ", LANR_GUELTIG, "", 0.80,
+                ConfidenceLevel.WAHRSCHEINLICH, "lanr");
+        lanrKeinFund("LANR " + a + " " + a + " " + a + " " + a + " " + LANR_GUELTIG);
     }
 }

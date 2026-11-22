@@ -6,9 +6,12 @@ import java.util.Set;
 /**
  * Konfiguration der KV-Nummernarten fuer den {@link KvNumberScanner}: Fundtyp, Konfidenz bei direktem Kontext,
  * Grundquelle, Kontextwoerter und Pruefziffernverfahren. Alle Kontextwoerter sind ASCII und klein geschrieben; der
- * Scanner faltet nur {@code A-Z} und vergleicht ganze Woerter.
+ * Scanner faltet nur {@code A-Z} und vergleicht ganze Woerter, die aus ganzen Teilstuecken eines Laufs bestehen
+ * (unsichtbare Zeichen wie Formatzeichen und Variantenwaehler trennen Teilstuecke und werden beim Vergleich
+ * uebergangen).
  *
- * <p>Der Eintrag {@link #IK} ist hier schon angelegt; der zugehoerige Erkenner folgt in einem eigenen Task.
+ * <p>Beide Eintraege werden vom {@code LanrRecognizer} bzw. {@code IkRecognizer} ueber den
+ * {@link KvNumberScanner} genutzt.
  */
 enum KvArt {
 

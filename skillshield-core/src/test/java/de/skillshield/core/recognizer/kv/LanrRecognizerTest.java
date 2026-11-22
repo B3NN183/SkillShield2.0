@@ -44,9 +44,9 @@ import org.junit.jupiter.api.Test;
  * Verkettung. Jeder Fund wird gegen {@code text.substring(start, end).equals(originalValue)}, Typ, Sortierung und
  * Ueberlappungsfreiheit geprueft; die Beispiel-Tests pruefen Bereich, Typ, Konfidenz, Stufe und Quelle.
  *
- * <p>Tests mit dem Praefix {@code t3Uebergang} halten das Verhalten dieses Tasks fest, das der Folgetask
- * (Fuellwoerter, Zeilenumbruch, Aufzaehlung, nachgestellter Kontext) bewusst aendert; er ersetzt sie durch die
- * Tests zu AK-12 bis AK-15.
+ * <p>Die Tests mit dem frueheren Praefix {@code t3Uebergang} (Verhalten von T-3: jedes Fuellwort, jeder Umbruch und
+ * jedes Segment beendete den Kontext) wurden in T-5 in die endgueltigen Erwartungen nach Kap. 3.3 ueberfuehrt und
+ * umbenannt; die vollstaendigen Tests zu AK-12 bis AK-15 stehen in {@code KvKontextTest}.
  *
  * <p>Regel aus T-1: Kein Test bildet zur Laufzeit eine neunstellige Nummer, die nach LANR- oder IK-Verfahren
  * gueltig ist und nicht mit {@code 00} beginnt. Die Laufzeittests waehlen deshalb Ziffernmuster, bei denen kein
@@ -526,13 +526,14 @@ class LanrRecognizerTest {
     }
 
     @Test
-    void t3Uebergang_zeilenumbruchHinterKontextwortBeendetKontext() {
-        assertKeinFund("LANR:\n" + LANR_GUELTIG);
-        assertKeinFund("LANR\r\n" + LANR_GUELTIG);
-        assertKeinFund("LANR\r" + LANR_GUELTIG);
-        assertKeinFund("LANR" + (char) 0x85 + LANR_GUELTIG);
-        assertKeinFund("LANR" + (char) 0x2028 + LANR_GUELTIG);
-        assertKeinFund("LANR" + (char) 0x2029 + LANR_GUELTIG);
+    void zeilenumbruch_einUmbruchHinterKontextwortIstErlaubt_leerzeileBeendetKontext() {
+        // Kap. 3.3 (Zeilenumbruch): ein Umbruch ist erlaubt (nicht mehr "direkt": 0.80), zwei beenden den Kontext
+        assertWahrscheinlich("LANR:\n", LANR_GUELTIG, "");
+        assertWahrscheinlich("LANR\r\n", LANR_GUELTIG, "");
+        assertWahrscheinlich("LANR\r", LANR_GUELTIG, "");
+        assertWahrscheinlich("LANR" + (char) 0x85, LANR_GUELTIG, "");
+        assertWahrscheinlich("LANR" + (char) 0x2028, LANR_GUELTIG, "");
+        assertWahrscheinlich("LANR" + (char) 0x2029, LANR_GUELTIG, "");
         assertKeinFund("LANR\n\n" + LANR_GUELTIG);
     }
 
@@ -543,25 +544,40 @@ class LanrRecognizerTest {
     }
 
     @Test
-    void t3Uebergang_fuellwortZwischenKontextwortUndZahl_beendetKontext() {
-        assertKeinFund("LANR des Behandlers " + LANR_GUELTIG);
+    void fuellwort_zwischenKontextwortUndZahl_bisDreiWoerterErlaubt_satzendeBeendetKontext() {
+        // Kap. 3.3 (Fuellwort): bis drei Woerter, Stufe "wahrscheinlich"; Satzende beendet den Kontext
+        assertWahrscheinlich("LANR des Behandlers ", LANR_GUELTIG, "");
         assertKeinFund("Die LANR fehlt. Vorgang " + LANR_GUELTIG);
     }
 
     @Test
-    void t3Uebergang_ziffernblockOhneSegmentZwischenKontextwortUndZahl_beendetKontext() {
-        assertKeinFund("LANR 12, " + LANR_GUELTIG);
+    void fuellwort_ziffernblockOhneSegmentZaehltAlsFuellwort() {
+        // Kap. 3.3: auch ein Ziffernblock ohne Segment ist ein Fuellwort (1 Fuellwort, noch im Kontext)
+        assertWahrscheinlich("LANR 12, ", LANR_GUELTIG, "");
     }
 
     @Test
-    void t3Uebergang_ausgegebenesSegmentBeendetKontext_keineAufzaehlung() {
-        assertSicher("LANR ", LANR_GUELTIG, ", " + LANR_GUELTIG_ZWEI);
+    void aufzaehlung_ausgegebenesSegmentBeendetKontextNicht_zweitesSegmentIstFund() {
+        // Kap. 3.3 (Segment bei aktiv): das zweite Segment ist ein Fund, nicht mehr "direkt" (0.80)
+        List<Finding> funde = scan("LANR " + LANR_GUELTIG + ", " + LANR_GUELTIG_ZWEI);
+        assertEquals(2, funde.size());
+        assertEquals(LANR_GUELTIG, funde.get(0).originalValue());
+        assertEquals(SICHER, funde.get(0).confidence());
+        assertEquals(LANR_GUELTIG_ZWEI, funde.get(1).originalValue());
+        assertEquals(0.80, funde.get(1).confidence());
+        assertEquals(ConfidenceLevel.WAHRSCHEINLICH, funde.get(1).level());
+        assertEquals(Q, funde.get(1).source());
     }
 
     @Test
-    void t3Uebergang_nachgestelltesKontextwortGibtNochKeinenFund() {
-        assertKeinFund("Nummer " + LANR_GUELTIG + " (LANR)");
-        assertKeinFund(LANR_GUELTIG + " (LANR)");
+    void nachgestellt_kontextwortHinterDerZahlGibtFund_wahrscheinlich() {
+        // Kap. 3.3 (offen): das Kontextwort hinter der Zahl erschliesst sie (0.80)
+        assertWahrscheinlich("Nummer ", LANR_GUELTIG, " (LANR)");
+        assertWahrscheinlich("", LANR_GUELTIG, " (LANR)");
+    }
+
+    private static void assertWahrscheinlich(String vor, String wert, String nach) {
+        assertFund(vor, wert, nach, 0.80, ConfidenceLevel.WAHRSCHEINLICH, Q);
     }
 
     // ------------------------------------------------------------------ mehrere Funde, Reihenfolge, Typ
@@ -734,13 +750,19 @@ class LanrRecognizerTest {
     }
 
     @Test
-    void ak21_laufzeit_lanrGefolgtVonNullUndLeerzeichenWiederholt_genauEinFund() {
+    void ak21_laufzeit_lanrGefolgtVonNullUndLeerzeichenWiederholt_einFundJeNeunNullen() {
         // Muster "0 " statt "1 ": neun Einsen waeren eine nach LANR gueltige Nummer ohne Praefix 00 (jede neunfach
-        // wiederholte Ziffer x hat Pruefziffer x). Neun Nullen beginnen mit 00 (ausserhalb von Praefix 00 entsteht
-        // kein Segment, weil alle Ketten nur aus Nullen bestehen).
-        // Formel: Die erste Kette ("0 " neunmal, 17 Zeichen) ist ein Segment bei direktem Kontext = 1 Fund; das Segment
-        // beendet den Kontext, kein weiteres Kontextwort folgt, die uebrigen Ketten ergeben keinen Fund. Summe 1.
-        laufzeit("0 ", "LANR ", 1, "1 Fund");
+        // wiederholte Ziffer x hat Pruefziffer x). Neun Nullen beginnen mit 00 (alle Ketten bestehen nur aus Nullen).
+        // Formel (Kap. 3.3, Segment bei aktiv: der Kontext bleibt erhalten): Ziffernbloecke
+        // b = (1 000 000 - 5 + 2 - 1) / 2 = 499 998 (Praefix "LANR " = 5 Zeichen, Baustein 2 Zeichen). Jede Kette
+        // liest Praefixe aus ganzen Bloecken (je eine Null), das Neuner-Praefix ist nach dem neunten Block erreicht und
+        // wird das Segment (17 Zeichen); der Durchlauf geht dahinter weiter. Funde = b / 9 = 55 555 (Rest: drei
+        // Nullen, kein Segment).
+        int bloecke = (1_000_000 - "LANR ".length() + "0 ".length() - 1) / "0 ".length();
+        assertEquals(499_998, bloecke);
+        int erwartet = bloecke / 9;
+        assertEquals(55_555, erwartet);
+        laufzeit("0 ", "LANR ", erwartet, "55 555 Funde");
     }
 
     @Test
@@ -757,21 +779,28 @@ class LanrRecognizerTest {
 
     @Test
     void ak21_laufzeit_lanrGefolgtVonEineMillionZiffern_keinFund() {
-        // Formel: ein einziger Ziffernblock von mehr als 12 Ziffern ist kein Segment und beendet den Kontext: 0 Funde.
-        // Ziffer 1 ist hier unkritisch: Ein Block von ueber 12 Ziffern erzeugt nie ein Neuner-Segment.
-        String warm = "LANR " + repeat("1", 9_995);
+        // Formel: ein einziger Ziffernblock von mehr als 12 Ziffern ist kein Segment (nur ein Fuellwort): 0 Funde.
+        // Nullen statt Einsen: Ein Block von ueber 12 Ziffern erzeugt nie ein Neuner-Segment; Nullen halten dennoch
+        // die Regel ein, dass kein Laufzeittext eine nach LANR gueltige Nummer ohne Praefix 00 bildet.
+        String warm = "LANR " + repeat("0", 9_995);
         R.detect(warm);
-        String text = "LANR " + repeat("1", 1_000_000);
+        String text = "LANR " + repeat("0", 1_000_000);
         int ist = assertTimeoutPreemptively(Duration.ofSeconds(2), () -> R.detect(text).size());
         assertEquals(0, ist, "0 Funde");
     }
 
     @Test
-    void ak21_laufzeit_viererBloeckeOhneNeunerPraefix_genauEinFund() {
+    void ak21_laufzeit_viererBloeckeOhneNeunerPraefix_einFundJeDreiBloecke() {
         // Muster "0123 ": Praefixe haben 4, 8, 12 Ziffern, nie neun (jede Kette beginnt an einer Blockgrenze).
-        // Formel: erste Kette = Segment mit 12 Ziffern (laengstes Praefix 6 bis 12), 1 Fund bei direktem Kontext;
-        // danach ist der Kontext beendet: Summe 1.
-        laufzeit("0123 ", "LANR ", 1, "1 Fund");
+        // Formel (Kap. 3.3, Segment bei aktiv: der Kontext bleibt erhalten): Bloecke
+        // b = (1 000 000 - 5 + 5 - 1) / 5 = 199 999. Jede Kette ist ein Segment aus drei Bloecken (laengstes Praefix
+        // mit 6 bis 12 Ziffern = 12 Ziffern, ein vierter Block wuerde 16 ergeben). Funde = b / 3 = 66 666 (Rest: ein
+        // Block mit vier Ziffern, kein Segment).
+        int bloecke = (1_000_000 - "LANR ".length() + "0123 ".length() - 1) / "0123 ".length();
+        assertEquals(199_999, bloecke);
+        int erwartet = bloecke / 3;
+        assertEquals(66_666, erwartet);
+        laufzeit("0123 ", "LANR ", erwartet, "66 666 Funde");
     }
 
     @Test
