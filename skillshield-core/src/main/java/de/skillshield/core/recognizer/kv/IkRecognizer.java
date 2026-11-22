@@ -10,6 +10,8 @@ import java.util.List;
  * Die Pruefziffer bestimmt nur Stufe und Quelle: gueltig und direkter Kontext 0.92 (Quelle {@value #SOURCE}),
  * gueltig bei weiterem Kontext (Fuellwoerter, Zeilenumbruch, Aufzaehlung, nachgestellt) 0.80 (gleiche Quelle),
  * gueltig und nachgestellt mit genau einem Komma oder Semikolon vor dem Kontextwort 0.60 (gleiche Quelle),
+ * gueltig mit gesperrt geschriebenem Kontextwort ab drei Buchstaben ({@code I K N R}) hoechstens 0.80 (gleiche
+ * Quelle),
  * ungueltig 0.50 (Quelle {@value #SOURCE_PRUEFZIFFER_UNGUELTIG}), Laenge 6 bis 12 ausser neun 0.40 (Quelle
  * {@value #SOURCE_LAENGE_ABWEICHEND}). Der Fund umfasst nur die Ziffern samt inneren Trennern.
  *

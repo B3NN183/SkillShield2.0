@@ -6,8 +6,10 @@ import static de.skillshield.core.SynthetischeKvNummern.LAENGE_8;
 import static de.skillshield.core.recognizer.kv.KvTestHilfen.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import de.skillshield.core.model.ConfidenceLevel;
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.recognizer.kv.KvTestHilfen.Art;
+import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -27,7 +29,7 @@ class KvKommaTest {
 
     /** Kontextwort-Varianten ohne ein Wort davor ({@code Praxis-}, {@code Lebenslange}). */
     private static String[] ohneWortDavor(Art a) {
-        return java.util.Arrays.stream(a.kws).filter(k -> !k.startsWith("Praxis") && !k.startsWith("Lebenslange"))
+        return Arrays.stream(a.kws).filter(k -> !k.startsWith("Praxis") && !k.startsWith("Lebenslange"))
                 .toArray(String[]::new);
     }
 
@@ -49,7 +51,7 @@ class KvKommaTest {
             assertEquals(1, funde.size());
             assertEquals(a.quelle, funde.get(0).source(), a.name + " Quelle");
             assertEquals(KOMMA, funde.get(0).confidence(), a.name + " Konfidenz");
-            assertEquals(de.skillshield.core.model.ConfidenceLevel.of(KOMMA), funde.get(0).level(), a.name + " Stufe");
+            assertEquals(ConfidenceLevel.of(KOMMA), funde.get(0).level(), a.name + " Stufe");
         }
     }
 

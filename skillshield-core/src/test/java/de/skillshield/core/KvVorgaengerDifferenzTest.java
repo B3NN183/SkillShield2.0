@@ -221,6 +221,36 @@ class KvVorgaengerDifferenzTest {
         assertEquals(0, typVerlusteTexte(NEU, KvDifferenzTest.korpus()), "Korpus: Texte mit Typverlust");
     }
 
+    /**
+     * Beobachtung (ohne Sollwert): Zaehlt die Texte, in denen eine alt nur von einem Nicht-KV-Fund abgedeckte
+     * Position neu von einem KV-Fund abgedeckt wird (zusaetzlicher Schutz durch die neuen Regeln).
+     */
+    private static int nichtKvZuKvTexte(TextScanner neu, List<String> texte) {
+        int gewonnen = 0;
+        for (String text : texte) {
+            boolean[] kvNeu = abdeckung(text.length(), neu.scan(text).stream().filter(f -> istKv(f)).toList());
+            List<Finding> altFunde = ALT.scan(text);
+            boolean[] kvAlt = abdeckung(text.length(), altFunde.stream().filter(f -> istKv(f)).toList());
+            boolean neuKv = false;
+            for (Finding f : altFunde) {
+                for (int i = f.start(); !istKv(f) && i < f.end(); i++) {
+                    neuKv |= !kvAlt[i] && kvNeu[i];
+                }
+            }
+            if (neuKv) {
+                gewonnen++;
+            }
+        }
+        return gewonnen;
+    }
+
+    @Test
+    void beobachtung_nichtKvPositionenDieNeuVonKvFundAbgedecktWerden_auswertungLaeuft() {
+        int summe = nichtKvZuKvTexte(NEU, teil1()) + nichtKvZuKvTexte(NEU, teil1b())
+                + nichtKvZuKvTexte(NEU, KvDifferenzTest.korpus());
+        assertTrue(summe >= 0, "Auswertung ohne Sollwert, Texte mit neuem KV-Schutz: " + summe);
+    }
+
     @Test
     void selbsttest_typVerlust_wirdGemeldet() {
         Recognizer alsEmail = text -> {
