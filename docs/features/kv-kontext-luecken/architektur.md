@@ -562,6 +562,8 @@ Nach jedem Task ist `mvn verify` im Wurzelverzeichnis grün. Pfade unter `skills
   keine Sperrschrift (D-1).
 - 14d. Unmittelbar wiederholte Sperrschrift (`L A N R L A N R N`) ist eine einzige Folge → kein Kontextwort.
 - 14e. Einzelbuchstabe direkt vor der Folge (`Herr A I K N`, `X Y I K N`) → maximale Folge ist kein Kontextwort.
+  Dasselbe gilt für einen Einzelbuchstaben direkt hinter der Folge, auch hinter einem gesperrten nachgestellten
+  Kontextwort (`N, L A N R x`), und auch dann, wenn ein unsichtbares Zeichen dazwischen steht (Nachtrag 22.11.2026).
 - 14f. `I K` ohne Füllwörter, Aufzählung, Umbruch, nachgestellten Kontext (D-3, bewusst).
 - 14g. Bekannte Folge: Eine Nummer, die von `I K` direkt und zugleich von einem nachgestellten Kontextwort erschlossen
   wird (`I K N (IK)`), hat 0,50 statt bisher 0,80. Abdeckung unverändert.
@@ -571,6 +573,18 @@ Nach jedem Task ist `mvn verify` im Wurzelverzeichnis grün. Pfade unter `skills
   Zeichen zwischen `I K` und der Nummer sowie bei `I K N IK M` (N 0,50, M bleibt 0,92). In 1,1 Mio. Zufallstexten gab
   es keinen anderen Mechanismus; die Abdeckung blieb in allen Fällen erhalten.
 - Alle übrigen Grenzen des Vorgängers (1–11, 13) unverändert.
+- **14h. (Nachtrag 22.11.2026, Befund des engineer in T-6 über den neuen Zähler „Block ohne Scan-Abdeckung“; wird
+  in T-7 geschlossen):** Läuft bereits ein normaler IK-Kontext und folgen ein Vorwort, das gesperrte `I K` und ein
+  Nachsatzwort (`IK: Praxis I K Nr N`, `IKNR, der I K-Nr. N`), bleibt die Nummer ohne Fund: Das Ereignis `I K` wirkt
+  bei laufendem Kontext nicht, und das Nachsatzwort zählt dann als viertes Füllwort. Ohne den vorangehenden Kontext
+  gibt es den Fund (`der I K Nr N` → 0,50), ohne das Nachsatzwort ebenfalls (`IK: Praxis I K N` → 0,80). Kein
+  Verlust gegenüber dem Vorgänger (der fand die Form auch nicht), aber ein vorangehendes Kontextwort darf den Schutz
+  nicht verringern. **Entscheidung der Hauptsitzung (Richtung „möglichst viel schützen“):** T-7 schließt die Lücke im
+  `KvNumberScanner`: Ein Nachsatzwort unmittelbar hinter einem gesperrten Zwei-Buchstaben-Kontextwort zählt auch bei
+  laufendem Kontext nicht als Füllwort; die Nummer behält die Konfidenz des laufenden Kontexts (hier 0,80, wie
+  Kap. 13 Hinweis 6). Bedingungen: kein bestehender Fund wird schwächer oder fällt weg (Differenzprüfung, einzige
+  Ausnahme bleibt 14g), Laufzeit linear, Tests für die Formen oben samt Gegenproben (viertes echtes Füllwort bleibt
+  „kein Fund“). In T-6 wird die Form im Fuzz-Teil 1c als offene Grenze geführt; T-7 stellt den Zähler auf 0.
 - **15. (Nachtrag 22.11.2026, Befund von security in T-3 und T-5; offen, Entscheidung liegt beim Nutzer):** Steht ein
   unsichtbares Zeichen genau zwischen CR und LF (`KW:` CR unsichtbar LF `N`), zählt der Scanner zwei Zeilenumbrüche
   statt einem; der Kontext erlischt, die Nummer bleibt ohne Fund. Das Verhalten stammt aus dem Vorfeature

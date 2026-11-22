@@ -67,7 +67,8 @@ import org.junit.jupiter.params.provider.MethodSource;
  * Scan, alle Funde pseudonymisieren, erwarteter Ausgabetext und Typen, keine Ziffernkette mit 6+ Ziffern im
  * Ausgabetext (Faelle ohne Fund sind ausgenommen, dort bleibt der Text absichtlich unveraendert), Rueckuebersetzung
  * zeichengleich ohne Meldung. Meldungen nennen nur den Fallnamen. Dazu Konsistenzfaelle (AK-20, OF-5) und die bekannte
- * Grenze 13.
+ * Grenze 13. Die Faelle {@code kl-...} und {@code bekannteGrenze12R/14a-14g...} (kv-kontext-luecken T-6) decken
+ * gesperrt geschriebene Kontextwoerter, {@code I K}, Komma vor dem Kontextwort, Gegenproben und bekannte Grenzen ab.
  *
  * <p>Testdaten sind synthetisch ({@code *.invalid}, {@code *.example}, 192.0.2.0/24, erfundene Namen).
  * Backslashes werden über {@link TestTexte#bs(String)} geschrieben; Nicht-ASCII-, unsichtbare und typografische
@@ -879,7 +880,144 @@ class RoundtripKorpusTest {
                 "Praxis\u200BLANR [[LANR_1]]", "LANR"));
         f.add(kvFall("tabelle-mit-tabulatoren", "Praxis\tLANR\t" + LANR_GUELTIG + "\tIK\t" + IK_GUELTIG + "\t",
                 "Praxis\tLANR\t[[LANR_1]]\tIK\t[[IK_2]]\t", "LANR,IK"));
+        kvLueckenFaelle(f);
         return f;
+    }
+
+    /**
+     * Korpusfaelle zu kv-kontext-luecken (T-6, AK-1 bis AK-19 des Features): gesperrt geschriebene Kontextwoerter,
+     * {@code I K}, Komma oder Semikolon vor dem nachgestellten Kontextwort, Gegenproben und bekannte Grenzen
+     * (Plan Kap. 11). Sonderzeichen nur als {@code (char)}-Konstanten. Wo hinter einem Fund eine zweite Nummer ohne
+     * Fund stehen soll, hat sie hoechstens fuenf Ziffern (keine Ziffernkette mit 6+ Ziffern im Ausgabetext).
+     */
+    private static void kvLueckenFaelle(List<KvFall> f) {
+        String nb = String.valueOf((char) 0xA0);
+        String zw = String.valueOf((char) 0x200B);
+        String[] trenner = {" ", ".", "-", nb, String.valueOf((char) 0x2009), String.valueOf((char) 0x202F),
+            String.valueOf((char) 0x2011), String.valueOf((char) 0x2013)};
+        String[] trennerNamen = {"leerzeichen", "punkt", "bindestrich", "nbsp", "thin", "nnbsp", "gesch-bindestrich",
+            "halbgeviert"};
+        // Sperrschrift ab drei Buchstaben: jeder der acht Trenner, ein Fund 0,80
+        for (int i = 0; i < trenner.length; i++) {
+            String t = trenner[i];
+            f.add(ein("kl-sperr-lanr-" + trennerNamen[i], "L" + t + "A" + t + "N" + t + "R ", LANR_GUELTIG, "LANR",
+                    ""));
+            f.add(ein("kl-sperr-iknr-" + trennerNamen[i], "I" + t + "K" + t + "N" + t + "R: ", IK_GUELTIG, "IK", ""));
+        }
+        f.add(ein("kl-sperr-lanr-gemischt", "L.A-N R ", LANR_GUELTIG, "LANR", ""));
+        f.add(ein("kl-sperr-lanr-punkt-am-ende", "L.A.N.R. ", LANR_GUELTIG, "LANR", ""));
+        f.add(ein("kl-sperr-lanr-gross-klein", "l A n R ", LANR_GUELTIG, "LANR", ""));
+        f.add(ein("kl-sperr-arztnr", "A R Z T N R ", LANR_GUELTIG, "LANR", ""));
+        f.add(ein("kl-sperr-arztnummer", "A r z t n u m m e r: ", LANR_GUELTIG, "LANR", ""));
+        f.add(ein("kl-sperr-iknummer", "I K N U M M E R ", IK_GUELTIG, "IK", ""));
+        f.add(ein("kl-sperr-institutionskennzeichen", "I N S T I T U T I O N S K E N N Z E I C H E N ", IK_GUELTIG,
+                "IK", ""));
+        f.add(ein("kl-sperr-direkt-an-ziffern", "L A N R", LANR_GUELTIG, "LANR", ""));
+        f.add(ein("kl-sperr-nachsatz-bindestrich-nummer", "L A N R-Nummer ", LANR_GUELTIG, "LANR", ""));
+        f.add(ein("kl-sperr-nachsatz-nr", "L A N R Nr. ", LANR_GUELTIG, "LANR", ""));
+        f.add(ein("kl-sperr-fuellwoerter", "L A N R des Behandlers ", LANR_GUELTIG, "LANR", ""));
+        f.add(ein("kl-sperr-praefix-praxis", "Praxis L A N R ", LANR_GUELTIG, "LANR", ""));
+        f.add(ein("kl-sperr-umbruch", "L A N R:\n", LANR_GUELTIG, "LANR", ""));
+        f.add(kvFall("kl-sperr-aufzaehlung", "L A N R " + LANR_GUELTIG + ", " + LANR_GUELTIG_ZWEI + " und "
+                + LANR_GUELTIG_FACHGRUPPE, "L A N R [[LANR_1]], [[LANR_2]] und [[LANR_3]]", "LANR,LANR,LANR"));
+        f.add(ein("kl-sperr-unsichtbar-vor-leerzeichen", "L" + zw + " A N R ", LANR_GUELTIG, "LANR", ""));
+        f.add(ein("kl-sperr-unsichtbar-als-wort-bestand", "L" + zw + "A" + zw + "N" + zw + "R ", LANR_GUELTIG,
+                "LANR", ""));
+        f.add(ein("kl-sperr-ungueltige-nummer", "L A N R ", LANR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN, "LANR", ""));
+        f.add(ein("kl-sperr-laenge-abweichend", "I K N R ", LAENGE_7, "IK", ""));
+        f.add(ein("kl-sperr-trennerform", "L A N R ", LANR_TRENNER_LEERZEICHEN, "LANR", ""));
+        f.add(kein("kl-sperr-ohne-nummer", "Bitte die Nummer eintragen: L A N R"));
+        // I K (zwei Buchstaben): nur die unmittelbar folgende Nummer, fraglich 0,50
+        f.add(ein("kl-ik-zwei-leerzeichen", "I K ", IK_GUELTIG, "IK", ""));
+        f.add(ein("kl-ik-zwei-punkte-doppelpunkt", "I.K.: ", IK_GUELTIG, "IK", ""));
+        f.add(ein("kl-ik-zwei-bindestrich", "I-K ", IK_GUELTIG, "IK", ""));
+        f.add(ein("kl-ik-zwei-nbsp", "I" + nb + "K ", IK_GUELTIG, "IK", ""));
+        f.add(ein("kl-ik-zwei-nachsatz", "I K-Nr. ", IK_GUELTIG, "IK", ""));
+        f.add(ein("kl-ik-zwei-punkte-nachsatz", "I.K.-Nr. ", IK_GUELTIG, "IK", ""));
+        f.add(ein("kl-ik-zwei-satzumfeld", "Rechnung an I.K. ", IK_GUELTIG, "IK", " gesendet"));
+        f.add(ein("kl-ik-zwei-praefix", "Praxis-I.K. ", IK_GUELTIG, "IK", ""));
+        f.add(ein("kl-ik-zwei-ungueltige-nummer", "I K ", IK_UNGUELTIG_KOMPLEMENT, "IK", ""));
+        f.add(ein("kl-ik-zwei-zweite-nummer-ohne-fund", "I K ", IK_GUELTIG, "IK", " und " + LAENGE_5));
+        f.add(ein("kl-ik-zwei-bestandskontext-laeuft", "IK: Praxis I K ", IK_GUELTIG, "IK", ""));
+        f.add(ein("kl-ik-zwei-normales-ik-danach", "I K IK ", IK_GUELTIG, "IK", ""));
+        f.add(kein("kl-ik-zwei-fuellwoerter", "I K der Praxis " + IK_GUELTIG));
+        f.add(kein("kl-ik-zwei-umbruch", "I K\n" + IK_GUELTIG));
+        f.add(kein("kl-ik-zwei-nachgestellt-klammer", IK_GUELTIG + " (I K)"));
+        f.add(kein("kl-ik-zwei-nachgestellt", IK_GUELTIG + " I K"));
+        f.add(kein("kl-ik-zwei-nachgestellt-komma", IK_GUELTIG + ", I K"));
+        f.add(kein("kl-ik-zwei-doppeltrenner", "I  K " + IK_GUELTIG));
+        f.add(kein("kl-ik-zwei-initialen", "I. K. " + IK_GUELTIG));
+        f.add(kein("kl-ik-zwei-initialen-name", "I. K. Mustermann " + IK_GUELTIG));
+        f.add(kein("kl-ik-zwei-tab", "I\tK " + IK_GUELTIG));
+        f.add(kein("kl-ik-zwei-komma", "I,K " + IK_GUELTIG));
+        f.add(kein("kl-ik-zwei-wortende-ik-ea", "I K EA " + IK_GUELTIG));
+        // Komma oder Semikolon vor dem nachgestellten Kontextwort, Fund 0,60 (Fundbereich bleibt die Nummer)
+        f.add(ein("kl-komma-lanr", "", LANR_GUELTIG, "LANR", ", LANR"));
+        f.add(ein("kl-komma-ik", "", IK_GUELTIG, "IK", ", IK"));
+        f.add(ein("kl-semikolon-ik", "", IK_GUELTIG, "IK", "; IK"));
+        f.add(ein("kl-komma-ohne-leerzeichen", "", LANR_GUELTIG, "LANR", ",LANR"));
+        f.add(ein("kl-komma-leerzeichen-davor", "", LANR_GUELTIG, "LANR", " ,LANR"));
+        f.add(ein("kl-komma-tab", "", LANR_GUELTIG, "LANR", ",\tLANR"));
+        f.add(ein("kl-komma-klammer-rund", "", LANR_GUELTIG, "LANR", ", (LANR)"));
+        f.add(ein("kl-semikolon-klammer-eckig", "", IK_GUELTIG, "IK", " ; [IK]"));
+        f.add(ein("kl-komma-arztnummer", "", LANR_GUELTIG, "LANR", ", Arztnummer"));
+        f.add(ein("kl-komma-institutionskennzeichen", "", IK_GUELTIG, "IK", ", Institutionskennzeichen"));
+        f.add(ein("kl-komma-ungueltige-nummer", "", LANR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN, "LANR", ", LANR"));
+        f.add(ein("kl-komma-laenge-abweichend", "", LAENGE_7, "LANR", ", LANR"));
+        f.add(ein("kl-komma-gesperrt-lanr", "", LANR_GUELTIG, "LANR", ", L A N R"));
+        f.add(ein("kl-ohne-komma-gesperrt-lanr", "", LANR_GUELTIG, "LANR", " L A N R"));
+        f.add(ein("kl-klammer-gesperrt-lanr", "", LANR_GUELTIG, "LANR", " (L A N R)"));
+        f.add(kvFall("kl-komma-folge-zwei", LANR_GUELTIG + ", " + LANR_GUELTIG_ZWEI + ", LANR",
+                "[[LANR_1]], [[LANR_2]], LANR", "LANR,LANR"));
+        f.add(kvFall("kl-komma-folge-und", IK_GUELTIG + " und " + IK_GUELTIG_ZWEI + ", IK", "[[IK_1]] und [[IK_2]], IK",
+                "IK,IK"));
+        f.add(kvFall("kl-komma-folge-drei", LANR_GUELTIG + "; " + LANR_GUELTIG_ZWEI + " / " + LANR_GUELTIG_FACHGRUPPE
+                + ", LANR", "[[LANR_1]]; [[LANR_2]] / [[LANR_3]], LANR", "LANR,LANR,LANR"));
+        // Gegenproben: kein Fund (Plan Kap. 3.1, AK-18), darunter die bekannte Grenze 12R
+        f.add(kein("kl-komma-zwei-kommas", LANR_GUELTIG + ",, LANR"));
+        f.add(kein("kl-komma-komma-semikolon", LANR_GUELTIG + ",; LANR"));
+        f.add(kein("kl-komma-und", LANR_GUELTIG + ", und LANR"));
+        f.add(kein("kl-komma-schraegstrich", LANR_GUELTIG + ", / LANR"));
+        f.add(kein("kl-komma-fuellwort", LANR_GUELTIG + ", Fax LANR"));
+        f.add(kein("kl-komma-klammer-vor-komma", LANR_GUELTIG + "(, LANR)"));
+        f.add(kein("kl-komma-zwei-klammern", LANR_GUELTIG + ", ((LANR)"));
+        f.add(kein("kl-komma-doppelpunkt", LANR_GUELTIG + ": LANR"));
+        f.add(kein("kl-komma-punkt", LANR_GUELTIG + ". LANR"));
+        f.add(kein("kl-komma-umbruch-lf", LANR_GUELTIG + ",\nLANR"));
+        f.add(kein("kl-komma-umbruch-crlf", IK_GUELTIG + ",\r\nIK"));
+        f.add(kein("bekannteGrenze12R-und", LANR_GUELTIG + " und LANR"));
+        f.add(kein("bekannteGrenze12R-schraegstrich", LANR_GUELTIG + " / LANR"));
+        f.add(kein("bekannteGrenze12R-komma-und", IK_GUELTIG + ", und IK"));
+        // Gegenproben Sperrschrift (Plan Kap. 3.2.4) und bekannte Grenzen 14a bis 14g
+        f.add(kein("kl-sperr-gegenprobe-einzelbuchstabe-davor", "A L A N R " + LANR_GUELTIG));
+        f.add(kein("kl-sperr-gegenprobe-buchstabe-dahinter", "L A N R X " + LANR_GUELTIG));
+        f.add(kein("kl-sperr-gegenprobe-ein-buchstabe-weniger", "L A N " + LANR_GUELTIG));
+        f.add(kein("kl-sperr-gegenprobe-zwei-trenner", "L  A N R " + LANR_GUELTIG));
+        f.add(kein("kl-sperr-gegenprobe-unterstrich", "L_A N R " + LANR_GUELTIG));
+        f.add(kein("kl-sperr-gegenprobe-zeilenumbruch-leerzeile", "L A N R\n\n" + LANR_GUELTIG));
+        f.add(kein("kl-sperr-gegenprobe-vier-fuellwoerter", "L A N R der Praxis von Frau Beispiel " + LANR_GUELTIG));
+        f.add(kein("bekannteGrenze14a-teilgruppe-la-nr", "LA N R " + LANR_GUELTIG));
+        f.add(kein("bekannteGrenze14a-teilgruppe-l-anr", "L ANR " + LANR_GUELTIG));
+        f.add(kein("bekannteGrenze14a-teilgruppe-unsichtbar", "L" + zw + "A N R " + LANR_GUELTIG));
+        // 14b: das Nachsatzwort "Nr" ist gesperrt geschrieben und bricht die Sperrfolge; trotzdem Fund (LANR direkt)
+        f.add(ein("bekannteGrenze14b-nachsatz-gesperrt-trotzdemFund", "L A N R - N r ", LANR_GUELTIG, "LANR", ""));
+        f.add(kein("bekannteGrenze14b-arzt-nr-gesperrt", "A r z t - N r " + LANR_GUELTIG));
+        f.add(kein("bekannteGrenze14c-initialen-lanr", "L. A. N. R. " + LANR_GUELTIG));
+        f.add(kein("bekannteGrenze14c-tab", "L\tA\tN\tR " + LANR_GUELTIG));
+        f.add(kein("bekannteGrenze14d-wiederholt", "L A N R L A N R " + LANR_GUELTIG));
+        f.add(kein("bekannteGrenze14e-herr-a-ik", "Herr A I K " + IK_GUELTIG));
+        f.add(kein("bekannteGrenze14e-x-y-ik", "X Y I K " + IK_GUELTIG));
+        f.add(ein("bekannteGrenze14g-ik-nachgestellt-ik", "I K ", IK_GUELTIG, "IK", " (IK)"));
+        f.add(ein("bekannteGrenze14g-ik-komma-ik", "I K ", IK_GUELTIG, "IK", ", IK"));
+        // 14h: laufender IK-Kontext, Vorwort, gesperrtes I K, Nachsatzwort, gueltige IK -> heute kein Fund;
+        // offene Grenze, wird in T-7 geschlossen (dann ein(...) mit Konfidenz des laufenden Kontexts)
+        f.add(kein("bekannteGrenze14h-ik-praxis-sperr-nr", "IK: Praxis I K Nr " + IK_GUELTIG));
+        f.add(kein("bekannteGrenze14h-iknr-der-sperr-nr", "IKNR, der I K-Nr. " + IK_GUELTIG));
+        // Roundtrip mit Sperrschrift neben anderen Funden und Umgebung
+        f.add(kvFall("kl-sperr-neben-mail-und-ip", "Mail " + MAIL + ", L A N R " + LANR_GUELTIG + ", Server 192.0.2.10",
+                "Mail [[EMAIL_1]], L A N R [[LANR_2]], Server [[IP_3]]", "EMAIL,LANR,IP"));
+        f.add(kvFall("kl-sperr-zwei-arten", "L A N R " + LANR_GUELTIG + "\nI K " + IK_GUELTIG,
+                "L A N R [[LANR_1]]\nI K [[IK_2]]", "LANR,IK"));
     }
 
     /** Die Texte aller KV-Korpusfaelle (fuer den Differenztest). */

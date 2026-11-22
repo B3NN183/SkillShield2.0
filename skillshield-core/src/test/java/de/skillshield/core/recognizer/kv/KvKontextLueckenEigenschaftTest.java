@@ -41,14 +41,16 @@ import org.junit.jupiter.api.Test;
  * ausserhalb der Nummern eingestreut, aendern die Funde nicht (Plan Kap. 3.2.1).
  *
  * <p><b>Ausgespart beim Einstreuen (bekannte, dokumentierte Ausnahmen):</b> Positionen zwischen zwei Buchstaben
- * (Teilgruppe/Grenze 14a und R-1-Teilstueck: dort entsteht ein Lauf mit mehreren Buchstaben), Positionen im Inneren
- * einer Nummer (Grenze 7: Ziffernkette) und die Position zwischen CR und LF (aelterer, noch offener Befund). Positionen
- * unmittelbar vor und hinter einer Nummer sind zulaessig.
+ * (ein Formatzeichen mitten im Wort bildet dort einen Lauf mit mehreren Buchstaben: bei einer Sperrfolge die Teilgruppe
+ * der Grenze 14a, bei einem normalen Wort ein R-1-Teilstueck, das als Kontextwort gelten oder eines zerstoeren
+ * kann), Positionen im Inneren einer Nummer (Grenze 7: Ziffernkette) und die Position zwischen CR und LF (Plan
+ * Kap. 11 Nr. 15: dort zaehlt der Scanner zwei Zeilenumbrueche; Vorfeature-Verhalten, offen). Positionen unmittelbar
+ * vor und hinter einer Nummer sind zulaessig; Positionen innerhalb eines Surrogatpaars werden nie gewaehlt.
  *
  * <p>Testdatenregel: Nummern kommen aus {@code bilde...} (Praefix {@code 00}), den Laengenkonstanten oder sind
  * Rauschketten (hoechstens acht Ziffern oder ein Block mit {@code 00}-Praefix); der Waechter sichert jeden Text.
  */
-class KvKontextLueckenEigenschaftTest {
+public class KvKontextLueckenEigenschaftTest {
 
     private static final long SEED_A = 20261201L;
     private static final long SEED_B = 20261202L;
@@ -455,11 +457,15 @@ class KvKontextLueckenEigenschaftTest {
             return f.toString();
         }
 
+        /**
+         * Zieht einen Kandidaten fuer eine Einzelbuchstabenfolge. Die Zaehler {@code c.gezogen.*} zaehlen Ziehungen,
+         * nicht angenommene Tokens: Ein Kandidat, den die Referenz als Kontextwort erkennt, wird verworfen
+         * ({@code c.neuGezogen}); angenommene Tokens zaehlt {@code c.sperrToken}.
+         */
         String sperrKandidat() {
-            String[] alle = new String[] {wahl(SPERR_LANR), wahl(SPERR_IK)};
-            String wort = alle[r.nextInt(2)];
+            String wort = wahl(r.nextBoolean() ? SPERR_LANR : SPERR_IK);
             int muster = r.nextInt(8);
-            st.zaehle("c.muster." + muster);
+            st.zaehle("c.gezogen.muster." + muster);
             switch (muster) {
                 case 0, 1 -> {
                     return zufallsFolge(2 + r.nextInt(7));
@@ -499,7 +505,7 @@ class KvKontextLueckenEigenschaftTest {
                             : SPERR_IK), false);
                 }
                 case 6 -> {
-                    st.zaehle("c.initialen");
+                    st.zaehle("c.gezogen.initialen");
                     return wahl(INITIALEN);
                 }
                 default -> {
@@ -573,7 +579,9 @@ class KvKontextLueckenEigenschaftTest {
                     }
                     default -> {
                         st.zaehle("c.rauschkette");
-                        sb.append(r.nextBoolean() ? rauschkette() : ziffern(1 + r.nextInt(5)));
+                        // jede Ziffernkette gilt als Nummer: dort wird nichts eingestreut (Invarianz, Grenze 7)
+                        String kette = r.nextBoolean() ? rauschkette() : ziffern(1 + r.nextInt(5));
+                        platziere(new Zahl(kette, kette));
                     }
                 }
                 vorher = sorte;
@@ -706,7 +714,7 @@ class KvKontextLueckenEigenschaftTest {
                     ohneFund(zahl());
                 }
                 case 8 -> {
-                    // gesperrtes Wort ohne Nummer (auch am Textende)
+                    // gesperrtes Wort ohne Nummer; danach folgt Satzende und weiteres Rauschen, kein Textende
                     sb.append(folge(wort, r.nextBoolean()));
                     endeKw = true;
                 }
@@ -805,6 +813,82 @@ class KvKontextLueckenEigenschaftTest {
         }
     }
 
+    // Gemeinsame Bausteine der Testschleifen und von differenzTexte(): eine Aenderung hier wirkt auf beide,
+    // so dass die Differenzpruefung immer dieselben Texte sieht wie die Eigenschaftstests (siehe auch
+    // differenzTexte_liefertDieTexteDerTestschleifen).
+
+    private static Art artVon(int iteration) {
+        return iteration % 2 == 0 ? LANR_ART : IK_ART;
+    }
+
+    private static Bauer bauA(Random r, int iteration, Statistik st) {
+        Bauer b = new Bauer(r, artVon(iteration), st, "a");
+        b.textA();
+        return b;
+    }
+
+    private static Bauer bauB(Random r, int iteration, Statistik st) {
+        Bauer b = new Bauer(r, artVon(iteration), st, "b");
+        b.textB();
+        return b;
+    }
+
+    /** Text von (c), mit Wahrscheinlichkeit 1/4 mit eingestreuten unsichtbaren Zeichen. */
+    private static String bauC(Random r, int iteration, Statistik st) {
+        Bauer b = new Bauer(r, artVon(iteration), st, "c");
+        b.textC();
+        String text = b.sb.toString();
+        if (r.nextInt(4) == 0) {
+            text = streue(r, text, b.nummern).text;
+            st.zaehle("c.mitUnsichtbaren");
+        }
+        return text;
+    }
+
+    private static Bauer bauD(Random r, int iteration, Statistik st) {
+        Bauer b = new Bauer(r, artVon(iteration), st, "d");
+        b.textD();
+        return b;
+    }
+
+    /**
+     * Die Texte der Generatoren (a) bis (d) mit denselben Seeds wie die Tests, ohne Pruefung: Eingabe fuer die
+     * Differenzpruefung auf Scannerebene ({@code KvVorgaengerDifferenzTest}, T-6). Jeder Text geht dort vor dem
+     * Vergleich durch den Waechter. Nutzt dieselben Helfer ({@code bauA} bis {@code bauD}) wie die Testschleifen.
+     */
+    public static List<String> differenzTexte() {
+        List<String> texte = new ArrayList<>();
+        Random ra = new Random(SEED_A);
+        Random rb = new Random(SEED_B);
+        Random rc = new Random(SEED_C);
+        Random rd = new Random(SEED_D);
+        Statistik st = new Statistik();
+        for (int it = 0; it < TEXTE; it++) {
+            texte.add(bauA(ra, it, st).sb.toString());
+            texte.add(bauB(rb, it, st).sb.toString());
+            texte.add(bauC(rc, it, st));
+            texte.add(bauD(rd, it, st).sb.toString());
+        }
+        return texte;
+    }
+
+    @Test
+    void differenzTexte_liefertDieTexteDerTestschleifen() {
+        List<String> texte = differenzTexte();
+        assertEquals(4 * TEXTE, texte.size());
+        Random ra = new Random(SEED_A);
+        Random rb = new Random(SEED_B);
+        Random rc = new Random(SEED_C);
+        Random rd = new Random(SEED_D);
+        Statistik st = new Statistik();
+        for (int it = 0; it < TEXTE; it++) {
+            assertEquals(bauA(ra, it, st).sb.toString(), texte.get(4 * it), "a, Iteration " + it);
+            assertEquals(bauB(rb, it, st).sb.toString(), texte.get(4 * it + 1), "b, Iteration " + it);
+            assertEquals(bauC(rc, it, st), texte.get(4 * it + 2), "c, Iteration " + it);
+            assertEquals(bauD(rd, it, st).sb.toString(), texte.get(4 * it + 3), "d, Iteration " + it);
+        }
+    }
+
     // ------------------------------------------------------------------ Pruefungen
 
     private static void pruefe(Art art, String text, List<Erw> erwartet, String ort) {
@@ -835,10 +919,9 @@ class KvKontextLueckenEigenschaftTest {
         Statistik st = new Statistik();
         for (int it = 0; it < TEXTE; it++) {
             String ort = ort(SEED_A, it);
-            Art art = it % 2 == 0 ? LANR_ART : IK_ART;
+            Art art = artVon(it);
             Art andere = art == LANR_ART ? IK_ART : LANR_ART;
-            Bauer b = new Bauer(r, art, st, "a");
-            b.textA();
+            Bauer b = bauA(r, it, st);
             String text = b.sb.toString();
             pruefe(art, text, b.erwartet, ort);
             assertEquals(List.of(), scan(andere, text), ort + " andere Art darf nichts finden");
@@ -852,9 +935,13 @@ class KvKontextLueckenEigenschaftTest {
             }
         }
         st.mindestens("a.punktEnde", 100);
-        for (String k : new String[] {"direkt", "fuellwort", "umbruch", "aufzaehlung", "zweiteNummerOhneFund"}) {
+        // Messwerte (fester Seed): direkt 1 340, Fuellwort 320, Umbruch 330, Aufzaehlung 425, zweite Nummer 62
+        for (String k : new String[] {"direkt", "fuellwort", "umbruch", "aufzaehlung"}) {
             st.mindestens("a.block." + k, 60);
         }
+        // Reine Vorkommens-Untergrenze (keine Erkennungspruefung): 40 liegt mehr als 30 % unter dem Messwert 62
+        // bei festem Seed (vorher 60, zu nah am Messwert).
+        st.mindestens("a.block.zweiteNummerOhneFund", 40);
         st.mindestens("a.fund.sperrDrei", 500);
         st.mindestens("a.fund.sperrDrei.0.8.lanr", 150);
         st.mindestens("a.fund.sperrDrei.0.8.ik", 100);
@@ -878,9 +965,8 @@ class KvKontextLueckenEigenschaftTest {
         Statistik st = new Statistik();
         for (int it = 0; it < TEXTE; it++) {
             String ort = ort(SEED_B, it);
-            Art art = it % 2 == 0 ? LANR_ART : IK_ART;
-            Bauer b = new Bauer(r, art, st, "b");
-            b.textB();
+            Art art = artVon(it);
+            Bauer b = bauB(r, it, st);
             pruefe(art, b.sb.toString(), b.erwartet, ort);
         }
         st.mindestens("b.fund.komma", 1_000);
@@ -920,13 +1006,7 @@ class KvKontextLueckenEigenschaftTest {
         Statistik st = new Statistik();
         for (int it = 0; it < TEXTE; it++) {
             String ort = ort(SEED_C, it);
-            Bauer b = new Bauer(r, it % 2 == 0 ? LANR_ART : IK_ART, st, "c");
-            b.textC();
-            String text = b.sb.toString();
-            if (r.nextInt(4) == 0) {
-                text = streue(r, text, b.nummern).text;
-                st.zaehle("c.mitUnsichtbaren");
-            }
+            String text = bauC(r, it, st);
             // Selbstpruefung des Generators: die Referenz findet im ganzen Text kein Kontextwort
             for (Art art : ARTEN) {
                 assertEquals(0, sperrKontextwoerterReferenz(text, art).size(), ort + " Generator " + art.name);
@@ -937,12 +1017,12 @@ class KvKontextLueckenEigenschaftTest {
         }
         st.mindestens("c.neuGezogen", 200);
         st.mindestens("c.sperrToken", 3_000);
-        st.mindestens("c.initialen", 200);
+        st.mindestens("c.gezogen.initialen", 200);
         st.mindestens("c.nummer", 500);
         st.mindestens("c.rauschkette", 200);
         st.mindestens("c.mitUnsichtbaren", 150);
         for (int m = 0; m < 8; m++) {
-            st.mindestens("c.muster." + m, 200);
+            st.mindestens("c.gezogen.muster." + m, 200);
         }
     }
 
@@ -954,16 +1034,18 @@ class KvKontextLueckenEigenschaftTest {
         Statistik st = new Statistik();
         for (int it = 0; it < TEXTE; it++) {
             String ort = ort(SEED_D, it);
-            Art art = it % 2 == 0 ? LANR_ART : IK_ART;
-            Bauer b = new Bauer(r, art, st, "d");
-            b.textD();
+            Art art = artVon(it);
+            Bauer b = bauD(r, it, st);
             pruefe(art, b.sb.toString(), b.erwartet, ort);
         }
         for (int id = 0; id < 9 + 3 + 18; id++) {
             st.mindestens("d.muster." + id, 40);
         }
+        // Messwerte (Seed fest): Muster 0 bis 29 mindestens 59, Muster 30 bis 34 mindestens 25.
+        // Reine Vorkommens-Untergrenze (keine Erkennungspruefung): 15 liegt mehr als 30 % unter dem kleinsten
+        // Messwert 25 (vorher 20, zu nah am Messwert).
         for (int id = 30; id < 35; id++) {
-            st.mindestens("d.muster." + id, 20);
+            st.mindestens("d.muster." + id, 15);
         }
         st.mindestens("d.kw.gesperrt", 100);
         st.mindestens("d.kw.normal", 300);
@@ -975,8 +1057,8 @@ class KvKontextLueckenEigenschaftTest {
     }
 
     /**
-     * Streut 1 bis 6 unsichtbare Zeichen ein. Ausgespart: Positionen im Inneren einer Nummer, zwischen zwei Buchstaben
-     * (Teilgruppe, R-1-Teilstueck) und zwischen CR und LF (siehe Klassenbeschreibung).
+     * Streut 1 bis 6 unsichtbare Zeichen ein. Ausgespart (Codepunkt-basiert): Positionen im Inneren einer Nummer,
+     * zwischen zwei Buchstaben, innerhalb eines Surrogatpaars und zwischen CR und LF (siehe Klassenbeschreibung).
      */
     private static Gestreut streue(Random r, String text, List<int[]> nummern) {
         List<Integer> erlaubt = new ArrayList<>();
@@ -985,11 +1067,13 @@ class KvKontextLueckenEigenschaftTest {
             for (int[] n : nummern) {
                 imInneren |= p > n[0] && p < n[1];
             }
-            boolean zwischenBuchstaben = p > 0 && p < text.length() && Character.isLetter(text.charAt(p - 1))
-                    && Character.isLetter(text.charAt(p));
+            boolean imSurrogatpaar = p > 0 && p < text.length() && Character.isHighSurrogate(text.charAt(p - 1))
+                    && Character.isLowSurrogate(text.charAt(p));
+            boolean zwischenBuchstaben = !imSurrogatpaar && p > 0 && p < text.length()
+                    && Character.isLetter(text.codePointBefore(p)) && Character.isLetter(text.codePointAt(p));
             boolean zwischenCrLf = p > 0 && p < text.length() && text.charAt(p - 1) == '\r'
                     && text.charAt(p) == '\n';
-            if (!imInneren && !zwischenBuchstaben && !zwischenCrLf) {
+            if (!imInneren && !imSurrogatpaar && !zwischenBuchstaben && !zwischenCrLf) {
                 erlaubt.add(p);
             }
         }
@@ -1082,7 +1166,9 @@ class KvKontextLueckenEigenschaftTest {
         assertEquals(0, sperrKontextwoerterReferenz("L  A N R", LANR_ART).size());
         assertEquals(0, sperrKontextwoerterReferenz("I K N", IK_ART).size());
         assertEquals(0, sperrKontextwoerterReferenz("I. K. N", IK_ART).size());
-        assertEquals(0, sperrKontextwoerterReferenz("I" + (char) 0x212A + " N", IK_ART).size());
+        // Faltung nur A-Z: das Kelvin-Zeichen (U+212A) ist kein K; als echtes K waere es eine Folge
+        assertEquals(0, sperrKontextwoerterReferenz("I " + (char) 0x212A + ":", IK_ART).size());
+        assertEquals(1, sperrKontextwoerterReferenz("I K:", IK_ART).size());
         // unsichtbare Zeichen: L ZWSP A ist ein Lauf mit zwei Buchstaben; L ZWSP Leerzeichen A ist eine Folge
         assertEquals(0, sperrKontextwoerterReferenz("L" + ZWSP + "A N R", LANR_ART).size());
         assertEquals(1, sperrKontextwoerterReferenz("L" + ZWSP + " A N R", LANR_ART).size());

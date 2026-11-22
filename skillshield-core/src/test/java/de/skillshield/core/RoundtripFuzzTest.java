@@ -2,6 +2,7 @@ package de.skillshield.core;
 
 import static de.skillshield.core.TestTexte.bs;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -38,7 +39,11 @@ import org.junit.jupiter.api.Test;
  * Kontextwoerter, Trennerformen, U+00A0, Umbrueche, Aufzaehlung, nachgestellter Kontext, ungueltige Pruefziffer,
  * Laengenabweichung, KV-Nummer in URL, Pfad und E-Mail, IK mit Dokumentations-IP), dieselben Eigenschaften wie Teil 1
  * samt Schutzgarantie mit {@code TextScanner.standard().recognizers()} und Waechter der Testdatenregel; Teil 1 bleibt
- * unveraendert (Hashwert {@link #HASH_TEIL_1}). Teil 2: {@value #ANZAHL_EINGABEN} Zufallseingaben an {@code restore}.
+ * unveraendert (Hashwert {@link #HASH_TEIL_1}); Teil 1b ist ebenfalls festgehalten ({@link #HASH_TEIL_1B}). Teil 1c
+ * ({@code SEED_TEXTE_KV_C}, kv-kontext-luecken T-6, eigener Generator {@link #erzeugeKvC}, Hash
+ * {@link #HASH_TEIL_1C}): Sperrschrift beider Arten mit allen Trennern, {@code I K}, Komma oder Semikolon vor dem
+ * Kontextwort (auch Folgen), Gegenproben und Initialen; dieselben Eigenschaften wie Teil 1b samt Schutzgarantie, dazu
+ * vollstaendiges Ersetzen aller Funde. Teil 2: {@value #ANZAHL_EINGABEN} Zufallseingaben an {@code restore}.
  *
  * <p>Der Lauf wird einmal ausgeführt ({@link #LAUF}); jede Eigenschaft ist ein eigener Test. Meldungen nennen nur
  * Startwert, Iteration und Anzahl, nie einen Text. Testdaten sind synthetisch. Nicht-ASCII-Zeichen stehen nur als
@@ -59,6 +64,13 @@ class RoundtripFuzzTest {
     static final int MIN_KV_FRAGLICH = 40;
     static final int MIN_KV_IN_ANDEREM = 80;
     static final int MIN_KV_GLEICHER_BEREICH_IP = 60;
+    /** Teil 1c (kv-kontext-luecken T-6): eigene Startwerte, {@value #ANZAHL_TEXTE} Texte mit den neuen Formen. */
+    static final long SEED_TEXTE_KV_C = 20261123L;
+    static final long SEED_AUSWAHL_KV_C = 616161L;
+    static final int MIN_KV_C_KOMMA = 400;
+    static final int MIN_KV_C_SPERR = 400;
+    static final int MIN_KV_C_ZWEI = 300;
+    static final int MIN_KV_C_JE_ART = 250;
 
     private static final String[] FORMEN = {"LAUFWERK", "UNC", "UNIX", "HOME", "HOST", "RELATIV", "EINZEL_BACKSLASH",
         "BENUTZER_WURZEL", "WURZEL_ZWEI_SEGMENTE", "UMGEBUNG", "FILE_URI"};
@@ -89,6 +101,7 @@ class RoundtripFuzzTest {
 
     private static Lauf LAUF;
     private static Lauf LAUF_KV;
+    private static Lauf LAUF_KV_C;
 
     // ------------------------------------------------------------------ Erzeugung
 
@@ -270,6 +283,329 @@ class RoundtripFuzzTest {
         }
     }
 
+    // ------------------------------------------------------------------ Teil 1c: Sperrschrift, Komma (T-6)
+
+    /** Blockarten von Teil 1c: Sperrschrift ab drei Buchstaben, {@code I K}, Komma. */
+    static final int BLOCK_SPERR_DREI = 0;
+    static final int BLOCK_SPERR_ZWEI = 1;
+    static final int BLOCK_KOMMA = 2;
+    private static final int ANZAHL_BLOCKARTEN = 3;
+    /** Positionen von LANR und IK in {@code STANDARD_ERKENNER} (wie in {@code TextScanner.standard()}). */
+    private static final int ERKENNER_LANR = 4;
+    private static final int ERKENNER_IK = 5;
+
+    /**
+     * Ein erwarteter Fund einer gueltigen Nummer in einem Text von Teil 1c (Konstruktion als Zaehlgrundlage der
+     * Klassen): Blockart, Art der Nummer, Bereich der Nummer im Text. {@code grenze} markiert Bloecke, die
+     * absichtlich an einer dokumentierten Grenze liegen und deshalb keinen Scan-Fund haben muessen.
+     */
+    record BlockC(int blockart, boolean lanr, int start, int ende, boolean grenze) {
+        BlockC markiert() {
+            return new BlockC(blockart, lanr, start, ende, true);
+        }
+    }
+
+    /** Ein Text von Teil 1c mit den Bloecken seiner Konstruktion (getrennt von den Pfadbloecken von {@link Fall}). */
+    record FallC(String text, List<BlockC> bloecke) {
+    }
+
+    private static final String NB = String.valueOf((char) 0xA0);
+    private static final String DUENN_C = String.valueOf((char) 0x2009);
+    private static final String NNBSP_C = String.valueOf((char) 0x202F);
+    private static final String GESCH_C = String.valueOf((char) 0x2011);
+    private static final String HALBG_C = String.valueOf((char) 0x2013);
+    /** Die acht Sperr-Trenner (Plan D-1). */
+    private static final String[] SPERR_TRENNER_C = {" ", ".", "-", NB, DUENN_C, NNBSP_C, GESCH_C, HALBG_C};
+    private static final String[] SPERR_LANR_C = {"LANR", "LANRNR", "ARZTNUMMER", "ARZTNR"};
+    private static final String[] SPERR_IK_C = {"IK", "IKNR", "IKNUMMER", "INSTITUTIONSKENNZEICHEN"};
+    private static final String[] SPERR_IK_DREI_C = {"IKNR", "IKNUMMER", "INSTITUTIONSKENNZEICHEN"};
+    private static final String[] PRAEFIX_C = {"", "", "Praxis ", "Praxis-", "Rechnung an ", "der "};
+    private static final String[] DIR_C = {" ", ": ", "=", ":", "\t", " : ", "", NB, "  ", " Nr ", "-Nr. ",
+        "-Nummer: ", " - ", "= "};
+    private static final String[] WS_C = {"", " ", "  ", "\t", NB, DUENN_C, NNBSP_C, " \t"};
+    private static final String[] INNEN_C = {", ", "; ", " / ", " und ", ",", ";", " , ", ", und "};
+    /** Trenner zwischen Bausteinen von Teil 1c: nie ein einzelnes Gruppentrennerzeichen zwischen Ziffern. */
+    private static final String[] TRENNER_C = {"\n", "\r\n", "; ", ". ", "! ", "\t", " | ", " x ", ", "};
+    private static final String[] INITIALEN_C = {"I. K.", "A. B.", "I. K. Mustermann", "Prof. I. K. Mustermann",
+        "L. A. N. R.", "I.K.", "I-K", "A. I. K."};
+    private static final String[] UNSICHTBAR_C = {String.valueOf((char) 0xAD), String.valueOf((char) 0x200B),
+        String.valueOf((char) 0x200C), String.valueOf((char) 0x2060), String.valueOf((char) 0xFEFF)};
+    /** Ohne Doppelklammern (kein Literalschutz): die Luecken zwischen den Funden bleiben unveraendert. */
+    private static final String[] SONDER_C = {"Hallo", "Text", ",", ".", "(", ")", "\"", "'", "$1", "%", "\\",
+        String.valueOf((char) 0xE4), new String(Character.toChars(0x1F600)), "Frau Beispiel", "Rechnung"};
+
+    /** Teil 1c: Texte mit Sperrschrift, {@code I K}, Komma vor dem Kontextwort, Gegenproben und Initialen. */
+    static List<FallC> erzeugeKvC(long seed) {
+        Random r = new Random(seed);
+        List<FallC> faelle = new ArrayList<>(ANZAHL_TEXTE);
+        for (int i = 0; i < ANZAHL_TEXTE; i++) {
+            faelle.add(erzeugeTextC(r));
+        }
+        return faelle;
+    }
+
+    /**
+     * Ein Text aus 3 bis 10 Bausteinen mit den Bloecken je erwartetem Fund einer gueltigen Nummer. Der Trenner
+     * {@code " x "} haengt einen Einzelbuchstaben an eine benachbarte Sperrfolge. Als absichtliche Grenze (14e)
+     * markiert werden genau zwei Faelle: (a) Sperrbloecke, deren Sperrfolge ohne Praefix unmittelbar auf
+     * {@code " x "} folgt, und (b) Kommabloecke, deren gesperrtes nachgestelltes Kontextwort unmittelbar vor
+     * {@code " x "} endet (keine schliessende Klammer dazwischen; ein unsichtbares Zeichen dazwischen zaehlt
+     * nicht, der Scanner ignoriert es; maximale Folge {@code L A N R X N}). Die Markierung zieht keine Zufallszahlen.
+     */
+    static FallC erzeugeTextC(Random r) {
+        StringBuilder sb = new StringBuilder();
+        List<BlockC> bloecke = new ArrayList<>();
+        int n = 3 + r.nextInt(8);
+        boolean nachX = false;
+        for (int i = 0; i < n; i++) {
+            int vorher = bloecke.size();
+            int form = kvBausteinC(r, sb, bloecke);
+            int bis = bloecke.size();
+            if (r.nextInt(6) == 0) {
+                sb.append(waehle(r, UNSICHTBAR_C));
+            }
+            String trenner = waehle(r, TRENNER_C);
+            boolean vorX = " x ".equals(trenner);
+            for (int b = vorher; b < bis; b++) {
+                boolean komma = bloecke.get(b).blockart() == BLOCK_KOMMA;
+                boolean grenze = komma ? vorX && form == FORM_KOMMA_GESPERRT_ENDE
+                        : nachX && form == FORM_SPERR_OHNE_PRAEFIX;
+                if (grenze) {
+                    bloecke.set(b, bloecke.get(b).markiert());
+                }
+            }
+            nachX = " x ".equals(trenner);
+            sb.append(trenner);
+        }
+        return new FallC(sb.toString(), bloecke);
+    }
+
+    /** Das Wort gesperrt: je Buchstabe zufaellige Schreibweise, dazwischen genau ein Sperr-Trenner. */
+    private static String sperrFolge(Random r, String wort, boolean punktEnde) {
+        boolean gemischt = r.nextBoolean();
+        String fest = waehle(r, SPERR_TRENNER_C);
+        StringBuilder f = new StringBuilder();
+        for (int i = 0; i < wort.length(); i++) {
+            if (i > 0) {
+                f.append(gemischt ? waehle(r, SPERR_TRENNER_C) : fest);
+            }
+            char c = wort.charAt(i);
+            f.append(r.nextBoolean() ? Character.toUpperCase(c) : Character.toLowerCase(c));
+        }
+        return punktEnde ? f + "." : f.toString();
+    }
+
+    /** Beliebige Nummer der Art: meist gueltig, sonst ungueltig, Laenge oder mit Gruppentrennern. */
+    private static String nummerC(Random r, boolean lanr) {
+        switch (r.nextInt(6)) {
+            case 0:
+                return waehle(r, lanr ? LANR_UNGUELTIG : IK_UNGUELTIG);
+            case 1:
+                return waehle(r, LAENGEN);
+            case 2:
+                return waehle(r, lanr ? LANR_TRENNERFORMEN : IK_TRENNERFORMEN);
+            default:
+                return kvNummer(r, lanr);
+        }
+    }
+
+    /** Eine gueltige, schlichte Nummer an der aktuellen Stelle; der erwartete Fund wird als Block vermerkt. */
+    private static void fundNummerC(Random r, StringBuilder sb, List<BlockC> bloecke, int blockart, boolean lanr) {
+        int start = sb.length();
+        sb.append(kvNummer(r, lanr));
+        bloecke.add(new BlockC(blockart, lanr, start, sb.length(), false));
+    }
+
+    /** Nachgestelltes Kontextwort der Art, normal (ohne Vorwort) oder gesperrt ab drei Buchstaben. */
+    private static String nachgestelltesKwC(Random r, boolean lanr) {
+        return nachgestelltesKwC(r, lanr, new boolean[1]);
+    }
+
+    /** Wie oben; {@code gesperrt[0]} wird gesetzt, wenn das Kontextwort gesperrt gewaehlt wurde. */
+    private static String nachgestelltesKwC(Random r, boolean lanr, boolean[] gesperrt) {
+        if (r.nextInt(100) < 30) {
+            gesperrt[0] = true;
+            return sperrFolge(r, waehle(r, lanr ? SPERR_LANR_C : SPERR_IK_DREI_C), false);
+        }
+        String kw = waehle(r, lanr ? KW_LANR_F : KW_IK_F);
+        while (kw.startsWith("Praxis") || kw.startsWith("Lebenslange")) {
+            kw = waehle(r, lanr ? KW_LANR_F : KW_IK_F);
+        }
+        return kw;
+    }
+
+    /** Form eines Bausteins fuer die Grenz-Markierung: kein Sonderfall. */
+    private static final int FORM_ANDERE = 0;
+    /** Sperrbaustein ohne Praefix: die Sperrfolge steht am Anfang des Bausteins. */
+    private static final int FORM_SPERR_OHNE_PRAEFIX = 1;
+    /** Kommabaustein, der unmittelbar mit einem gesperrten nachgestellten Kontextwort endet. */
+    private static final int FORM_KOMMA_GESPERRT_ENDE = 2;
+
+    /** Haengt einen Baustein an und liefert seine Form ({@code FORM_*}); die Zufallsfolge ist die der Erzeugung. */
+    private static int kvBausteinC(Random r, StringBuilder sb, List<BlockC> bloecke) {
+        boolean lanr = r.nextBoolean();
+        switch (r.nextInt(21)) {
+            case 0:
+            case 1:
+            case 2:
+            case 3:
+                // Sperrschrift ab drei Buchstaben, Nummer direkt dahinter
+                String praefix = waehle(r, PRAEFIX_C);
+                sb.append(praefix)
+                        .append(sperrFolge(r, waehle(r, lanr ? SPERR_LANR_C : SPERR_IK_C), r.nextInt(4) == 0))
+                        .append(waehle(r, DIR_C));
+                fundNummerC(r, sb, bloecke, BLOCK_SPERR_DREI, lanr);
+                return praefix.isEmpty() ? FORM_SPERR_OHNE_PRAEFIX : FORM_ANDERE;
+            case 4:
+            case 5:
+            case 6:
+                // I K (zwei Buchstaben): nur die unmittelbar folgende Nummer, fraglich
+                String praefixZwei = waehle(r, PRAEFIX_C);
+                sb.append(praefixZwei).append(sperrFolge(r, "IK", r.nextInt(4) == 0))
+                        .append(waehle(r, DIR_C));
+                fundNummerC(r, sb, bloecke, BLOCK_SPERR_ZWEI, false);
+                return praefixZwei.isEmpty() ? FORM_SPERR_OHNE_PRAEFIX : FORM_ANDERE;
+            case 7:
+            case 8:
+            case 9:
+                // Nummer, Komma oder Semikolon, Leerraum, optional Klammer, Kontextwort (normal oder gesperrt)
+                return kommaBlock(r, sb, bloecke, lanr, 1);
+            case 10:
+            case 11:
+                return kommaBlock(r, sb, bloecke, lanr, 2 + r.nextInt(2));
+            case 12:
+                // Komma mit beliebigen Nummernformen (ohne Vermerk)
+                sb.append(nummerC(r, lanr)).append(waehle(r, WS_C)).append(r.nextBoolean() ? ',' : ';')
+                        .append(waehle(r, WS_C)).append(nachgestelltesKwC(r, lanr));
+                break;
+            case 13:
+            case 14:
+            case 15:
+                gegenprobeC(r, sb, lanr);
+                break;
+            case 16:
+                sb.append(waehle(r, INITIALEN_C)).append(r.nextBoolean() ? " " + nummerC(r, lanr) : "");
+                break;
+            case 17:
+                // Bestandsform: normales Kontextwort mit Nummer
+                sb.append(waehle(r, lanr ? KW_LANR_F : KW_IK_F)).append(waehle(r, KV_ZWISCHEN))
+                        .append(nummerC(r, lanr));
+                break;
+            case 18:
+                sb.append(nummerC(r, lanr)).append(", ").append(sperrFolge(r, lanr ? "LANR" : "IKNR", false));
+                break;
+            case 19:
+                umgebungC(r, sb);
+                break;
+            default:
+                sb.append(waehle(r, SONDER_C));
+                break;
+        }
+        return FORM_ANDERE;
+    }
+
+    /** Umgebung ohne KV-Bezug: Pfad, E-Mail, IP, URL. */
+    private static void umgebungC(Random r, StringBuilder sb) {
+        switch (r.nextInt(4)) {
+            case 0:
+                sb.append(pfadOhneAnfuehrung(r, r.nextInt(FORMEN.length)));
+                break;
+            case 1:
+                sb.append(waehle(r, LOKAL)).append('@').append(waehle(r, DOMAINS));
+                break;
+            case 2:
+                sb.append(ipKv(r));
+                break;
+            default:
+                sb.append(url(r));
+                break;
+        }
+    }
+
+    /** {@code N, KW}, {@code N; (KW)}, {@code N1, N2, KW}: gueltige Nummern, genau ein Komma vor dem Kontextwort. */
+    private static int kommaBlock(Random r, StringBuilder sb, List<BlockC> bloecke, boolean lanr, int anzahl) {
+        for (int i = 0; i < anzahl; i++) {
+            if (i > 0) {
+                sb.append(waehle(r, INNEN_C));
+            }
+            fundNummerC(r, sb, bloecke, BLOCK_KOMMA, lanr);
+        }
+        sb.append(waehle(r, WS_C)).append(r.nextBoolean() ? ',' : ';').append(waehle(r, WS_C));
+        int klammer = r.nextInt(3);
+        sb.append(klammer == 0 ? "(" : klammer == 1 ? "[" : "");
+        boolean[] gesperrt = new boolean[1];
+        sb.append(nachgestelltesKwC(r, lanr, gesperrt));
+        boolean geschlossen = false;
+        if (klammer < 2 && r.nextInt(4) != 0) {
+            sb.append(klammer == 0 ? ")" : "]");
+            geschlossen = true;
+        }
+        return gesperrt[0] && !geschlossen ? FORM_KOMMA_GESPERRT_ENDE : FORM_ANDERE;
+    }
+
+    /**
+     * Gegenproben aus AK-6, AK-7, AK-18 (Plan Kap. 3.1, 3.2.4): Texte nahe an den neuen Regeln, die sie nicht
+     * ausloesen sollen. Teil 1c prueft hier nur Roundtrip, Schutzgarantie und vollstaendiges Ersetzen, keine
+     * Nicht-Erkennung (die uebrigen Regeln, etwa das Komma vor dem Kontextwort, duerfen Funde erzeugen).
+     * Die Nicht-Erkennung pruefen die Korpus- und Eigenschaftstests.
+     */
+    private static void gegenprobeC(Random r, StringBuilder sb, boolean lanr) {
+        String kw = nachgestelltesKwC(r, lanr);
+        String w = lanr ? "LANR" : "IKNR";
+        String nummer = nummerC(r, lanr);
+        switch (r.nextInt(16)) {
+            case 0:
+                sb.append(nummer).append(",, ").append(kw);
+                break;
+            case 1:
+                sb.append(nummer).append(", und ").append(kw);
+                break;
+            case 2:
+                sb.append(nummer).append(" / ").append(kw);
+                break;
+            case 3:
+                sb.append(nummer).append(" und ").append(kw);
+                break;
+            case 4:
+                sb.append(nummer).append(": ").append(kw);
+                break;
+            case 5:
+                sb.append(nummer).append(". ").append(kw);
+                break;
+            case 6:
+                sb.append("I. K. ").append(nummer);
+                break;
+            case 7:
+                sb.append("L. A. N. R. ").append(nummer);
+                break;
+            case 8:
+                sb.append("A ").append(sperrFolge(r, "IK", false)).append(' ').append(nummer);
+                break;
+            case 9:
+                sb.append(sperrFolge(r, w + "X", false)).append(' ').append(nummer);
+                break;
+            case 10:
+                // Teilgruppe (Grenze 14a)
+                sb.append(lanr ? "LA NR " : "I KNR ").append(nummer);
+                break;
+            case 11:
+                sb.append(sperrFolge(r, w, false)).append("\n\n").append(nummer);
+                break;
+            case 12:
+                sb.append(nummer).append(" (").append(sperrFolge(r, "IK", false)).append(')');
+                break;
+            case 13:
+                sb.append(sperrFolge(r, "IK", false)).append(" der Praxis ").append(nummer);
+                break;
+            case 14:
+                sb.append(sperrFolge(r, w + w, false)).append(' ').append(nummer);
+                break;
+            default:
+                sb.append(sperrFolge(r, "IKEA", false)).append(' ').append(nummer);
+                break;
+        }
+    }
+
     private static String url(Random r) {
         switch (r.nextInt(4)) {
             case 0:
@@ -411,6 +747,7 @@ class RoundtripFuzzTest {
     static void lauf() {
         LAUF = fuehreAus();
         LAUF_KV = fuehreKvAus();
+        LAUF_KV_C = fuehreKvCAus();
     }
 
     private static boolean paarGetrennt(String s, int pos) {
@@ -453,6 +790,162 @@ class RoundtripFuzzTest {
             }
         }
         return lauf;
+    }
+
+    /**
+     * Teil 1c (kv-kontext-luecken T-6): dieselben Eigenschaften wie Teil 1b ({@code pruefeText}: Invarianten,
+     * Schutzgarantie, Roundtrip, Waechter) plus {@link #pruefeKvC}: Klassen nach Konstruktion und vollstaendiges
+     * Ersetzen aller Funde.
+     */
+    private static Lauf fuehreKvCAus() {
+        Lauf lauf = new Lauf(SEED_TEXTE_KV_C);
+        TextScanner scanner = TextScanner.standard();
+        Random auswahl = new Random(SEED_AUSWAHL_KV_C);
+        List<FallC> faelle = erzeugeKvC(SEED_TEXTE_KV_C);
+        for (int it = 0; it < faelle.size(); it++) {
+            FallC fall = faelle.get(it);
+            String text = fall.text();
+            if (KvTestHilfen.neunerfenster(text, "00")[1] != 0) {
+                lauf.verletzt("waechter-gueltiges-neunerfenster-ohne-00", it);
+                continue;
+            }
+            if (text.contains("[[")) {
+                lauf.verletzt("generator-doppelklammer", it);
+                continue;
+            }
+            try {
+                pruefeText(lauf, scanner, auswahl, it, new Fall(text, List.of(), false), text);
+                pruefeKvC(lauf, scanner, it, fall);
+            } catch (RuntimeException e) {
+                lauf.verletzt("ausnahme-im-lauf", it);
+            }
+        }
+        return lauf;
+    }
+
+    /**
+     * Klassen je Text, hoechstens einmal: Ein Erkenner-Kandidat (LANR und IK wie in {@code TextScanner.standard()})
+     * liegt genau auf der Nummer eines Bausteins und hat die erwartete Konfidenz: Sperrschrift ab drei Buchstaben
+     * 0,80, {@code I K} 0,50 mit Quelle {@code ik}, Komma 0,60. Dann werden alle Scan-Funde pseudonymisiert und
+     * geprueft, dass jeder Fund vollstaendig durch einen Platzhalter ersetzt ist. Zusaetzlich zaehlt die Klasse
+     * {@code block-ohne-scan-abdeckung} die vermerkten Bloecke, die nicht als Grenze 14e markiert sind
+     * ({@link #erzeugeTextC}) und deren Nummernbereich von keinem Scan-Fund ganz abgedeckt ist. Das ist die
+     * offene Grenze 14h (Plan Kap. 11): laufender IK-Kontext, Vorwort, gesperrtes {@code I K}, Nachsatzwort,
+     * gueltige IK, z. B. {@code IK: Praxis I K Nr N}. Messwert 20 bei festem Seed, von security einzeln
+     * bestaetigt (alle IK); T-7 stellt die Erwartung auf 0 um (siehe
+     * {@code t6_kvC_blockOhneScanAbdeckung_nurOffeneGrenze14h}). Nicht geprueft werden die Konfidenz der
+     * Abdeckung sowie Nummern ohne Vermerk (Gegenproben, ungueltige Formen).
+     */
+    private static void pruefeKvC(Lauf lauf, TextScanner scanner, int it, FallC fall) {
+        String text = fall.text();
+        boolean[][] gesehen = new boolean[ANZAHL_BLOCKARTEN][2];
+        for (BlockC block : fall.bloecke()) {
+            int erkenner = block.lanr() ? ERKENNER_LANR : ERKENNER_IK;
+            for (Finding c : STANDARD_ERKENNER.get(erkenner).detect(text)) {
+                if (c.start() != block.start() || c.end() != block.ende()) {
+                    continue;
+                }
+                boolean treffer;
+                if (block.blockart() == BLOCK_SPERR_DREI) {
+                    treffer = c.confidence() == 0.80;
+                } else if (block.blockart() == BLOCK_SPERR_ZWEI) {
+                    treffer = c.confidence() == 0.50 && "ik".equals(c.source());
+                } else {
+                    treffer = c.confidence() == 0.60;
+                }
+                gesehen[block.blockart()][block.lanr() ? 0 : 1] |= treffer;
+            }
+        }
+        String[] arten = {"lanr", "ik"};
+        String[] namen = new String[ANZAHL_BLOCKARTEN];
+        namen[BLOCK_SPERR_DREI] = "kv-sperr-fund";
+        namen[BLOCK_SPERR_ZWEI] = "kv-sperr-zwei-fund";
+        namen[BLOCK_KOMMA] = "kv-komma-fund";
+        boolean irgendwo = false;
+        for (int b = 0; b < ANZAHL_BLOCKARTEN; b++) {
+            boolean beide = false;
+            for (int a = 0; a < 2; a++) {
+                if (gesehen[b][a]) {
+                    lauf.klasse(namen[b] + "-" + arten[a]);
+                    beide = true;
+                }
+            }
+            if (beide) {
+                lauf.klasse(namen[b]);
+                irgendwo = true;
+            }
+        }
+        if (irgendwo) {
+            lauf.klasse("kv-fund-aus-neuer-regel");
+        }
+        List<Finding> scan = scanner.scan(text);
+        String[] blockNamen = {"sperr-drei", "sperr-zwei", "komma"};
+        for (BlockC block : fall.bloecke()) {
+            boolean abgedeckt = vonScanAbgedeckt(scan, block);
+            if (block.grenze()) {
+                lauf.klasse("block-markiert");
+            }
+            String detail = blockNamen[block.blockart()] + "-" + (block.lanr() ? "lanr" : "ik");
+            if (block.grenze() && !abgedeckt) {
+                lauf.klasse("markiert-ohne-abdeckung");
+                lauf.klasse("markiert-ohne-abdeckung-" + (block.blockart() == BLOCK_KOMMA ? "komma" : "sperr"));
+            } else if (!block.grenze() && !abgedeckt) {
+                lauf.klasse("block-ohne-scan-abdeckung");
+                lauf.klasse("block-ohne-scan-abdeckung-" + detail);
+            }
+        }
+        PseudonymizationResult alle = PSEUDONYMIZER.pseudonymize(text, scan);
+        if (!alleFundeErsetzt(text, scan, alle.text())) {
+            lauf.verletzt("ak23-fund-nicht-vollstaendig-ersetzt", it);
+        }
+    }
+
+    private static boolean vonScanAbgedeckt(List<Finding> scan, BlockC block) {
+        for (Finding f : scan) {
+            if (f.start() <= block.start() && f.end() >= block.ende()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Der Ausgabetext besteht genau aus den Luecken zwischen den Funden (unveraendert) und je einem Platzhalter
+     * {@code [[TYP_n]]} anstelle jedes Fundes; ein Platzhalter enthaelt nie eine Ziffernkette ab sechs Ziffern. Damit
+     * steht keine Ziffernkette eines Fundes mehr im Ausgabetext.
+     */
+    static boolean alleFundeErsetzt(String text, List<Finding> funde, String ausgabe) {
+        int pos = 0;
+        int vorher = 0;
+        for (Finding f : funde) {
+            String luecke = text.substring(vorher, f.start());
+            if (!ausgabe.startsWith(luecke, pos)) {
+                return false;
+            }
+            pos += luecke.length();
+            if (!ausgabe.startsWith("[[", pos)) {
+                return false;
+            }
+            int ende = ausgabe.indexOf("]]", pos + 2);
+            if (ende < 0 || laengsteZiffernfolge(ausgabe.substring(pos, ende)) >= 6) {
+                return false;
+            }
+            pos = ende + 2;
+            vorher = f.end();
+        }
+        String rest = text.substring(vorher);
+        return ausgabe.startsWith(rest, pos) && pos + rest.length() == ausgabe.length();
+    }
+
+    private static int laengsteZiffernfolge(String s) {
+        int beste = 0;
+        int aktuell = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            aktuell = c >= '0' && c <= '9' ? aktuell + 1 : 0;
+            beste = Math.max(beste, aktuell);
+        }
+        return beste;
     }
 
     private static Lauf fuehreAus() {
@@ -957,6 +1450,154 @@ class RoundtripFuzzTest {
         mindestens(LAUF_KV, "zusammengelegter-fund", 100);
         mindestens(LAUF_KV, "manueller-fund", 300);
         mindestens(LAUF_KV, "echte-teilmenge-der-scan-funde", 300);
+    }
+
+    // ------------------------------------------------------------------ Teil 1c (T-6): Eigenschaften
+
+    /** Hashwert der Teil-1c-Textfolge (kv-kontext-luecken T-6, nach dem Anlegen des Generators gemessen). */
+    static final int HASH_TEIL_1C = 0xC32923F8;
+
+    private static List<String> texteTeil1c() {
+        List<String> texte = new ArrayList<>();
+        for (FallC f : erzeugeKvC(SEED_TEXTE_KV_C)) {
+            texte.add(f.text());
+        }
+        return texte;
+    }
+
+    @Test
+    void t6_teil1cTextfolgeIstUnveraendert() {
+        List<String> texte = texteTeil1c();
+        assertEquals(HASH_TEIL_1C, texte.hashCode(), "Hashwert der Teil-1c-Textfolge, Startwert " + SEED_TEXTE_KV_C
+                + ", gemessen 0x" + Integer.toHexString(texte.hashCode()));
+    }
+
+    @Test
+    void t6_teil1cZweiLaeufeMitDemselbenStartwertErzeugenDieselbeTextfolge() {
+        List<String> a = texteTeil1c();
+        assertEquals(ANZAHL_TEXTE, a.size());
+        assertTextfolgeGleich(a, texteTeil1c(), SEED_TEXTE_KV_C, "Teil 1c: Textfolge");
+        List<String> teil1b = new ArrayList<>();
+        for (Fall f : erzeugeKv(SEED_TEXTE_KV_C)) {
+            teil1b.add(f.text());
+        }
+        assertNotEquals(a.hashCode(), teil1b.hashCode(), "Teil 1c unterscheidet sich von Teil 1b gleichen Seeds");
+        assertNotEquals(HASH_TEIL_1B, a.hashCode(), "Teil 1c unterscheidet sich von Teil 1b");
+        assertNotEquals(HASH_TEIL_1, a.hashCode(), "Teil 1c unterscheidet sich von Teil 1");
+    }
+
+    private static void keineC(String eigenschaft) {
+        assertEquals(0, LAUF_KV_C.anzahl(eigenschaft), "Teil 1c: " + LAUF_KV_C.meldung(eigenschaft));
+    }
+
+    @Test
+    void t6_kvC_waechterUndGeneratorSindSauber() {
+        keineC("waechter-gueltiges-neunerfenster-ohne-00");
+        keineC("generator-doppelklammer");
+    }
+
+    @Test
+    void t6_kvC_roundtripIstZeichengleichOhneMeldung() {
+        keineC("ak45-roundtrip-ungleich");
+        keineC("ak45-pseudonymisierung-wirft");
+        keineC("ak45-meldung");
+        keineC("ausnahme-im-lauf");
+    }
+
+    @Test
+    void t6_kvC_scanInvarianteUndListenInvariante() {
+        keineC("ak1-scan-invariante");
+        keineC("ak1-liste-invariante");
+    }
+
+    @Test
+    void t6_kvC_schutzgarantie_jederKandidatDerStandardErkennerIstImScanAbgedeckt() {
+        keineC("ak7a-kandidat-nicht-im-scan");
+    }
+
+    @Test
+    void t6_kvC_keinFremdtextImScanUndBereicheSindDieVerschmolzenenKandidaten() {
+        keineC("ak7e-fremdtext-im-scan");
+        keineC("ak7e-bereiche-nicht-verschmolzen");
+    }
+
+    @Test
+    void t6_kvC_keineZiffernketteEinesFundesImAusgabetext() {
+        keineC("ak23-fund-nicht-vollstaendig-ersetzt");
+    }
+
+    @Test
+    void t6_kvC_ersetzPruefungLaeuftNichtInsLeere() {
+        String nummer = SynthetischeKvNummern.LANR_GUELTIG;
+        String text = "LANR " + nummer + " Ende";
+        List<Finding> funde = TextScanner.standard().scan(text);
+        assertEquals(1, funde.size());
+        assertTrue(alleFundeErsetzt(text, funde, PSEUDONYMIZER.pseudonymize(text, funde).text()));
+        assertFalse(alleFundeErsetzt(text, funde, text), "unveraenderter Text: Fund nicht ersetzt");
+        assertFalse(alleFundeErsetzt(text, funde, "LANR [[LANR_1]] Ende!"), "Rest weicht ab");
+        assertFalse(alleFundeErsetzt(text, funde, "LANR [[LANR_" + nummer + "]] Ende"),
+                "Platzhalter mit langer Ziffernkette");
+    }
+
+    /**
+     * Mindestzahlen der Klassen (Messwerte bei festem Seed in Klammern, Abstand mindestens ein Drittel):
+     * Fund der neuen Regel je Blockart und Art (Sperrschrift ab drei Buchstaben 656 / LANR 446 / IK 388, I K 510,
+     * Komma 699 / LANR 452 / IK 464), Fund aus neuer Regel insgesamt 960 (Untergrenze 600), Funde je Typ
+     * (LANR 843, IK 939; je 500), fraglich 947 (500), Scan-Funde 998 (600), manuelle Funde 947 (500), echte
+     * Teilmengen der Scan-Funde 854 (500).
+     */
+    @Test
+    void t6_kvC_fuzzPruftNichtInsLeere_jedeKlasseKommtVor() {
+        mindestens(LAUF_KV_C, "kv-komma-fund", MIN_KV_C_KOMMA);
+        mindestens(LAUF_KV_C, "kv-komma-fund-lanr", MIN_KV_C_JE_ART);
+        mindestens(LAUF_KV_C, "kv-komma-fund-ik", MIN_KV_C_JE_ART);
+        mindestens(LAUF_KV_C, "kv-sperr-fund", MIN_KV_C_SPERR);
+        mindestens(LAUF_KV_C, "kv-sperr-fund-lanr", MIN_KV_C_JE_ART);
+        mindestens(LAUF_KV_C, "kv-sperr-fund-ik", MIN_KV_C_JE_ART);
+        mindestens(LAUF_KV_C, "kv-sperr-zwei-fund", MIN_KV_C_ZWEI);
+        mindestens(LAUF_KV_C, "kv-sperr-zwei-fund-ik", MIN_KV_C_ZWEI);
+        mindestens(LAUF_KV_C, "kv-fund-aus-neuer-regel", 600);
+        mindestens(LAUF_KV_C, "kv-fund-lanr", 500);
+        mindestens(LAUF_KV_C, "kv-fund-ik", 500);
+        mindestens(LAUF_KV_C, "kv-fraglich", 500);
+        mindestens(LAUF_KV_C, "scan-fund", 600);
+        mindestens(LAUF_KV_C, "manueller-fund", 500);
+        mindestens(LAUF_KV_C, "echte-teilmenge-der-scan-funde", 500);
+    }
+
+    /**
+     * OFFENE GRENZE 14h, wird in T-7 geschlossen; dann Erwartung auf 0 umdrehen (Plan Kap. 11, 14h). Die als
+     * 14e markierten Bloecke ohne Scan-Abdeckung (69: 53 Sperrbloecke hinter {@code " x "}, 16 Kommabloecke
+     * vor {@code " x "}) sind per Konstruktion markiert und zaehlen nicht. Die uebrigen Bloecke ohne Abdeckung
+     * haben alle das Muster 14h: laufender IK-Kontext, Vorwort, gesperrtes {@code I K}, Nachsatzwort, gueltige IK
+     * ({@code IK: Praxis I K Nr N}). Beim Konstruieren laesst sich "aktiver Kontext" nicht sicher bestimmen (er
+     * haengt von den Vorbausteinen, Trennern und Fuellwoertern ab), eine Markierung ist daher nicht sauber
+     * moeglich; stattdessen gilt der exakte Messwert bei festem Seed. Ein Wert ungleich 20 ist ein Befund.
+     */
+    @Test
+    void t6_kvC_blockOhneScanAbdeckung_nurOffeneGrenze14h() {
+        assertEquals(20, LAUF_KV_C.klasse_("block-ohne-scan-abdeckung"),
+                "Bloecke ohne Scan-Abdeckung (offene Grenze 14h, T-7 stellt auf 0), Startwert " + SEED_TEXTE_KV_C);
+    }
+
+    /** Strukturbeleg 14h: nicht markierte Bloecke ohne Abdeckung nach Blockart und Art (T-7 stellt alle auf 0). */
+    @Test
+    void t6_kvC_blockOhneScanAbdeckung_nachBlockartUndArt() {
+        String basis = "block-ohne-scan-abdeckung-";
+        assertEquals(17, LAUF_KV_C.klasse_(basis + "sperr-zwei-ik"), "Sperrschrift zwei Buchstaben, IK");
+        assertEquals(3, LAUF_KV_C.klasse_(basis + "sperr-drei-ik"), "Sperrschrift ab drei Buchstaben, IK");
+        assertEquals(0, LAUF_KV_C.klasse_(basis + "sperr-drei-lanr"), "Sperrschrift ab drei Buchstaben, LANR");
+        assertEquals(0, LAUF_KV_C.klasse_(basis + "sperr-zwei-lanr"), "Sperrschrift zwei Buchstaben, LANR");
+        assertEquals(0, LAUF_KV_C.klasse_(basis + "komma-lanr"), "Komma, LANR");
+        assertEquals(0, LAUF_KV_C.klasse_(basis + "komma-ik"), "Komma, IK");
+    }
+
+    /** Markierte 14e-Bloecke ohne Scan-Abdeckung werden einzeln gezaehlt, damit nichts verdeckt wird. */
+    @Test
+    void t6_kvC_markierteBloeckeOhneAbdeckung_sindGezaehlt() {
+        assertEquals(69, LAUF_KV_C.klasse_("markiert-ohne-abdeckung"), "markierte Bloecke ohne Abdeckung");
+        assertEquals(53, LAUF_KV_C.klasse_("markiert-ohne-abdeckung-sperr"), "davon Sperrbloecke hinter x");
+        assertEquals(16, LAUF_KV_C.klasse_("markiert-ohne-abdeckung-komma"), "davon Kommabloecke vor x");
     }
 
     @Test

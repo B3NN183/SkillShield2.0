@@ -16,6 +16,7 @@ import de.skillshield.core.recognizer.general.EmailRecognizer;
 import de.skillshield.core.recognizer.general.Ipv4Recognizer;
 import de.skillshield.core.recognizer.general.PathRecognizer;
 import de.skillshield.core.recognizer.general.UrlRecognizer;
+import de.skillshield.core.recognizer.kv.KvKontextLueckenEigenschaftTest;
 import de.skillshield.core.recognizer.kv.KvTestHilfen;
 import de.skillshield.core.recognizer.kv.KvVorgaenger;
 import java.util.ArrayList;
@@ -34,6 +35,12 @@ import org.junit.jupiter.api.Test;
  * zwischen IK und LANR und die Stufenaenderung durch Zusammenlegung bleiben erlaubt). Selbsttests
  * belegen, dass die Pruefregel nicht ins Leere laeuft. Meldungen nennen nur Zahlen, nie Text oder Ziffern.
  *
+ * <p>Teil 1c (T-6: Sperrschrift, Komma vor dem Kontextwort), der erweiterte Korpus ({@code KvDifferenzTest.korpus()}
+ * enthaelt die Faelle des Roundtrip-Korpus) und die Texte der Generatoren (a) bis (d) aus
+ * {@code KvKontextLueckenEigenschaftTest} laufen durch dieselben Pruefungen. Teil 1c ist zusaetzlich mit einem
+ * eigenen Siegel festgehalten und muss neuen Schutz bringen (Texte, in denen der neue Scanner Positionen abdeckt,
+ * die der alte nicht abdeckt).
+ *
  * <p>Teil 1 ist die unveraenderte Altfolge und wird (wie im {@code KvDifferenzTest}) nicht mit dem Waechter geprueft;
  * Teil 1b und der Korpus gehen vor dem Vergleich durch den Waechter.
  */
@@ -43,6 +50,13 @@ class KvVorgaengerDifferenzTest {
     static final int SIEGEL_TEIL_1 = 0xE79FC611;
     /** Siegel ueber die Funde des Vorgaengers auf Fuzz-Teil 1b (hexadezimal, in T-1 gemessen). */
     static final int SIEGEL_TEIL_1B = 0x62D65251;
+
+    /** Siegel ueber die Funde des Vorgaengers auf Fuzz-Teil 1c (hexadezimal, in T-6 gemessen). */
+    static final int SIEGEL_TEIL_1C = 0x9099FBAD;
+
+    /** Mindestzahlen (Messwerte bei festen Seeds: Teil 1c 980 von 1 000, Generatoren 2 014 von 4 000 Texten). */
+    static final int MIN_TEXTE_MIT_MEHR_ABDECKUNG_1C = 650;
+    static final int MIN_TEXTE_MIT_MEHR_ABDECKUNG_GENERATOREN = 1_300;
 
     private static final TextScanner NEU = TextScanner.standard();
     private static final TextScanner ALT = new TextScanner(List.of(new EmailRecognizer(), new Ipv4Recognizer(),
@@ -63,6 +77,22 @@ class KvVorgaengerDifferenzTest {
     private static List<String> teil1b() {
         return texte(RoundtripFuzzTest.erzeugeKv(RoundtripFuzzTest.SEED_TEXTE_KV));
     }
+
+    private static List<String> teil1c() {
+        return texte1c(RoundtripFuzzTest.erzeugeKvC(RoundtripFuzzTest.SEED_TEXTE_KV_C));
+    }
+
+    private static List<String> texte1c(List<RoundtripFuzzTest.FallC> faelle) {
+        List<String> texte = new ArrayList<>(faelle.size());
+        for (RoundtripFuzzTest.FallC f : faelle) {
+            texte.add(f.text());
+        }
+        return texte;
+    }
+
+    /** Einmal erzeugt und von allen Tests wiederverwendet (die Listen werden nur gelesen). */
+    private static final List<String> TEIL_1C = teil1c();
+    private static final List<String> GENERATOREN = KvKontextLueckenEigenschaftTest.differenzTexte();
 
     // ------------------------------------------------------------------ Siegel
 
@@ -92,6 +122,12 @@ class KvVorgaengerDifferenzTest {
         int teil1b = siegel(teil1b());
         assertEquals(SIEGEL_TEIL_1, teil1, "Siegel Teil 1, gemessen 0x" + Integer.toHexString(teil1));
         assertEquals(SIEGEL_TEIL_1B, teil1b, "Siegel Teil 1b, gemessen 0x" + Integer.toHexString(teil1b));
+    }
+
+    @Test
+    void vorgaenger_fundbildAufTeil1cIstEingefroren() {
+        int teil1c = siegel(TEIL_1C);
+        assertEquals(SIEGEL_TEIL_1C, teil1c, "Siegel Teil 1c, gemessen 0x" + Integer.toHexString(teil1c));
     }
 
     // ------------------------------------------------------------------ Differenz Erkennerebene
@@ -135,6 +171,25 @@ class KvVorgaengerDifferenzTest {
     void differenz_erkennerebene_teil1bUndKorpus() {
         pruefeMitWaechter(teil1b());
         pruefeMitWaechter(KvDifferenzTest.korpus());
+    }
+
+    @Test
+    void differenz_erkennerebene_teil1c() {
+        pruefeMitWaechter(TEIL_1C);
+    }
+
+    @Test
+    void differenz_erkennerebene_generatorenAusDenEigenschaftstests() {
+        pruefeMitWaechter(GENERATOREN);
+    }
+
+    @Test
+    void differenz_vorgaengerLiefertFundeAufTeil1cUndGeneratoren() {
+        for (KvTestHilfen.Art a : KvTestHilfen.ARTEN) {
+            assertTrue(zaehleAlteFunde(a, TEIL_1C) > 0, a.name + ": Vorgaenger ohne Funde auf Teil 1c");
+            assertTrue(zaehleAlteFunde(a, GENERATOREN) > 0,
+                    a.name + ": Vorgaenger ohne Funde auf den Generatoren");
+        }
     }
 
     @Test
@@ -185,6 +240,46 @@ class KvVorgaengerDifferenzTest {
         assertEquals(0, verloreneTexte(KvDifferenzTest.korpus()), "Korpus: Texte mit verlorener Position");
     }
 
+    @Test
+    void differenz_scannerebene_teil1cUndGeneratoren_keineAbgedeckePositionGehtVerloren() {
+        List<String> generatoren = GENERATOREN;
+        pruefeMitWaechter(TEIL_1C);
+        pruefeMitWaechter(generatoren);
+        assertEquals(0, verloreneTexte(TEIL_1C), "Teil 1c: Texte mit verlorener Position");
+        assertEquals(0, verloreneTexte(generatoren), "Generatoren (a) bis (d): Texte mit verlorener Position");
+    }
+
+    /** Zaehlt die Texte, in denen der neue Scanner eine Position abdeckt, die der alte nicht abdeckt. */
+    private static int mehrAbdeckungTexte(List<String> texte) {
+        int mehr = 0;
+        for (String text : texte) {
+            boolean[] imAlten = abdeckung(text.length(), ALT.scan(text));
+            boolean[] imNeuen = abdeckung(text.length(), NEU.scan(text));
+            boolean gewonnen = false;
+            for (int i = 0; i < text.length(); i++) {
+                gewonnen |= imNeuen[i] && !imAlten[i];
+            }
+            if (gewonnen) {
+                mehr++;
+            }
+        }
+        return mehr;
+    }
+
+    @Test
+    void differenz_scannerebene_teil1cBringtNeuenSchutz_pruefungLaeuftNichtInsLeere() {
+        int mehr = mehrAbdeckungTexte(TEIL_1C);
+        assertTrue(mehr >= MIN_TEXTE_MIT_MEHR_ABDECKUNG_1C, "Teil 1c: Texte mit zusaetzlich abgedeckter Position: "
+                + mehr + ", erwartet mindestens " + MIN_TEXTE_MIT_MEHR_ABDECKUNG_1C);
+        int generatoren = mehrAbdeckungTexte(GENERATOREN);
+        assertTrue(generatoren >= MIN_TEXTE_MIT_MEHR_ABDECKUNG_GENERATOREN, "Generatoren: Texte mit zusaetzlich "
+                + "abgedeckter Position: " + generatoren + ", erwartet mindestens "
+                + MIN_TEXTE_MIT_MEHR_ABDECKUNG_GENERATOREN);
+        // Gegenprobe: ein Text ohne neue Form bringt keinen Zugewinn
+        assertEquals(0, mehrAbdeckungTexte(List.of("LANR " + LANR_GUELTIG)), "Bestandsform: kein Zugewinn");
+        assertEquals(1, mehrAbdeckungTexte(List.of(LANR_GUELTIG + ", LANR")), "Komma-Form: Zugewinn");
+    }
+
     private static boolean istKv(Finding f) {
         return f.type() == FindingType.LANR || f.type() == FindingType.IK;
     }
@@ -213,6 +308,13 @@ class KvVorgaengerDifferenzTest {
             }
         }
         return verloren;
+    }
+
+    @Test
+    void differenz_scannerebene_teil1cUndGeneratoren_kvPositionWirdNieNurVonNichtKvTypAbgedeckt() {
+        assertEquals(0, typVerlusteTexte(NEU, TEIL_1C), "Teil 1c: Texte mit KV-Position nur noch als Nicht-KV");
+        assertEquals(0, typVerlusteTexte(NEU, GENERATOREN),
+                "Generatoren: Texte mit KV-Position nur noch als Nicht-KV");
     }
 
     @Test
@@ -283,7 +385,8 @@ class KvVorgaengerDifferenzTest {
 
     @Test
     void differenz_scannerebene_alterScannerLiefertFundeAufTeil1bUndKorpus() {
-        for (List<String> texte : List.of(teil1b(), KvDifferenzTest.korpus())) {
+        for (List<String> texte : List.of(teil1b(), TEIL_1C, KvDifferenzTest.korpus(),
+                GENERATOREN)) {
             int funde = 0;
             for (String text : texte) {
                 funde += ALT.scan(text).size();
