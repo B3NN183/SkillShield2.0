@@ -36,7 +36,7 @@ import java.util.Random;
  * unabhaengig vom Produkt alle Ziffernketten und prueft jedes aus ganzen Bloecken gebildete Fenster mit genau neun
  * Ziffern, das also ein Segment des Scanners sein koennte. Die Meldung nennt nie Ziffern.
  */
-final class KvTestHilfen {
+public final class KvTestHilfen {
 
     private KvTestHilfen() {
     }
@@ -256,7 +256,7 @@ final class KvTestHilfen {
      * {@code ausgenommenPraefix} beginnen ({@code null}: keine Ausnahme; Ergebnis[0]), und davon die nach LANR- oder
      * IK-Referenz gueltigen (Ergebnis[1]).
      */
-    static int[] neunerfenster(String text, String ausgenommenPraefix) {
+    public static int[] neunerfenster(String text, String ausgenommenPraefix) {
         int[] ergebnis = new int[2];
         int n = text.length();
         int i = 0;

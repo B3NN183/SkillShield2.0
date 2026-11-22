@@ -556,6 +556,18 @@ reviewer und security. Verbindlich ab Durchlauf 2:
   Kandidaten, ist `neu.equals(alt)`.
 - **AK**: AK-19, AK-20 (Fuzz-Roundtrip), AK-22, AK-26.
 - **Tests**: wie beschrieben; Meldungen nur mit Seed, Iteration, Anzahl.
+- **Nachtrag der Hauptsitzung (22.11.2026, aus der Prüfung von T-7):**
+  1. Dokumentierte Ausnahme zur Testdatenregel (ergänzt Nachtrag T-1 Punkt 10): Fuzz-Teil 1 (Altfolge, Seed
+     20261120, vor diesem Feature entstanden) enthält 11 Texte mit rechnerisch gültigen Neunerfenstern aus
+     Dokumentations-IPs (198.51.100.x, 203.0.113.x). IP-Kontext, kein Personenbezug; die Folge bleibt unverändert und
+     läuft im Differenztest ohne Wächter.
+  2. In T-9 miterledigen (Schwere niedrig): `RoundtripFuzzTest` vergleicht Textlisten mit `assertEquals` (Teil 1b
+     neu, Teil 1 Bestand); im Fehlerfall stünden die synthetischen Texte in der Meldung. Auf Vergleich mit Meldung
+     aus Startwert und erster abweichender Iteration umstellen (beide Stellen; zulässige Änderung am Bestandstest
+     ohne geänderte Erwartung). Im Differenztest die Zahl der Wächtertreffer in Teil 1 als feste Erwartung (11)
+     prüfen. Klassen-Javadoc von `RoundtripFuzzTest` um Teil 1b ergänzen.
+  3. `KvTestHilfen` (Sichtbarkeit `public`) gehört nachträglich zur Dateiliste von T-7; der Differenztest nutzt eine
+     eigene Korpusliste (48 Texte), weil `RoundtripKorpusTest` seine Texte nicht als Liste vorhält.
 
 ### T-8: Grenzlast über den Standard-Scanner
 - **Dateien**: `GrenzlastTest.java` (neue parametrisierte Methode `ak21_kvEingabe…`; bestehende Fälle unverändert).

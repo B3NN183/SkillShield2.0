@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import de.skillshield.core.model.ConfidenceLevel;
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.model.FindingType;
 import de.skillshield.core.pseudonymize.PlaceholderMapping;
@@ -13,6 +14,7 @@ import de.skillshield.core.pseudonymize.PseudonymizationResult;
 import de.skillshield.core.pseudonymize.Pseudonymizer;
 import de.skillshield.core.recognizer.Recognizer;
 import de.skillshield.core.recognizer.TextScanner;
+import de.skillshield.core.recognizer.kv.KvTestHilfen;
 import de.skillshield.core.reidentify.ReidentificationResult;
 import de.skillshield.core.reidentify.Reidentifier;
 import java.util.ArrayList;
@@ -45,6 +47,14 @@ class RoundtripFuzzTest {
     static final long SEED_EINGABEN = 777001L;
     static final int ANZAHL_TEXTE = 1000;
     static final int ANZAHL_EINGABEN = 1000;
+    /** Teil 1b (T-7): eigene Startwerte, {@value #ANZAHL_TEXTE} Texte mit KV-Bausteinen. */
+    static final long SEED_TEXTE_KV = 20261122L;
+    static final long SEED_AUSWAHL_KV = 515151L;
+    static final int MIN_KV_LANR = 150;
+    static final int MIN_KV_IK = 150;
+    static final int MIN_KV_FRAGLICH = 40;
+    static final int MIN_KV_IN_ANDEREM = 80;
+    static final int MIN_KV_GLEICHER_BEREICH_IP = 60;
 
     private static final String[] FORMEN = {"LAUFWERK", "UNC", "UNIX", "HOME", "HOST", "RELATIV", "EINZEL_BACKSLASH",
         "BENUTZER_WURZEL", "WURZEL_ZWEI_SEGMENTE", "UMGEBUNG", "FILE_URI"};
@@ -61,6 +71,9 @@ class RoundtripFuzzTest {
 
     private static final String[] TRENNER = {" ", " ", " ", "\n", "\r\n", ", ", "", " - ", "\t"};
 
+    /** Teil 1b: Trenner ohne einzelnes Gruppentrennerzeichen vor einer Ziffer, damit keine Ziffernketten wachsen. */
+    private static final String[] TRENNER_KV = {"\n", "\r\n", ", ", "; ", "\t", " x ", " und ", " | "};
+
     private static final String[] DOMAINS = {"example.invalid", "example.org", "example.net"};
     private static final String[] LOKAL = {"erika.beispiel", "max.mustermann", "a_b", "x+y"};
 
@@ -71,6 +84,7 @@ class RoundtripFuzzTest {
     private static final List<Recognizer> STANDARD_ERKENNER = TextScanner.standard().recognizers();
 
     private static Lauf LAUF;
+    private static Lauf LAUF_KV;
 
     // ------------------------------------------------------------------ Erzeugung
 
@@ -78,23 +92,39 @@ class RoundtripFuzzTest {
     record Fall(String text, List<int[]> pfade, boolean ungeschlossen) {
     }
 
+    /** Teil 1: die unveraenderte Altfolge ohne KV-Bausteine. */
     static List<Fall> erzeuge(long seed) {
+        return erzeuge(seed, false);
+    }
+
+    /** Teil 1b: Texte mit KV-Bausteinen (T-7). */
+    static List<Fall> erzeugeKv(long seed) {
+        return erzeuge(seed, true);
+    }
+
+    private static List<Fall> erzeuge(long seed, boolean mitKv) {
         Random r = new Random(seed);
         List<Fall> faelle = new ArrayList<>(ANZAHL_TEXTE);
         for (int i = 0; i < ANZAHL_TEXTE; i++) {
-            faelle.add(erzeugeText(r));
+            faelle.add(erzeugeText(r, mitKv));
         }
         return faelle;
     }
 
-    private static Fall erzeugeText(Random r) {
+    /**
+     * Bei {@code mitKv = false} verbraucht der Generator genau dieselben Zufallszahlen wie vor T-7 (Hashwert-Test
+     * {@code t7_teil1TextfolgeIstUnveraendert}); die KV-Zweige ziehen nur bei {@code mitKv} Zufallszahlen.
+     */
+    static Fall erzeugeText(Random r, boolean mitKv) {
         StringBuilder sb = new StringBuilder();
         List<int[]> pfade = new ArrayList<>();
         boolean[] ungeschlossen = {false};
         int n = 2 + r.nextInt(9);
         for (int i = 0; i < n; i++) {
             int art = r.nextInt(100);
-            if (art < 45) {
+            if (mitKv && art >= 75 && r.nextInt(5) < 3) {
+                kvBaustein(r, sb);
+            } else if (art < 45) {
                 int form = r.nextInt(FORMEN.length);
                 int start = sb.length();
                 sb.append(pfad(r, form, ungeschlossen));
@@ -102,7 +132,7 @@ class RoundtripFuzzTest {
             } else if (art < 55) {
                 sb.append(LOKAL[r.nextInt(LOKAL.length)]).append('@').append(DOMAINS[r.nextInt(DOMAINS.length)]);
             } else if (art < 63) {
-                sb.append(ip(r));
+                sb.append(mitKv ? ipKv(r) : ip(r));
             } else if (art < 71) {
                 sb.append(url(r));
             } else if (art < 78) {
@@ -114,7 +144,8 @@ class RoundtripFuzzTest {
             } else {
                 sb.append(SONDER[r.nextInt(SONDER.length)]);
             }
-            sb.append(TRENNER[r.nextInt(TRENNER.length)]);
+            String[] trenner = mitKv ? TRENNER_KV : TRENNER;
+            sb.append(trenner[r.nextInt(trenner.length)]);
         }
         return new Fall(sb.toString(), pfade, ungeschlossen[0]);
     }
@@ -122,6 +153,117 @@ class RoundtripFuzzTest {
     private static String ip(Random r) {
         String[] netze = {"192.0.2.", "198.51.100.", "203.0.113."};
         return netze[r.nextInt(netze.length)] + r.nextInt(256);
+    }
+
+    // ------------------------------------------------------------------ Teil 1b: KV-Bausteine
+
+    private static final String[] KW_LANR_F = {"LANR", "lanr", "Lanr", "LANR-Nr.", "LANRNR", "Arztnummer", "Arzt-Nr.",
+        "Arzt Nummer", "Praxis-LANR", "Lebenslange Arztnummer", "ARZT-NR", "arztnr"};
+    private static final String[] KW_IK_F = {"IK", "ik", "Ik", "IK-Nr.", "IKNR", "IK-Nummer", "IKNUMMER",
+        "Institutionskennzeichen", "Praxis-IK", "INSTITUTIONSKENNZEICHEN", "iknr"};
+    private static final String[] KV_ZWISCHEN = {" ", ": ", ":", " Nr. ", " ist ", " lautet ", " = ", "\u00A0",
+        " bitte ", " der Praxis ", "\u00A0\u00A0", "  "};
+    private static final String[] GRUPPENTRENNER = {" ", "\u00A0", "-", ".", "/"};
+    private static final String[] UMBRUECHE = {"\n", "\r\n", "\r", "\n\n", "\u2028", "\u0085", "\n "};
+    private static final String[] LANR_TRENNERFORMEN = {SynthetischeKvNummern.LANR_TRENNER_LEERZEICHEN,
+        SynthetischeKvNummern.LANR_TRENNER_UNGLEICHE_GRUPPEN, SynthetischeKvNummern.LANR_TRENNER_NBSP,
+        SynthetischeKvNummern.LANR_TRENNER_SCHRAEGSTRICH};
+    private static final String[] IK_TRENNERFORMEN = {SynthetischeKvNummern.IK_TRENNER_BINDESTRICH,
+        SynthetischeKvNummern.IK_TRENNER_PUNKT, SynthetischeKvNummern.IK_TRENNER_GRUPPE_6_3,
+        SynthetischeKvNummern.IK_TRENNER_NBSP};
+    private static final String[] LANR_UNGUELTIG = {SynthetischeKvNummern.LANR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN,
+        SynthetischeKvNummern.LANR_UNGUELTIG_VERTAUSCHT, SynthetischeKvNummern.LANR_UNGUELTIG_ZIFFER_GEAENDERT};
+    private static final String[] IK_UNGUELTIG = {SynthetischeKvNummern.IK_UNGUELTIG_KOMPLEMENT,
+        SynthetischeKvNummern.IK_UNGUELTIG_NULL, SynthetischeKvNummern.IK_UNGUELTIG_VERTAUSCHT};
+    private static final String[] LAENGEN = {SynthetischeKvNummern.LAENGE_4, SynthetischeKvNummern.LAENGE_5,
+        SynthetischeKvNummern.LAENGE_6, SynthetischeKvNummern.LAENGE_7, SynthetischeKvNummern.LAENGE_8,
+        SynthetischeKvNummern.LAENGE_10, SynthetischeKvNummern.LAENGE_12, SynthetischeKvNummern.LAENGE_13};
+    /** Letzte Stelle der Doku-IP bei "IK" davor (die Waechterpruefung prueft jeden Text). */
+    private static final String[] IP_ENDEN = {"1", "2", "3", "4", "6", "7", "8", "9"};
+    private static final String[] AUFZAEHLER = {", ", " und ", "; "};
+
+    private static String waehle(Random r, String[] auswahl) {
+        return auswahl[r.nextInt(auswahl.length)];
+    }
+
+    private static String kvNummer(Random r, boolean lanr) {
+        return lanr ? SynthetischeKvNummern.bildeLanr(r) : SynthetischeKvNummern.bildeIk(r);
+    }
+
+    /** Neun Ziffern in 3-3-3 mit dem Trenner {@code t}. */
+    private static String gruppiert(String neun, String t) {
+        return neun.substring(0, 3) + t + neun.substring(3, 6) + t + neun.substring(6);
+    }
+
+    /**
+     * IP nur aus zwei Dokumentationsbereichen und so, dass die Ziffern der Adresse nie genau neun ergeben
+     * (W\u00E4chter):
+     * 192.0.2.x hat h\u00F6chstens acht Ziffern, bei 198.51.100.x ist x mindestens zweistellig.
+     */
+    private static String ipKv(Random r) {
+        if (r.nextBoolean()) {
+            return "192.0.2." + r.nextInt(256);
+        }
+        return "198.51.100." + (10 + r.nextInt(246));
+    }
+
+    /** Ein KV-Baustein aus Plan T-7: Kontextw\u00F6rter, Trennerformen, Umbr\u00FCche, Aufz\u00E4hlung. */
+    private static void kvBaustein(Random r, StringBuilder sb) {
+        boolean lanr = r.nextBoolean();
+        String kw = waehle(r, lanr ? KW_LANR_F : KW_IK_F);
+        String zw = waehle(r, KV_ZWISCHEN);
+        switch (r.nextInt(15)) {
+            case 0:
+            case 1:
+                sb.append(kw).append(zw).append(kvNummer(r, lanr));
+                break;
+            case 2:
+                sb.append(kw).append(zw).append(gruppiert(kvNummer(r, lanr), waehle(r, GRUPPENTRENNER)));
+                break;
+            case 3:
+                sb.append(kw).append(zw).append(waehle(r, lanr ? LANR_TRENNERFORMEN : IK_TRENNERFORMEN));
+                break;
+            case 4:
+                sb.append(kw).append(zw).append(waehle(r, lanr ? LANR_UNGUELTIG : IK_UNGUELTIG));
+                break;
+            case 5:
+                sb.append(kw).append(zw).append(waehle(r, LAENGEN));
+                break;
+            case 6:
+                sb.append(kw).append(' ').append(kvNummer(r, lanr)).append(waehle(r, AUFZAEHLER))
+                        .append(kvNummer(r, lanr)).append(waehle(r, AUFZAEHLER)).append(kvNummer(r, lanr));
+                break;
+            case 7:
+                sb.append(kw).append(r.nextBoolean() ? ":" : "").append(waehle(r, UMBRUECHE))
+                        .append(kvNummer(r, lanr));
+                break;
+            case 8:
+                sb.append(kvNummer(r, lanr));
+                sb.append(r.nextBoolean() ? " (" + kw + ")" : " ist die " + kw);
+                break;
+            case 9:
+                sb.append(kw).append('\u00A0').append(gruppiert(kvNummer(r, lanr), "\u00A0"));
+                break;
+            case 10:
+                sb.append("https://intranet.invalid/praxis?").append(waehle(r, lanr ? KW_LANR_F : KW_IK_F))
+                        .append(r.nextBoolean() ? "=" : ":").append(kvNummer(r, lanr)).append("&x=1");
+                break;
+            case 11:
+                sb.append("\"").append(bs("C:\u00A6Praxis\u00A6")).append(kw).append(' ').append(kvNummer(r, lanr))
+                        .append(bs("\u00A6x.txt")).append("\"");
+                break;
+            case 12:
+                sb.append(lanr ? "LANR" : "IK").append(r.nextBoolean() ? "-" : "+").append(kvNummer(r, lanr))
+                        .append("@example.invalid");
+                break;
+            case 13:
+                sb.append(waehle(r, KW_IK_F)).append(zw).append(r.nextBoolean() ? SynthetischeKvNummern.IK_FORM_DOKU_IP
+                        : "198.51.100." + waehle(r, IP_ENDEN));
+                break;
+            default:
+                sb.append(kvNummer(r, lanr));
+                break;
+        }
     }
 
     private static String url(Random r) {
@@ -224,9 +366,14 @@ class RoundtripFuzzTest {
 
     /** Ergebnis des gesamten Laufs: erste Verletzung und Anzahl je Eigenschaft sowie Klassenhäufigkeiten. */
     static final class Lauf {
+        final long seed;
         final Map<String, int[]> verletzungen = new LinkedHashMap<>();
         final Map<String, Integer> klassen = new TreeMap<>();
         int eingabenOhneAusnahme;
+
+        Lauf(long seed) {
+            this.seed = seed;
+        }
 
         void verletzt(String eigenschaft, int iteration) {
             int[] v = verletzungen.computeIfAbsent(eigenschaft, k -> new int[] {iteration, 0});
@@ -244,9 +391,9 @@ class RoundtripFuzzTest {
         String meldung(String eigenschaft) {
             int[] v = verletzungen.get(eigenschaft);
             if (v == null) {
-                return "Startwert " + SEED_TEXTE;
+                return "Startwert " + seed;
             }
-            return "Startwert " + SEED_TEXTE + ", Eigenschaft " + eigenschaft + ", erste Iteration " + v[0]
+            return "Startwert " + seed + ", Eigenschaft " + eigenschaft + ", erste Iteration " + v[0]
                     + ", betroffene Iterationen " + v[1];
         }
 
@@ -259,6 +406,7 @@ class RoundtripFuzzTest {
     @BeforeAll
     static void lauf() {
         LAUF = fuehreAus();
+        LAUF_KV = fuehreKvAus();
     }
 
     private static boolean paarGetrennt(String s, int pos) {
@@ -281,8 +429,30 @@ class RoundtripFuzzTest {
                 || (b.start() < a.start() && a.start() < b.end() && b.end() < a.end());
     }
 
+    /** Teil 1b (T-7): Texte mit KV-Bausteinen; jeder Text wird vor dem Scan mit dem Waechter geprueft. */
+    private static Lauf fuehreKvAus() {
+        Lauf lauf = new Lauf(SEED_TEXTE_KV);
+        TextScanner scanner = TextScanner.standard();
+        Random auswahl = new Random(SEED_AUSWAHL_KV);
+        List<Fall> faelle = erzeugeKv(SEED_TEXTE_KV);
+        for (int it = 0; it < faelle.size(); it++) {
+            Fall fall = faelle.get(it);
+            String text = fall.text();
+            if (KvTestHilfen.neunerfenster(text, "00")[1] != 0) {
+                lauf.verletzt("waechter-gueltiges-neunerfenster-ohne-00", it);
+                continue;
+            }
+            try {
+                pruefeText(lauf, scanner, auswahl, it, fall, text);
+            } catch (RuntimeException e) {
+                lauf.verletzt("ausnahme-im-lauf", it);
+            }
+        }
+        return lauf;
+    }
+
     private static Lauf fuehreAus() {
-        Lauf lauf = new Lauf();
+        Lauf lauf = new Lauf(SEED_TEXTE);
         TextScanner scanner = TextScanner.standard();
         Random auswahl = new Random(SEED_AUSWAHL);
         List<Fall> faelle = erzeuge(SEED_TEXTE);
@@ -381,6 +551,7 @@ class RoundtripFuzzTest {
         }
 
         // Klassen
+        kvKlassen(lauf, kandidaten, scan);
         if (!scan.isEmpty()) {
             lauf.klasse("scan-fund");
         }
@@ -480,6 +651,53 @@ class RoundtripFuzzTest {
         }
         if (!zurueck.unresolved().isEmpty()) {
             lauf.verletzt("ak45-meldung", it);
+        }
+    }
+
+    /**
+     * KV-Klassen (T-7), je Text hoechstens einmal: Fund vom Typ LANR / IK im Scan, KV-Fund der Stufe fraglich,
+     * KV-Kandidat innerhalb eines E-Mail-, URL- oder Pfad-Kandidaten, KV-Kandidat mit demselben Bereich wie ein
+     * IP-Kandidat. Indizes wie in {@code TextScanner.standard()}: 0 E-Mail, 1 IPv4, 2 URL, 3 Pfad, 4 LANR, 5 IK.
+     */
+    private static void kvKlassen(Lauf lauf, List<List<Finding>> kandidaten, List<Finding> scan) {
+        boolean lanr = false;
+        boolean ik = false;
+        boolean fraglich = false;
+        for (Finding f : scan) {
+            boolean istLanr = FindingType.LANR.equals(f.type());
+            boolean istIk = FindingType.IK.equals(f.type());
+            lanr |= istLanr;
+            ik |= istIk;
+            fraglich |= (istLanr || istIk) && f.level() == ConfidenceLevel.FRAGLICH;
+        }
+        boolean inAnderem = false;
+        boolean gleichIp = false;
+        for (int k = 4; k <= 5; k++) {
+            for (Finding kv : kandidaten.get(k)) {
+                for (int a : new int[] {0, 2, 3}) {
+                    for (Finding o : kandidaten.get(a)) {
+                        inAnderem |= o.start() <= kv.start() && kv.end() <= o.end();
+                    }
+                }
+                for (Finding ip : kandidaten.get(1)) {
+                    gleichIp |= ip.start() == kv.start() && ip.end() == kv.end();
+                }
+            }
+        }
+        if (lanr) {
+            lauf.klasse("kv-fund-lanr");
+        }
+        if (ik) {
+            lauf.klasse("kv-fund-ik");
+        }
+        if (fraglich) {
+            lauf.klasse("kv-fraglich");
+        }
+        if (inAnderem) {
+            lauf.klasse("kv-in-anderem-fund");
+        }
+        if (gleichIp) {
+            lauf.klasse("kv-gleicher-bereich-ip");
         }
     }
 
@@ -625,6 +843,86 @@ class RoundtripFuzzTest {
         assertNotEquals(a.hashCode(), anders.hashCode(), "anderer Startwert muss andere Texte liefern");
     }
 
+    /** Hashwert der Teil-1-Textfolge (T-7, vor der Generator-Aenderung am unveraenderten Stand gemessen). */
+    static final int HASH_TEIL_1 = 1480527293;
+
+    @Test
+    void t7_teil1TextfolgeIstUnveraendert() {
+        List<String> texte = new ArrayList<>();
+        for (Fall f : erzeuge(SEED_TEXTE)) {
+            texte.add(f.text());
+        }
+        assertEquals(HASH_TEIL_1, texte.hashCode(), "Hashwert der Teil-1-Textfolge, Startwert " + SEED_TEXTE);
+    }
+
+    // ------------------------------------------------------------------ Teil 1b (T-7): Eigenschaften
+
+    private static void keine(String eigenschaft) {
+        assertEquals(0, LAUF_KV.anzahl(eigenschaft), "Teil 1b: " + LAUF_KV.meldung(eigenschaft));
+    }
+
+    @Test
+    void ak20_kv_waechterSchlaegtBeiKeinemErzeugtenTextAn() {
+        keine("waechter-gueltiges-neunerfenster-ohne-00");
+    }
+
+    @Test
+    void ak20_kv_roundtripIstZeichengleichOhneMeldung() {
+        keine("ak45-roundtrip-ungleich");
+        keine("ak45-pseudonymisierung-wirft");
+        keine("ak45-meldung");
+        keine("ausnahme-im-lauf");
+    }
+
+    @Test
+    void ak22_kv_scanInvarianteUndListenInvariante() {
+        keine("ak1-scan-invariante");
+        keine("ak1-liste-invariante");
+    }
+
+    @Test
+    void ak22_kv_schutzgarantie_jederKandidatDerStandardErkennerIstImScanAbgedeckt() {
+        keine("ak7a-kandidat-nicht-im-scan");
+    }
+
+    @Test
+    void ak22_kv_keinFremdtextImScanUndBereicheSindDieVerschmolzenenKandidaten() {
+        keine("ak7e-fremdtext-im-scan");
+        keine("ak7e-bereiche-nicht-verschmolzen");
+    }
+
+    @Test
+    void ak26_kv_zweiLaeufeMitDemselbenStartwertErzeugenDieselbeTextfolge() {
+        List<String> a = new ArrayList<>();
+        List<String> b = new ArrayList<>();
+        for (Fall f : erzeugeKv(SEED_TEXTE_KV)) {
+            a.add(f.text());
+        }
+        for (Fall f : erzeugeKv(SEED_TEXTE_KV)) {
+            b.add(f.text());
+        }
+        assertEquals(ANZAHL_TEXTE, a.size());
+        assertEquals(a, b, "Teil 1b: Textfolge, Startwert " + SEED_TEXTE_KV);
+        List<String> altfolge = new ArrayList<>();
+        for (Fall f : erzeuge(SEED_TEXTE_KV)) {
+            altfolge.add(f.text());
+        }
+        assertNotEquals(a.hashCode(), altfolge.hashCode(), "Teil 1b unterscheidet sich von der Altfolge");
+    }
+
+    @Test
+    void ak26_kv_fuzzPruftNichtInsLeere_jedeKvKlasseKommtVor() {
+        mindestens(LAUF_KV, "kv-fund-lanr", MIN_KV_LANR);
+        mindestens(LAUF_KV, "kv-fund-ik", MIN_KV_IK);
+        mindestens(LAUF_KV, "kv-fraglich", MIN_KV_FRAGLICH);
+        mindestens(LAUF_KV, "kv-in-anderem-fund", MIN_KV_IN_ANDEREM);
+        mindestens(LAUF_KV, "kv-gleicher-bereich-ip", MIN_KV_GLEICHER_BEREICH_IP);
+        mindestens(LAUF_KV, "scan-fund", 900);
+        mindestens(LAUF_KV, "zusammengelegter-fund", 100);
+        mindestens(LAUF_KV, "manueller-fund", 300);
+        mindestens(LAUF_KV, "echte-teilmenge-der-scan-funde", 300);
+    }
+
     @Test
     void fuzzPruftNichtInsLeere_jedeKlasseKommtVor() {
         mindestens("scan-fund", 900);
@@ -652,8 +950,12 @@ class RoundtripFuzzTest {
     }
 
     private static void mindestens(String klasse, int minimum) {
-        int anzahl = LAUF.klasse_(klasse);
+        mindestens(LAUF, klasse, minimum);
+    }
+
+    private static void mindestens(Lauf lauf, String klasse, int minimum) {
+        int anzahl = lauf.klasse_(klasse);
         assertTrue(anzahl >= minimum, "Klasse " + klasse + " kam in " + anzahl + " von " + ANZAHL_TEXTE
-                + " Fällen vor, erwartet mindestens " + minimum + " (Startwert " + SEED_TEXTE + ")");
+                + " F\u00E4llen vor, erwartet mindestens " + minimum + " (Startwert " + lauf.seed + ")");
     }
 }
