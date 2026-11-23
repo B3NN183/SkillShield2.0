@@ -6,8 +6,9 @@ import java.util.List;
 
 /**
  * Erkennt Krankenversichertennummern (KVNR, ein Buchstabe und neun Ziffern) hinter einem Kontextwort ({@code KVNR},
- * {@code Versichertennummer}, {@code eGK-Nummer}, {@code KV-Nr.} ...). Eine Nummer ohne Kontextwort ist kein Fund
- * (die Erkennung ohne Kontextwort ist nicht Teil dieser Klasse). Alle Kontextregeln von LANR und IK gelten
+ * {@code Versichertennummer}, {@code eGK-Nummer}, {@code KV-Nr.} ...). Eine Nummer ohne Kontextwort ist nur dann ein
+ * Fund, wenn sie die enge Form von Teil 1b hat (siehe den Absatz "ohne Kontextwort" weiter unten). Alle
+ * Kontextregeln von LANR und IK gelten
  * unveraendert: bis drei Fuellwoerter, ein Zeilenumbruch (auch {@code CR}, unsichtbare Zeichen, {@code LF}),
  * Aufzaehlung, nachgestelltes Kontextwort, Komma-Regel und gesperrte Schreibweise ({@code K V N R},
  * {@code K. V. N. R.}).
@@ -24,11 +25,22 @@ import java.util.List;
  * Buchstabenform; {@code VKNR}, {@code Versicherungsnummer}, {@code Rentenversicherungsnummer}, {@code KV} allein und
  * {@code Nr.} allein sind keine Kontextwoerter, und {@code KV-Nr.} ist fuer LANR und IK kein Kontextwort.
  *
+ * <p>KVNR ohne Kontextwort (Teil 1b, {@link KvnrOhneKontext}): Eine geschlossene Form aus einem
+ * ASCII-Grossbuchstaben und neun ASCII-Ziffern (genau zehn Zeichen, keine Trenner) mit gueltiger Pruefziffer, mit
+ * Wortgrenze davor und dahinter (kein Buchstabe, keine Ziffer, kein {@code _ - / \ @}, kein {@code .} oder {@code ,}
+ * mit Ziffer dahinter) und ohne Wort der Negativliste (D-4, etwa {@code Rechnungsnummer}, {@code Aktenzeichen})
+ * unmittelbar davor ist ein Fund ueber die zehn Zeichen mit 0.60 (fraglich) und der Quelle
+ * {@code kvnr-ohne-kontext}. Ein Fund mit Kontextwort hat Vorrang; es entsteht nie ein zweiter. Eine
+ * Nicht-ASCII-Ziffer direkt neben der Form sperrt den Fund (Lesart im Javadoc von {@link KvnrOhneKontext}).
+ *
  * <p>Bekannte Grenzen (je Grenze ein Test {@code bekannteGrenze...}, Tabelle im Javadoc von {@code KvnrGrenzenTest};
  * Einzelheiten und alle Kennungen im Javadoc von {@link KvNumberScanner}). "Kein Fund" heisst: kein KVNR-Fund, die
  * Nummer bleibt im Klartext, sofern kein anderer Erkenner sie deckt.
  * <ul>
- * <li>G-K1: Eine KVNR ohne Kontextwort ist kein Fund (diese Klasse sucht nur hinter einem Kontextwort).</li>
+ * <li>G-K1 (berichtigt nach Nachtrag 2 zu T-10): Eine KVNR ohne Kontextwort ist nur als geschlossene,
+ * grossgeschriebene Form mit gueltiger Pruefziffer ein Fund (Teil 1b, 0.60). Kein Fund bleiben Kleinschreibung,
+ * jede Schreibweise mit Trenner, eine verletzte Wortgrenze, ein Wort der Negativliste (D-4) davor und eine
+ * ungueltige Pruefziffer.</li>
  * <li>G-K3: Zwei Buchstaben, Nicht-ASCII-Zeichen in der Nummer und Woerter ausserhalb der Liste ({@code KVID},
  * {@code Versicherungsnummer}, {@code Krankenversicherungs-Nr.}) erschliessen nichts.</li>
  * <li>G-K4: Ziffern direkt an einem Wort ({@code KVNR} plus Ziffern ohne Leerzeichen, {@code AB} plus Ziffern) sind
@@ -112,7 +124,7 @@ public final class KvnrRecognizer implements Recognizer {
 
     @Override
     public List<Finding> detect(String text) {
-        return KvNumberScanner.detect(KvArt.KVNR, text);
+        return KvnrOhneKontext.ergaenze(text, KvNumberScanner.detect(KvArt.KVNR, text));
     }
 
     /** Der KVNR-Erkenner ist nachrangig: Der {@code TextScanner} schneidet seine Kandidaten, die einen aufgeloesten

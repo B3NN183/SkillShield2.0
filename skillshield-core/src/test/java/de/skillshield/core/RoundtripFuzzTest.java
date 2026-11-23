@@ -4402,9 +4402,11 @@ class RoundtripFuzzTest {
     /**
      * Die markierten Bloecke (dokumentierte Grenzen, Markierung aus dem fertigen Text, {@link #grenzklasseF}) sind
      * einzeln gezaehlt, damit nichts verdeckt wird. Messwerte bei festem Seed: 82 markierte Bloecke (1,7 % aller
-     * Bloecke), davon 77 ohne und 5 mit Scan-Abdeckung. Kontextwort am Buchstaben (Nachtrag zu T-4, Punkt 3): 20, alle
-     * ohne Abdeckung. Langer Pfad zwischen Kontextwort und Nummer (Nachtrag 5 zu T-6, Punkt 3): 60, davon 55 ohne und
-     * 5 mit Abdeckung (ein markierter Block ist ein nachgestellter Block hinter einem langen Pfad). KV-Vorwort vor
+     * Bloecke), davon 60 ohne und 22 mit Scan-Abdeckung (Nachtrag 2 zu T-10: vorher 77 und 5; Teil 1b deckt 17 Bloecke
+     * der Klasse langer Pfad ab). Kontextwort am Buchstaben (Nachtrag zu T-4, Punkt 3): 20, alle
+     * ohne Abdeckung. Langer Pfad zwischen Kontextwort und Nummer (Nachtrag 5 zu T-6, Punkt 3): 60, davon 38 ohne und
+     * 22 mit Abdeckung (vorher 55 und 5; ein markierter Block ist ein nachgestellter Block hinter einem langen
+     * Pfad). KV-Vorwort vor
      * reiner Ziffernfolge mit nachgestelltem Kontextwort (Nachtrag zu T-7, G-K7, engere Regel nach Nachtrag 2 zu
      * T-7, Punkt 3): 2, beide ohne Abdeckung; es sind die Bloecke, die ohne diese Markierung den strikten Zaehler
      * rissen, und kein markierter Block dieser Klasse hat eine Abdeckung. Die Grenze 14e beim gesperrt geschriebenen
@@ -4413,8 +4415,10 @@ class RoundtripFuzzTest {
     @Test
     void t7_kvF_markierteBloecke_sindEinzelnGezaehlt() {
         assertEquals(82, LAUF_KV_F.klasse_("block-markiert"), "markierte Bloecke");
-        assertEquals(77, LAUF_KV_F.klasse_("markiert-ohne-abdeckung"), "markierte Bloecke ohne Abdeckung");
-        assertEquals(5, LAUF_KV_F.klasse_("markiert-mit-abdeckung"), "markierte Bloecke mit Abdeckung");
+        // Nachtrag 2 zu T-10: Teil 1b (KVNR ohne Kontextwort) deckt 17 markierte Bloecke ab, alle in der Klasse
+        // langer Pfad; alte Werte: ohne Abdeckung 77, mit Abdeckung 5.
+        assertEquals(60, LAUF_KV_F.klasse_("markiert-ohne-abdeckung"), "markierte Bloecke ohne Abdeckung");
+        assertEquals(22, LAUF_KV_F.klasse_("markiert-mit-abdeckung"), "markierte Bloecke mit Abdeckung");
         assertEquals(2, LAUF_KV_F.klasse_("block-markiert-" + GRENZE_KV_VORWORT_ZIFFERN), "KV-Vorwort, Ziffern");
         assertEquals(2, LAUF_KV_F.klasse_("markiert-ohne-abdeckung-" + GRENZE_KV_VORWORT_ZIFFERN),
                 "KV-Vorwort, Ziffern, ohne Abdeckung");
@@ -4424,9 +4428,10 @@ class RoundtripFuzzTest {
         assertEquals(20, LAUF_KV_F.klasse_("markiert-ohne-abdeckung-" + GRENZE_AM_BUCHSTABEN),
                 "Kontextwort am Buchstaben ohne Abdeckung");
         assertEquals(60, LAUF_KV_F.klasse_("block-markiert-" + GRENZE_LANGER_PFAD), "langer Pfad");
-        assertEquals(55, LAUF_KV_F.klasse_("markiert-ohne-abdeckung-" + GRENZE_LANGER_PFAD),
+        // Nachtrag 2 zu T-10: alte Werte langer Pfad ohne Abdeckung 55, mit Abdeckung 5 (Teil 1b deckt 17 ab).
+        assertEquals(38, LAUF_KV_F.klasse_("markiert-ohne-abdeckung-" + GRENZE_LANGER_PFAD),
                 "langer Pfad ohne Abdeckung");
-        assertEquals(5, LAUF_KV_F.klasse_("markiert-mit-abdeckung-" + GRENZE_LANGER_PFAD),
+        assertEquals(22, LAUF_KV_F.klasse_("markiert-mit-abdeckung-" + GRENZE_LANGER_PFAD),
                 "langer Pfad mit Abdeckung");
         assertEquals(0, LAUF_KV_F.klasse_("block-markiert-" + GRENZE_SPERR_EINZELBUCHSTABE),
                 "Einzelbuchstabe vor gesperrtem Kontextwort");

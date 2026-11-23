@@ -29,6 +29,7 @@ import de.skillshield.core.recognizer.kv.KvStandTrenner;
 import de.skillshield.core.recognizer.kv.KvnrBsnrHilfen;
 import de.skillshield.core.recognizer.kv.KvnrBsnrHilfen.Abweichungen;
 import de.skillshield.core.recognizer.kv.KvnrBsnrHilfen.S3;
+import de.skillshield.core.recognizer.kv.KvnrOhneKontextAusnahme;
 import de.skillshield.core.recognizer.kv.LanrRecognizer;
 import java.util.ArrayList;
 import java.util.List;
@@ -416,10 +417,15 @@ class KvStandTrennerDifferenzTest {
     @Test
     void scannerebene_s1UndS2_keinVerstossUndKeinKollisionsfallAufDenBestandsmengen() {
         Messung[] m = messungen();
+        List<List<String>> mengen = mengen(); // Nachtrag 2 zu T-10: fuer die Zaehlung der Ausnahme (neue Zeile)
         for (int i = 0; i < m.length; i++) {
             Abweichungen a = m[i].abweichungen;
             assertEquals(0, a.verstoesse(), NAMEN[i] + ": Verstoesse gegen S-1/S-2; " + a.kurz());
-            assertEquals(0, a.k1(), NAMEN[i] + ": Kollisionsfall K-1; " + a.kurz());
+            // Nachtrag 2 zu T-10: Teil 1b ersetzt LANR-/IK-Funde auf gueltiger KVNR-Form; alter Wert: 0 je Menge,
+            // jetzt exakt 5 / 1 / 5 / 1 (Teil 1c / 1d / 1e / Generatoren), die Ausnahme zaehlt sie einzeln.
+            KvnrOhneKontextAusnahme.pruefe(NAMEN[i], mengen.get(i), ALT, NEU);
+            assertEquals(KvnrOhneKontextAusnahme.erwartet(NAMEN[i]).ersetzt(), a.k1(),
+                    NAMEN[i] + ": Kollisionsfall K-1; " + a.kurz());
             assertEquals(0, a.k2(), NAMEN[i] + ": Kollisionsfall K-2; " + a.kurz());
             assertEquals(0, a.k3(), NAMEN[i] + ": Kollisionsfall K-3; " + a.kurz());
             assertEquals(0, a.k4(), NAMEN[i] + ": Kollisionsfall K-4; " + a.kurz());

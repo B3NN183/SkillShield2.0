@@ -174,7 +174,8 @@ class KvnrFuzzBestandTest {
     private static final int MAX_FENSTERFERN = 70;
 
     /**
-     * Kollisionsfaelle (zulaessig im Fenster der Pruefregel), exakte Messwerte. Teil 1f: K-1 1 532, K-2 336, K-3 0
+     * Kollisionsfaelle (zulaessig im Fenster der Pruefregel), exakte Messwerte. Teil 1f: K-1 1 533 (Nachtrag 2 zu
+     * T-10, vorher 1 532), K-2 336, K-3 0
      * (exakt 0, kein Mindestwert: ein K-3-Fall braucht einen Restfund ueber einem alten Fund, siehe Nachtrag zu T-7),
      * K-4 0 (K-4 gibt es nur zwischen KV-Arten und bei Teilueberlappung ohne Trenner, die der Generator nicht
      * erzeugt); Untergrenzen K-1 und K-2 bei 70 % der Messwerte. Korpus: K-1 und K-2 wie in
@@ -184,7 +185,8 @@ class KvnrFuzzBestandTest {
     void ak19_neueMengen_kollisionsfaelle_exakteMesswerteUndMindestzahlen() {
         Messung[] m = messungen();
         Ergebnis f1 = m[0].ergebnis();
-        assertEquals(1532, f1.k1(), "Teil 1f: K-1; " + f1.kurz());
+        // Nachtrag 2 zu T-10: alter Wert 1532; ein LANR-/IK-Fund wird nun von Teil 1b (KVNR ohne Kontextwort) ersetzt.
+        assertEquals(1533, f1.k1(), "Teil 1f: K-1; " + f1.kurz());
         assertEquals(336, f1.k2(), "Teil 1f: K-2; " + f1.kurz());
         assertEquals(0, f1.k3(), "Teil 1f: K-3; " + f1.kurz());
         assertEquals(0, f1.k4(), "Teil 1f: K-4; " + f1.kurz());

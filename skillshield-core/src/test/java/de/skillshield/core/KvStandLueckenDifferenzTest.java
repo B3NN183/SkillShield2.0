@@ -22,6 +22,7 @@ import de.skillshield.core.recognizer.general.UrlRecognizer;
 import de.skillshield.core.recognizer.kv.KvKontextLueckenEigenschaftTest;
 import de.skillshield.core.recognizer.kv.KvStandLuecken;
 import de.skillshield.core.recognizer.kv.KvTestHilfen;
+import de.skillshield.core.recognizer.kv.KvnrOhneKontextAusnahme;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -381,7 +382,9 @@ class KvStandLueckenDifferenzTest {
     private static int typVerlusteTexte(TextScanner neu, List<String> texte) {
         int verloren = 0;
         for (String text : texte) {
-            List<Finding> neuFunde = neu.scan(text);
+            // Nachtrag 2 zu T-10: Funde der Ausnahme (KVNR ohne Kontextwort, Teil 1b) zaehlen nicht als Typverlust;
+            // alter Wert: List<Finding> neuFunde = neu.scan(text);
+            List<Finding> neuFunde = KvnrOhneKontextAusnahme.ohneAusnahme(text, ALT.scan(text), neu.scan(text));
             boolean[] kvNeu = abdeckung(text.length(), neuFunde.stream().filter(f -> istKv(f)).toList());
             boolean[] alleNeu = abdeckung(text.length(), neuFunde);
             boolean fehlt = false;
@@ -430,6 +433,14 @@ class KvStandLueckenDifferenzTest {
         assertEquals(0, typVerlusteTexte(NEU, TEIL_1C), "Teil 1c: Texte mit Typverlust");
         assertEquals(0, typVerlusteTexte(NEU, TEIL_1D), "Teil 1d: Texte mit Typverlust");
         assertEquals(0, typVerlusteTexte(NEU, GENERATOREN), "Generatoren: Texte mit Typverlust");
+        // Nachtrag 2 zu T-10: die ausgenommenen Funde (typVerlusteTexte) werden je Menge exakt gezaehlt
+        // (Teil 1c 5, 1d 1, Generatoren 1 ersetzt und 1 frei, sonst 0); alter Stand: keine Ausnahme.
+        KvnrOhneKontextAusnahme.pruefe("Teil 1", teil1(), ALT, NEU);
+        KvnrOhneKontextAusnahme.pruefe("Teil 1b", teil1b(), ALT, NEU);
+        KvnrOhneKontextAusnahme.pruefe("Korpus", KvDifferenzTest.korpus(), ALT, NEU);
+        KvnrOhneKontextAusnahme.pruefe("Teil 1c", TEIL_1C, ALT, NEU);
+        KvnrOhneKontextAusnahme.pruefe("Teil 1d", TEIL_1D, ALT, NEU);
+        KvnrOhneKontextAusnahme.pruefe("Generatoren", GENERATOREN, ALT, NEU);
     }
 
     @Test
@@ -459,7 +470,10 @@ class KvStandLueckenDifferenzTest {
      */
     private static int neuUnerklaert(TextScanner neu, String text) {
         boolean[] alt = abdeckung(text.length(), ALT.scan(text));
-        boolean[] jetzt = abdeckung(text.length(), neu.scan(text));
+        // Nachtrag 2 zu T-10: Funde der Ausnahme (KVNR ohne Kontextwort, Teil 1b) zaehlen nicht als neu abgedeckt;
+        // alter Wert: boolean[] jetzt = abdeckung(text.length(), neu.scan(text));
+        boolean[] jetzt = abdeckung(text.length(),
+                KvnrOhneKontextAusnahme.ohneAusnahme(text, ALT.scan(text), neu.scan(text)));
         KvTestHilfen.Vergleichsform vf = KvTestHilfen.wortVergleichsform(text, KvTestHilfen.LANR_ART,
                 KvTestHilfen.IK_ART);
         boolean[] erklaert = abdeckung(text.length(), vf.aufOriginal(ALT.scan(vf.text())));
@@ -530,6 +544,8 @@ class KvStandLueckenDifferenzTest {
         }
         for (int i = 0; i < namen.length; i++) {
             assertEquals(0, ergebnis[i][2], namen[i] + ": Texte mit neu abgedeckter Position; " + alle);
+            // Nachtrag 2 zu T-10: die ausgenommenen Funde (neuUnerklaert) exakt zaehlen; alter Stand: keine Ausnahme.
+            KvnrOhneKontextAusnahme.pruefe(namen[i], mengen.get(i), ALT, NEU);
         }
         for (int i = 0; i < namen.length; i++) {
             assertTrue(ergebnis[i][0] >= MIN_GEPRUEFT[i], namen[i] + ": zu wenig geprueft; " + alle);
@@ -940,6 +956,10 @@ class KvStandLueckenDifferenzTest {
             List<String> texte = t9Mengen().get(i);
             assertEquals(0, verloreneTexte(NEU, texte), T9_NAMEN[i] + ": Texte mit verlorener Position");
             assertEquals(0, typVerlusteTexte(NEU, texte), T9_NAMEN[i] + ": Texte mit Typverlust");
+            // Nachtrag 2 zu T-10: ausgenommene Funde exakt zaehlen (Teil 1e 5, davon 1 ersetzt und 4 frei, weil die
+            // Kopie hier keine Trenner kennt; Korpus Teil 2 0); alter Stand: keine Ausnahme.
+            KvnrOhneKontextAusnahme.pruefe(T9_NAMEN[i], texte, ALT, NEU,
+                    KvnrOhneKontextAusnahme.erwartetGegenLuecken(T9_NAMEN[i]));
             int gegenVergleichsform = 0;
             for (String text : texte) {
                 gegenVergleichsform += verlorenGegenVergleichsform(NEU, text) > 0 ? 1 : 0;
@@ -967,6 +987,9 @@ class KvStandLueckenDifferenzTest {
             List<String> texte = t9Mengen().get(i);
             int[] z = fehlalarmScannerebene(NEU, texte);
             assertEquals(0, z[2], T9_NAMEN[i] + ": Texte mit unerklaert neu abgedeckter Position");
+            // Nachtrag 2 zu T-10: ausgenommene Funde (neuUnerklaert) exakt zaehlen; alter Stand: keine Ausnahme.
+            KvnrOhneKontextAusnahme.pruefe(T9_NAMEN[i], texte, ALT, NEU,
+                    KvnrOhneKontextAusnahme.erwartetGegenLuecken(T9_NAMEN[i]));
             assertTrue(z[0] >= minGeprueft[i], T9_NAMEN[i] + ": zu wenig geprueft " + z[0]);
             assertTrue(z[1] >= minAusgenommen[i], T9_NAMEN[i] + ": zu wenig ausgenommen " + z[1]);
             assertTrue(z[3] >= minAlteFunde[i], T9_NAMEN[i] + ": zu wenig alte KV-Funde " + z[3]);

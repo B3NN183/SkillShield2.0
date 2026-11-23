@@ -1333,3 +1333,40 @@ Tests in `KvnrGrenzenTest`, sofern nicht anders genannt. Diese Liste ergänzt un
      Generator-Tests), ändert der engineer **nichts** an diesen Tests, sondern hält an und meldet Testname und
      Zahl; die Hauptsitzung entscheidet (Regel 15).
   4. Nicht-ASCII-Ziffer als Nachbar der Form: Lesart frei (Nachtrag 3 zu T-9), im Javadoc zu dokumentieren.
+- **Nachtrag 2 zu T-10 – Entscheidung zu D-5 / Regel 15 (Hauptsitzung, 23.11.2026):**
+  Der engineer hat nach Regel 15 angehalten: Produkt 1b fertig, 9 bestehende Tests rot. Messwerte gegen den
+  eingefrorenen Prüfstand (alle grün): (a) 13 KVNR-Funde auf den Bestandsmengen, alle auf den Referenzstellen
+  (vollständig gültige Form, Quelle `kvnr-ohne-kontext`, 0,60), 0 außerhalb; 12 davon ersetzen einen LANR-/IK-Fund
+  auf denselben Ziffern (K-1/R-2, in Kap. 2 angenommen), 1 Stelle war bisher frei; (b) 0 Funde auf 159
+  Fremdmustern; (c) 9 947 von 100 000 (Grenze 10 500, rechnerische Erwartung 10 000).
+  **Entscheidung: Teil 1b bleibt.** Begründung nach der Nutzervorgabe „wenn es vermehrt zu Fehlalarmen führt,
+  sollten wir es lassen": Es gibt keine vermehrten Fehlalarme – kein Fund auf Fremdmustern, kein Fund außerhalb
+  einer vollständig gültigen Form, die Zufallsquote liegt im rechnerisch unvermeidbaren Bereich und unter der
+  Grenze. Die 9 roten Tests halten den alten Zustand exakt fest und schlagen genau wegen der gewollten Wirkung an.
+  Vom Wortlaut von D-5 (a) („0 zusätzliche KVNR-Funde") wird damit bewusst abgewichen; dem Nutzer wird das
+  berichtet.
+  **Zulässige Anpassung der 9 Tests (eng, sonst nichts):**
+  1. Nur Erwartungswerte bzw. eine eng gefasste Ausnahme; keine Textliste, kein Generator, kein Seed, kein Hash,
+     keine Referenz, keine Prüfregel in `KvnrBsnrHilfen` wird geändert.
+  2. Die Ausnahme gilt ausschließlich für Abweichungen, deren neuer Fund Typ KVNR, Quelle `kvnr-ohne-kontext` und
+     Konfidenz 0,60 hat und zehn Zeichen umfasst (ein Großbuchstabe + die neun Ziffern des alten Fundes); ihre Zahl
+     wird je Menge **exakt** festgehalten (K-1: Teil 1c 5, 1d 1, 1e 5, Generatoren 1; frei: Generatoren 1). Jede
+     andere Abweichung bleibt ein Fehler.
+  3. Fuzz 1f: exakte Messwerte nachziehen (K-1 1532 → 1533; markierte Blöcke ohne Abdeckung 77 → 60, mit
+     Aufschlüsselung je Markierung); Seeds und `HASH_TEIL_1F` bleiben.
+  4. Für `KvStandTrennerDifferenzTest` (Tag `kb-t1-bestand`) ist dies die einzige zugelassene Änderung an einer
+     eingefrorenen Datei; alle anderen eingefrorenen Dateien bleiben unverändert. security prüft den Diff der 9
+     Tests Zeile für Zeile.
+  5. Jede geänderte Stelle trägt einen Kommentar mit Verweis auf diesen Nachtrag und dem alten Wert.
+- **Nachtrag 3 zu T-10 (zweiter Durchlauf, angenommen):** Die Ausnahme-Logik steht in der neuen Testhilfe
+  `recognizer/kv/KvnrOhneKontextAusnahme` (gehört zum 1b-Inventar). In `KvStandLueckenDifferenzTest` ist die
+  Vergleichsbasis der ältere Stand ohne Trenner; dort teilen sich die 5 Funde aus Teil 1e in 1 „ersetzt" und 4
+  „frei" (dieselben 5 Funde, gegen `ALT_TRENNER` 5 „ersetzt"). Fuzz 1f: K-1 1533; markierte Blöcke ohne
+  Abdeckung 60 (`kw-am-buchstaben` 20, `langer-pfad` 38, `kv-vorwort-ziffern` 2), mit Abdeckung 22 (alle
+  `langer-pfad`) – 1b schließt damit G-K15 teilweise, wenn die Nummer geschlossen und großgeschrieben ist.
+- **Nachtrag 4 zu T-10 (Ergänzung des 1b-Inventars, Regel 14, auf Hinweis des reviewers):** Zum 1b-Inventar gehören
+  zusätzlich `test/…/recognizer/kv/KvnrOhneKontextAusnahme.java`, `test/…/KvnrOhneKontextBestandTest.java` und die
+  mit „Nachtrag 2 zu T-10" markierten Stellen in `KvStandTrennerDifferenzTest`, `KvnrScannerBestandTest`,
+  `KvStandLueckenDifferenzTest`, `KvnrFuzzBestandTest`, `RoundtripFuzzTest`. Bei einer Rücknahme (T-R) werden
+  diese Stellen auf den im Kommentar genannten alten Wert zurückgesetzt. Regel 12 Satz 3 gilt mit dieser
+  erweiterten Liste.

@@ -261,8 +261,11 @@ import java.util.Set;
  * sind kein Soll fuer kuenftige Erweiterungen. "Kein Fund" heisst: kein KVNR-Fund; die Nummer bleibt im Klartext,
  * sofern kein anderer Erkenner sie deckt. Jede Grenze gilt fuer die KVNR; LANR und IK sind unveraendert.
  * <ul>
- * <li>G-K1: Eine KVNR ohne Kontextwort ist kein Fund, in jeder Schreibweise (auch mit einem Wort wie
- * {@code Rechnungsnummer} davor).</li>
+ * <li>G-K1: Dieser Scanner (Teil 1a) findet eine KVNR ohne Kontextwort nie, in keiner Schreibweise. Seit Teil 1b
+ * ({@link KvnrOhneKontext}, in {@link KvnrRecognizer} nachgeschaltet; berichtigt nach Nachtrag 2 zu T-10) ist eine
+ * geschlossene, grossgeschriebene Form (Buchstabe und neun Ziffern) mit gueltiger Pruefziffer auch ohne Kontextwort
+ * ein Fund (0,60); kein Fund bleiben Kleinschreibung, jede Schreibweise mit Trenner, eine verletzte Wortgrenze, ein
+ * Wort der Negativliste (D-4, etwa {@code Rechnungsnummer}) davor und eine ungueltige Pruefziffer.</li>
  * <li>G-K3: Zwei Buchstaben, Nicht-ASCII-Buchstaben und Nicht-ASCII-Ziffern in der Nummer sowie Woerter ausserhalb der
  * Kontextwortliste ({@code KVID}, {@code Versicherungsnummer}, {@code Krankenversicherungs-Nr.}) ergeben keinen Fund.
  * </li>

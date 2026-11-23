@@ -15,6 +15,7 @@ import de.skillshield.core.recognizer.kv.KvKontextLueckenEigenschaftTest;
 import de.skillshield.core.recognizer.kv.KvnrBsnrHilfen;
 import de.skillshield.core.recognizer.kv.KvnrBsnrHilfen.Abweichungen;
 import de.skillshield.core.recognizer.kv.KvnrBsnrHilfen.S3;
+import de.skillshield.core.recognizer.kv.KvnrOhneKontextAusnahme;
 import de.skillshield.core.recognizer.kv.KvnrRecognizer;
 import de.skillshield.core.recognizer.kv.KvnrSynthetischWaechter;
 import java.util.ArrayList;
@@ -125,10 +126,15 @@ class KvnrScannerBestandTest {
     @Test
     void ak19_bestandsmengen_keinVerstossKeinKollisionsfallKeineS3Abweichung() {
         Messung[] m = bestandsMessungen();
+        List<List<String>> mengen = mengen(); // Nachtrag 2 zu T-10: fuer die Zaehlung der Ausnahme (neue Zeile)
         for (int i = 0; i < m.length; i++) {
             Abweichungen a = m[i].abweichungen();
             assertEquals(0, a.verstoesse(), NAMEN[i] + ": Verstoesse; " + a.kurz());
-            assertEquals(0, a.k1(), NAMEN[i] + ": K-1; " + a.kurz());
+            // Nachtrag 2 zu T-10: Teil 1b ersetzt LANR-/IK-Funde auf gueltiger KVNR-Form; alter Wert: 0 je Menge,
+            // jetzt exakt 5 / 1 / 5 / 1 (Teil 1c / 1d / 1e / Generatoren), die Ausnahme zaehlt sie einzeln.
+            KvnrOhneKontextAusnahme.pruefe(NAMEN[i], mengen.get(i), ALT, NEU);
+            assertEquals(KvnrOhneKontextAusnahme.erwartet(NAMEN[i]).ersetzt(), a.k1(), NAMEN[i] + ": K-1; "
+                    + a.kurz());
             assertEquals(0, a.k2(), NAMEN[i] + ": K-2; " + a.kurz());
             assertEquals(0, a.k3(), NAMEN[i] + ": K-3; " + a.kurz());
             assertEquals(0, a.k4(), NAMEN[i] + ": K-4; " + a.kurz());
@@ -143,7 +149,10 @@ class KvnrScannerBestandTest {
         Messung[] m = bestandsMessungen();
         for (int i = 0; i < m.length; i++) {
             Ergebnis e = m[i].nachrechnung();
-            assertEquals(0, e.kollisionen(), NAMEN[i] + ": Kollisionsfaelle; " + e.kurz());
+            // Nachtrag 2 zu T-10: alter Wert 0; jetzt die ersetzten LANR-/IK-Funde der Ausnahme (5 / 1 / 5 / 1);
+            // die Zahl der Ausnahmefaelle selbst prueft der erste Test dieser Klasse exakt.
+            assertEquals(KvnrOhneKontextAusnahme.erwartet(NAMEN[i]).ersetzt(), e.kollisionen(),
+                    NAMEN[i] + ": Kollisionsfaelle; " + e.kurz());
             assertEquals(0, e.k4Faelle(), NAMEN[i] + ": K-4-Faelle; " + e.kurz());
             assertEquals(0, e.k4Abweichungen(), NAMEN[i] + ": K-4-Abweichungen; " + e.kurz());
             assertEquals(0, e.typwechselNichtKv(), NAMEN[i] + ": Typwechsel Nicht-KV; " + e.kurz());
