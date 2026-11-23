@@ -920,3 +920,52 @@ Begründung Kap. 1 und R-4).
   KVNR-Fund werden, auch wenn die Stufe dabei von 0,80 auf 0,60 sinkt; die Position bleibt geschützt. Voraussetzung
   bleibt, dass die Oberfläche „fragliche" Funde nicht automatisch abwählt (Hinweis für das UI-Feature).
 - **Reihenfolge:** 1a → 1b → 2 wie vorgeschlagen; Rücknahme von 1b nach D-5 über T-R, der Nutzer wird informiert.
+- **Nachtrag zu T-1 (Befund des engineers, für T-9/T-10 verbindlich):** Die Annahme aus Kap. 5.2, die Bestandsmengen
+  enthielten keine KVNR-Form, trifft für die weit gefasste `kvnrFormReferenz` (Großbuchstabe direkt vor genau neun
+  Ziffern, ohne Wortgrenzen) nicht zu: 173 Texte (Teil 1c 58, 1d 27, 1e 44, Korpus 1, Generatoren 43), meist ein
+  einzelnes `K` aus der Sperrschrift vor der Nummer. Entscheidung: Die weite Referenz und ihre Messwerte aus T-1
+  bleiben unverändert. T-9 ergänzt in `KvnrBsnrHilfen` eine **enge** Referenz nach E-3/AK-12/AK-13 (Großbuchstabe
+  mit Wortgrenze davor, genau neun Ziffern, Wortgrenze dahinter, gültige Prüfziffer, unabhängig vom Produkt
+  geschrieben) und hält fest, wie viele Bestandstexte sie trifft. Ab T-10 gilt für S-3 und K-1/K-4 die enge
+  Referenz als Bedingung „KVNR-Form"; Texte, die nur die weite Referenz trifft, bleiben streng geprüft. Trifft die
+  enge Referenz Bestandstexte, sind das Kandidaten für D-5 (a) („0 zusätzliche KVNR-Funde auf den Bestandskorpora")
+  und werden in T-9 einzeln ausgewiesen, nicht ausgenommen.
+- **Nachtrag 2 zu T-1 (security-Befund „mittel", Entscheidung der Hauptsitzung; geht dem Nachtrag davor und der
+  Tabelle in Kap. 5.2 vor, wo er strenger ist):** Die Prüfregel `bestandsabweichungen` wird verschärft.
+  1. **K-4** gilt nur, wenn alle drei Bedingungen erfüllt sind: der neue Fund ist echt größer als der alte
+     (`start` kleiner oder `ende` größer); sein Typ ist KVNR, BSNR oder der Typ eines alten Fundes, der ganz im
+     neuen liegt; seine Konfidenz ist mindestens `min(alte Konfidenz, 0,40)`.
+  2. **K-1** gilt nur, wenn die neue Konfidenz mindestens `min(alte Konfidenz, 0,50)` ist.
+  3. **Örtliche Bedingung statt „im Text":** K-1 bis K-4 und die Ausnahme von S-3 verlangen das Kontextwort bzw. die
+     KVNR-Form in der Nähe der Fundstelle: innerhalb des neuen Fundes oder höchstens 120 Zeichen vor seinem Anfang
+     oder hinter seinem Ende. S-3 (volle Gleichheit) gilt für jeden alten und neuen Fund, in dessen Nähe (gleiches
+     Fenster) weder Kontextwort noch Form steht. Erweist sich das Fenster später an einem plangemäßen Fall als zu
+     eng, hält der engineer an und berichtet; er ändert es nicht selbst.
+  4. **Enge KVNR-Form schon jetzt:** `KvnrBsnrHilfen` bekommt neben der weiten Referenz (die auf **genau** neun
+     Ziffern korrigiert wird: keine zehnte Ziffer dahinter) eine enge Referenz nach E-3: Großbuchstabe A–Z, davor
+     kein Buchstabe und keine Ziffer, genau neun Ziffern, dahinter kein Buchstabe und keine Ziffer, Prüfziffer nach
+     A-1 gültig (eigene, vom Produkt unabhängige Rechnung im Testcode, abgesichert mit dem Lehrbeispiel der Quelle).
+     Als Bedingung „KVNR-Form" für K-1, K-4 und S-3 gilt ab sofort die enge Referenz. Die weite Referenz bleibt nur
+     als Messwert (Zahl der Bestandstexte) erhalten. Die Treffer der engen Referenz auf den Bestandsmengen werden
+     je Menge exakt festgehalten.
+  5. **Siegel über `ALT_TRENNER`:** je Bestandsmenge ein Siegel über die vollständige Ausgabe (alle Typen, alle
+     Felder), damit eine Änderung an den übrigen Erkennern, am `TextScanner` oder am `ConflictResolver` auffällt.
+  6. Die Prüfung „K-1 bis K-4 = 0 auf den Bestandsmengen" bleibt in allen Tasks bestehen. Auf den neuen Fuzz-Teilen
+     1f bis 1h werden Kollisionsfälle nicht nur gezählt: jeder gezählte Fall muss zusätzlich die Bedingungen 1 bis 3
+     erfüllen (das leistet die Prüfregel selbst).
+- **Nachtrag 3 zu T-1 (security-Hinweis „niedrig" und reviewer-Mangel aus Durchlauf 2; verbindlich):**
+  1. **K-4, Typ:** Ist der alte Fund kein KV-Typ (EMAIL, IP, URL, PFAD, TEXT …), muss der neue zusammengelegte Fund
+     den Typ eines alten Fundes haben, der ganz in ihm liegt; KVNR/BSNR als neuer Typ ist dann kein K-4, sondern ein
+     Verstoß. Für alte LANR-/IK-Funde bleibt KVNR/BSNR zulässig.
+  2. **K-4, Ausdehnung:** Höchstens 24 Positionen des neuen Fundes dürfen von keinem alten Fund abgedeckt sein
+     (Obergrenze für eine KVNR-/BSNR-Schreibweise mit Trennern). Größere Zuwächse sind ein Verstoß.
+  3. **Ab dem ersten Task mit neuen Erkennern im Scanner (T-6, T-14) und auf den Fuzz-Teilen 1f bis 1h** wird jeder
+     K-4-Fall zusätzlich unabhängig nachgerechnet: Kandidaten des alten Scanners und der neuen Erkenner mit
+     `ConflictResolver.resolve` zusammenführen und Bereich, Typ und Konfidenz mit dem Produktfund vergleichen.
+     Zusätzlich wird dort gezählt, wie viele Kollisionsfälle nur über verstreute Buchstaben im Fenster als „nahe"
+     gelten (Kontextwort nicht als zusammenhängendes Wort im Fenster); der Wert wird exakt festgehalten.
+  4. **Siegel über `ALT_TRENNER`:** Der Originalwert jedes Fundes geht in den Hash ein (eigene Hash-Variante, damit
+     die Kopie-Siegel unverändert bleiben); zusätzlich wird die Invariante „Originalwert = Textausschnitt" auch für
+     die alten Funde geprüft.
+  5. Erweist sich eine dieser Grenzen später an einem plangemäßen Fall als zu eng, hält der engineer an und
+     berichtet; er ändert sie nicht selbst.
