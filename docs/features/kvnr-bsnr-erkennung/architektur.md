@@ -1037,3 +1037,134 @@ Begründung Kap. 1 und R-4).
   hinter dem Strich, andere Striche U+2010/U+2011/U+2013, Leerraum am Strich, doppelte Zeichen, Variantenwähler
   hinter dem Kontextwort). Die geschlossene, großgeschriebene, gültige Form wird in diesen Stellungen durch Teil 1b
   geschützt, die übrigen Schreibweisen nicht.
+- **Nachtrag zu T-6 (Befund des engineers, Entscheidung der Hauptsitzung; verbindlich):** Steht hinter einem
+  KVNR-Kontextwort ein Buchstabe unmittelbar (oder mit einem Trenner) vor einer Ziffernfolge in IPv4-Gestalt, darf
+  der bisherige IP-Fund weder den Typ wechseln noch schwächer werden (Nachtrag 3 zu T-1 Punkt 1 bleibt: KVNR als
+  neuer Typ eines Nicht-KV-Altfundes ist ein Verstoß; K-1 wird NICHT auf IP erweitert).
+  1. **Produktregel, nur für die Buchstabenform (`art.buchstabenform()`):** Besteht die Ziffernfolge hinter dem
+     Buchstaben aus genau vier durch je einen Punkt getrennten Gruppen von je ein bis drei Ziffern (IPv4-Gestalt),
+     gehört der Buchstabe nicht zur Kette: Es entsteht kein Kandidat in Buchstabenform; die Ziffernfolge wird wie
+     eine reine Ziffernfolge behandelt (hinter einem KVNR-Kontextwort höchstens 0,40 `kvnr-form-abweichend`, hinter
+     `KV-Nr.` kein Kandidat). Bei gleichem Bereich gewinnt dann nach der bestehenden Konfliktregel der IP-Fund
+     (0,85). Die Prüfung ist ein Vorgriff fester Länge (höchstens 15 Zeichen), also linear.
+  2. Dasselbe gilt, wenn die IPv4-Gestalt nur der Anfang einer längeren Kette ist (weitere Ziffern oder Gruppen
+     dahinter): maßgeblich ist, dass direkt hinter dem Buchstaben (bzw. Buchstabe + ein Trenner) vier Punkt-Gruppen
+     von je ein bis drei Ziffern stehen.
+  3. Nebenwirkung (bewusst): Eine KVNR, deren neun Ziffern mit Punkten in genau vier Gruppen geschrieben sind,
+     verliert ihren Buchstaben im Fund (Fund 0,40 nur über die Ziffern bzw. IP-Fund). Diese Schreibweise ist für
+     eine KVNR nicht üblich; sie wird als bekannte Grenze dokumentiert (Test `bekannteGrenze…` in T-8, hier schon
+     als Direkttest).
+  4. Tests: die bisher aus der Kollisionsmenge ausgenommenen Texte (Kontextwort + Buchstabe + IPv4-Gestalt, auch
+     längere Ketten) werden aufgenommen; die Prüfregel muss für sie Verstöße 0 und keinen Kollisionsfall melden
+     (alter IP-Fund bleibt in Bereich, Typ und Konfidenz erhalten oder wird nur durch K-4 mit Typ IP abgedeckt).
+     Der KVNR-Erkenner allein liefert für diese Texte keinen Fund in Buchstabenform.
+  5. Geht das nicht klar abgeschirmt (LANR/IK unverändert, übrige KVNR-Formen unverändert): anhalten und berichten.
+- **Nachtrag 2 zu T-6 (security-Befund „mittel"; Entscheidung der Hauptsitzung; verbindlich, geht K-4 in Kap. 5.2
+  und den Nachträgen 2/3 zu T-1 vor):** Die IPv4-Gestalt-Regel allein reicht nicht: Reine Ziffernfolgen und
+  Buchstabenformen hinter einem KVNR-Kontextwort umschließen oder überlappen weiterhin IP-Funde (CIDR-Schreibweise
+  `IP/Präfix`, IP + Leerzeichen + Ziffern, IP-Ketten mit langem erstem Block) sowie E-Mail-, Pfad- und URL-Funde;
+  diese wechseln dann den Typ zu KVNR oder werden beim Zusammenlegen schwächer.
+  1. **Grundsatz „Bestand hat Vorrang":** Funde der Typen EMAIL, IP, URL und PFAD bleiben durch die neuen Arten
+     (KVNR, später BSNR) **vollständig unverändert** (Bereich, Typ, Konfidenz, Quelle, Originalwert). Ein
+     Zusammenlegen mit oder ein Ersetzen durch einen KVNR-/BSNR-Kandidaten findet nicht statt. K-4 ist damit für
+     Nicht-KV-Altfunde kein zulässiger Fall mehr; zulässig bleiben nur K-1 bis K-3 und K-4 **zwischen KV-Arten**
+     (LANR, IK, KVNR, BSNR).
+  2. **Umsetzung im `TextScanner`, nicht im `ConflictResolver` (Regel 6 bleibt):** Vor der Konfliktauflösung werden
+     Kandidaten der „nachrangigen" Erkenner (derzeit nur `KvnrRecognizer`; die Eigenschaft wird am Erkenner bzw. in
+     `standard()` festgelegt, sodass T-14 den BSNR-Erkenner nur eintragen muss) verworfen, wenn sie sich mit
+     mindestens einem Kandidaten der Typen EMAIL, IP, URL oder PFAD überschneiden (mindestens eine gemeinsame
+     Position). Kandidaten von LANR und IK werden nicht gefiltert (Bestandsverhalten bleibt exakt). Aufwand:
+     Sortieren der Kandidaten und ein gemeinsamer Durchlauf, also O(n log n) in der Zahl der Kandidaten, kein
+     wiederholtes Abtasten des Textes; die Laufzeittests (1 Mio. Zeichen < 2 s) gelten weiter.
+  3. **Bewusste Nebenwirkung (bekannte Grenze, Test in T-8, hier schon als Direkttest):** Überschneidet eine echte
+     KVNR mit Kontextwort teilweise einen E-Mail-, IP-, URL- oder Pfad-Fund, entfällt der KVNR-Fund; der Teil der
+     Nummer außerhalb des anderen Fundes bleibt dann stehen. Liegt die Nummer ganz im anderen Fund (z. B. in einem
+     Dateinamen oder Pfad), bleibt sie über diesen geschützt, nur mit dessen Typ.
+  4. Die IPv4-Gestalt-Regel aus dem ersten Nachtrag zu T-6 bleibt bestehen (sie verhindert, dass der Buchstabe vor
+     einer IP als Teil einer Nummer gelesen wird; mit Punkt 2 ist sie für den Bestandsschutz nicht mehr allein
+     tragend).
+  5. **Tests:** (a) gezielte Texte für IP mit `/Präfix`, IP + Leerzeichen + Ziffern, IP-Kette mit langem erstem
+     Block, E-Mail/URL/Pfad/Dateiname mit Buchstabe + Ziffern davor, darin und dahinter, jeweils hinter KVNR-
+     Kontextwort, `KV-Nr.`, gesperrtem Kontextwort und mit nachgestelltem Kompositum – erwartet: jeder alte
+     Nicht-KV-Fund steht unverändert in der neuen Liste; Prüfregel: Verstöße 0. (b) ein Eigenschaftstest über
+     zufällige Mischtexte (fester Seed, mindestens 20 000 Texte, Bausteine aller Typen und KVNR-Kontext in der
+     Nähe): für jeden Text ist die Teilliste der Nicht-KV-Funde von `TextScanner.standard()` **gleich** der des
+     alten Scanners (`ALT_TRENNER`); Zähler mit Mindestzahlen für „Text mit verworfenem KVNR-Kandidaten",
+     Selbsttest (Scanner ohne Filter wird gemeldet). (c) Typwechsel bei Nicht-KV-Alttypen wird unabhängig von K-4
+     gezählt und ist strikt 0. (d) Die Nachrechnung `KvnrKollisionsNachrechnung` wird an die Filterstufe angepasst
+     und im Javadoc ehrlich beschrieben (sie sichert die Zusammensetzung von `standard()` und die Gleichheit der
+     LANR-/IK-Erkenner mit der Kopie, nicht die Zulässigkeit eines Falls).
+  6. **Fenster der Prüfregel (security-Hinweis 3):** LANR-/IK-Funde können bei langen Aufzählungen auch dann nach
+     K-1/K-2 zu KVNR werden, wenn das Kontextwort mehr als 120 Zeichen entfernt steht; die eingefrorene Prüfregel
+     meldet das als Verstoß. Die Prüfregel bleibt eingefroren. Für die Fuzz-Teile 1f bis 1h (T-7 ff.) gilt: Ein
+     von `bestandsabweichungen` gemeldeter Verstoß wird in einer neuen Testhilfe nachgeprüft; ist er ein K-1- oder
+     K-2-Fall nach allen übrigen Bedingungen (alter Typ LANR/IK, Bereich wie K-1/K-2, Konfidenzgrenzen) und steht
+     ein Kontextwort der neuen Art irgendwo davor im selben Absatz (keine Leerzeile dazwischen), zählt er als
+     „fensterfern zulässig" (exakt festgehalten, Mindest- und Höchstzahl), sonst bleibt er ein Verstoß. Auf den
+     acht Bestandsmengen bleibt alles strikt 0.
+  7. **Für Kap. 11 (T-8):** Der Pseudonymizer ersetzt nur gefundene Stellen; steht derselbe Wert an einer zweiten,
+     nicht erkannten Stelle (z. B. Kontextwort an das Vorwort geklebt), bleibt er dort stehen. Das ist der im
+     Blueprint für eine spätere Ausbaustufe vorgesehene „Leak-Check" und nicht Teil dieses Features.
+- **Nachtrag 3 zu T-6 (security-Befund „mittel" zur Nebenwirkung aus Nachtrag 2 Punkt 3; Entscheidung der
+  Hauptsitzung; verbindlich, ersetzt Nachtrag 2 Punkt 2 Satz 1 und Punkt 3):** Das vollständige Verwerfen eines
+  überschneidenden KVNR-Kandidaten lässt in realistischen Schreibweisen Ziffern einer echten KVNR im Klartext
+  (z. B. Kontextwort, dann ein Pfad ohne Anführungszeichen, dessen Dateiname `Buchstabe Leerzeichen neun Ziffern`
+  enthält: der Pfad-Fund endet am Buchstaben, die Ziffern dahinter bleiben stehen). Der Grundsatz „Bestand hat
+  Vorrang" (Nachtrag 2 Punkt 1) bleibt unverändert; geändert wird nur, was mit dem nachrangigen Kandidaten
+  geschieht:
+  1. **Zuschneiden statt Verwerfen:** Ein Kandidat eines nachrangigen Erkenners, der Bestandsbereiche (vereinigte
+     Bereiche der Kandidaten EMAIL/IP/URL/PFAD) überschneidet, wird auf die Teile außerhalb dieser Bereiche
+     zugeschnitten. Jedes Reststück wird an beiden Enden auf ASCII-Buchstaben und Ziffern gekürzt (Trenner,
+     Leerraum, Satzzeichen und unsichtbare Zeichen am Rand entfallen). Ein Reststück wird als Fund behalten, wenn
+     es **mindestens drei Ziffern** enthält; sonst entfällt es (ein einzelner Buchstabe oder eine ein- bis
+     zweistellige Zahl wie die Präfixlänge hinter einer IP ist kein Fund). Liegt der Kandidat ganz im Bestand,
+     entfällt er wie bisher.
+  2. **Felder des Restfunds:** Typ der Art (KVNR), Originalwert = Textausschnitt, Quelle `kvnr-rest`, Konfidenz =
+     Konfidenz des Kandidaten, höchstens 0,80 (die vollständige Form ist nicht mehr belegt). Restfunde grenzen an
+     Bestandsfunde nur an und überschneiden sie nie; die Bestandsfunde bleiben in allen Feldern unverändert.
+     Zwischen Restfunden und LANR-/IK-Kandidaten gilt die normale Konfliktauflösung.
+  3. Aufwand weiter O(n log n) in der Zahl der Kandidaten (ein Kandidat kann höchstens so viele Reststücke haben,
+     wie Bestandsbereiche in ihm liegen; die Summe ist durch die Zahl der Bestandsbereiche plus Kandidaten
+     beschränkt).
+  4. **Bekannte Grenze (Test `bekannteGrenze…`, T-8 übernimmt sie nach Kap. 11):** Der Teil einer Nummer, der im
+     Bestandsfund liegt, trägt dessen Typ; ein einzelner Buchstabe oder ein Rest mit weniger als drei Ziffern
+     außerhalb bleibt stehen.
+  5. **Tests:** Direkttests mit Pfad (Laufwerk, UNC, Unix), `file:`-URL und URL-Query, in denen die Nummer als
+     Buchstabe + Leerzeichen bzw. geschütztes Leerzeichen + neun Ziffern (auch gruppiert) steht, hinter
+     KVNR-Kontext: der alte Fund bleibt unverändert, die Ziffern außerhalb sind durch einen Restfund abgedeckt;
+     zusätzlich die Form „Kontextwort Nummer, Datei <Pfad mit derselben Nummer>". Test für den **angrenzenden**
+     Kandidaten (Ende des Bestandsfunds = Anfang des Kandidaten und umgekehrt): bleibt vollständig erhalten
+     (security: ein Off-by-one-Mutant blieb bisher unentdeckt). Test, dass für `TextScanner.standard()` genau der
+     KVNR-Erkenner nachrangig ist (T-14 ergänzt BSNR). Der Eigenschaftstest prüft zusätzlich: jede Position, die
+     der KVNR-Erkenner allein in einem Kandidaten mit mindestens drei Ziffern außerhalb des Bestands abdeckt, ist
+     von irgendeinem Fund abgedeckt, soweit das Reststück die Drei-Ziffern-Schwelle erreicht (Zähler, Mindestzahl,
+     Selbsttest mit der Verwerfen-Variante).
+  6. **Testdaten:** Frei erfundene Ziffernfolgen, auch über verkettete Literale verteilt, sind unzulässig
+     (reviewer/security zu `KvnrKollisionsTexte`): Texte werden aus Konstanten oder Teilstücken von
+     `SynthetischeKvNummern` gebildet; fehlt eine passende Konstante, wird sie dort angelegt.
+- **Nachtrag 4 zu T-6 (Präzisierung zu Nachtrag 3 Punkt 1, vom engineer vorgelegt und von der Hauptsitzung
+  angenommen):** „Bestandsbereiche" sind die Bereiche der **Funde** der Typen EMAIL, IP, URL und PFAD, die die
+  Konfliktauflösung über die Kandidaten der nicht nachrangigen Erkenner liefert (also genau die Funde des Scans
+  ohne die neuen Arten, einschließlich der dort zusammengelegten), nicht die rohen Kandidaten. Grund: Ein Restfund
+  konnte sonst über einen LANR-/IK-Kandidaten, der selbst einen Bestandskandidaten überlappt, in eine Kette
+  geraten und den zusammengelegten Bestandsfund verlängern oder schwächen (15 von 24 000 Zufallstexten). Der
+  `TextScanner` löst dafür zuerst die nicht nachrangigen Kandidaten auf, schneidet die nachrangigen Kandidaten an
+  diesen Funden zu und löst dann alle zusammen auf; der Aufwand bleibt O(n log n). `Recognizer` hat neben
+  `nachrangig()` die Default-Methode `restQuelle()` (für die KVNR `kvnr-rest`; T-14: `bsnr-rest`).
+- **Nachtrag 5 zu T-6 (security-Hinweise „niedrig" aus der Abschlussprüfung von T-6; für T-7/T-8):**
+  1. **Fensterfernes K-3 durch Restfund:** Ein Restfund (höchstens 0,80) kann einen alten LANR-/IK-Fund mit
+     niedrigerer Konfidenz im selben Bereich übernehmen, auch wenn das KVNR-Kontextwort (als Listenkontext) mehr
+     als 120 Zeichen entfernt steht; die eingefrorene Prüfregel zählt das als Verstoß (1 Fall in 500 000
+     Kettentexten). Es bleibt kein Klartext. Die Regel aus Nachtrag 2 zu T-6 Punkt 6 („fensterfern zulässig") gilt
+     deshalb für K-1, K-2 **und K-3**.
+  2. **Drei-Ziffern-Schwelle:** ein Buchstabe oder ein bis zwei Ziffern einer Nummer können neben einem
+     Bestandsfund stehen bleiben (bekannte Grenze, Nachtrag 3 Punkt 4); T-8 hält dazu auch den Fall „hinterer Teil
+     einer gruppierten Nummer wird vom lokalen Teil einer E-Mail geschluckt" fest.
+  3. **Bekannte Grenze der Kontextregel (nicht durch T-6 entstanden, Kap. 11 / T-8):** Steht zwischen Kontextwort
+     und Nummer ein langer Pfad oder eine lange URL (ab etwa 24 Zeichen), entsteht kein KVNR-Kandidat; die Nummer
+     dahinter bleibt ungeschützt, solange Teil 1b sie nicht findet (geschlossene, großgeschriebene, gültige Form).
+     T-8 legt dazu einen Test `bekannteGrenze…` an und stellt die genaue Ursache fest (Füllwortzählung oder
+     Fenster).
+  4. Javadoc von `Recognizer#nachrangig` und `KvnrRecognizer` sprechen noch von „Kandidaten" statt von den
+     aufgelösten Bestandsfunden (Nachtrag 4); T-7 gleicht das an. T-8 ergänzt Direkttests für das Kürzen der
+     Ränder (Nicht-ASCII-Ziffer, Surrogatpaar, unsichtbares Zeichen).

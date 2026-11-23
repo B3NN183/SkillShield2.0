@@ -95,7 +95,13 @@ import java.util.Set;
  * Kontext 0,95, sonst gelten die Stufen von LANR und IK (0,80, Komma 0,60, gesperrt hoechstens 0,80); ungueltige
  * Pruefziffer 0,50 ({@code kvnr-pruefziffer-ungueltig}); Buchstabe mit 6 bis 12 Ziffern ausser neun und jede reine
  * Ziffernfolge von 6 bis 12 Ziffern (auch neun) 0,40 ({@code kvnr-form-abweichend}). Der Fundbereich beginnt beim
- * Buchstaben. Bekannte Folge G-K6: {@code KVNR AB 1234...} (zwei Buchstaben, dann Trenner) ergibt 0,40 ueber die
+ * Buchstaben. IPv4-Gestalt (Nachtrag zu T-6): Stehen direkt hinter dem Buchstaben (oder Buchstabe und einem
+ * Gruppentrenner) vier durch je einen Punkt getrennte Gruppen von je ein bis drei Ziffern, ist der Buchstabe kein
+ * Kettenanfang (auch mit unsichtbaren Zeichen davor und bei gesperrtem Kontextwort davor); die Ziffernfolge wird wie
+ * eine reine Ziffernfolge ohne Buchstaben behandelt (0,40, hinter {@code KV-Nr.} kein Fund), und ein IP-Fund
+ * ueber denselben Bereich bleibt unveraendert (Vorgriff fester Laenge, hoechstens 16 Zeichen). Bekannte Folge: Eine
+ * KVNR, deren neun Ziffern mit Punkten in genau vier Gruppen geschrieben sind, verliert den Buchstaben im Fund.
+ * Bekannte Folge G-K6: {@code KVNR AB 1234...} (zwei Buchstaben, dann Trenner) ergibt 0,40 ueber die
  * reinen Ziffern. Unsichtbare Zeichen (Formatzeichen, Variantenwaehler) unmittelbar vor dem Buchstaben, auch
  * mehrere, gehoeren nicht zum Fund: Der Lauf aus ihnen, einem ASCII-Buchstaben und einer Ziffer oder einem Trenner und
  * einer Ziffer ist der Anfang einer Kette; der Fund beginnt beim Buchstaben, eine laufende Sperr- oder Weit-Folge endet
@@ -264,11 +270,13 @@ import java.util.Set;
  * unsichtbarer Zeichen bis zum ersten anderen Zeichen und einen festen Rest (Buchstabe, Trenner, Ziffer); der Lauf
  * wird danach uebersprungen oder einmal von der Hauptschleife gelesen; die Zahl der Durchgaenge je Zeichen ist fest
  * und unabhaengig von der Textlaenge (hoechstens vier: {@code buchstabenAnfang}, {@code nachsatzFolgt},
- * {@code vorausArt}, Lauf). Der Vorgriff auf ein nachgestelltes Kompositum ({@code kompositumVorKontextwort}) laeuft
- * nur bei der KVNR, nur bei offenen Segmenten und je Wort hoechstens einmal; er liest einen Punkt, einen Strich und
- * hoechstens 28 Buchstaben (danach das Nachsatzwort mit hoechstens sechs), springt bei einem Treffer hinter den Strich
- * und leert danach die offenen Segmente nicht, bei keinem Treffer leert das Wort sie wie bisher; ein Treffer beginnt
- * unmittelbar danach den Kontext (leert sie), sodass der Vorgriff nie zweimal auf dieselben Zeichen folgt.
+ * {@code vorausArt}, Lauf). Die IPv4-Pruefung ({@code ipv4GestaltHinter}) liest hinter einem Buchstabenanfang
+ * hoechstens 16 Zeichen, einmal je Laufanfang. Der Vorgriff auf ein nachgestelltes Kompositum
+ * ({@code kompositumVorKontextwort}) laeuft nur bei der KVNR, nur bei offenen Segmenten und je Wort hoechstens
+ * einmal; er liest einen Punkt, einen Strich und hoechstens 28 Buchstaben (danach das Nachsatzwort mit hoechstens
+ * sechs), springt bei einem Treffer hinter den Strich und leert danach die offenen Segmente nicht, bei keinem
+ * Treffer leert das Wort sie wie bisher; ein Treffer beginnt unmittelbar danach den Kontext (leert sie), sodass der
+ * Vorgriff nie zweimal auf dieselben Zeichen folgt.
  * Der Zeilenanfang-Merker ({@code zeilenanfang}) wird vorwaerts mitgefuehrt, nicht
  * rueckwaerts gesucht. Der Merker {@code crOffen} (CR UZ+ LF als ein Umbruch) ist ein einzelnes Flag, wird je
  * Zeichen in konstanter Zeit gesetzt oder geloescht und braucht weder Vorgriff noch Rueckkehr; {@code CR} gefolgt
@@ -323,6 +331,8 @@ final class KvNumberScanner {
     static final double CONFIDENCE_SPERRSCHRIFT_ZWEI = 0.50;
 
     private static final int NEUN = 9;
+    private static final int IPV4_GRUPPEN = 4;
+    private static final int IPV4_GRUPPE_MAX = 3;
     private static final int MIN_LAENGE = 6;
     private static final int MAX_LAENGE = 12;
     private static final int MAX_FUELLWOERTER = 3;
@@ -576,6 +586,13 @@ final class KvNumberScanner {
         /** Ende des letzten Laufs und Zahl seiner Buchstaben (0, wenn ohne Buchstaben), fuer den Abkuerzungspunkt. */
         private int laufEnde = -1;
         private int laufBuchstaben;
+
+        /**
+         * Position hinter dem Buchstaben, den die IPv4-Regel ({@link #ipv4GestaltHinter(int)}) als Kettenanfang
+         * abgelehnt hat, sonst -1: Die Ziffern dort sind nicht "an einen Buchstaben geklebt" (G-K4), sondern eine
+         * reine Ziffernfolge.
+         */
+        private int ipBuchstabeEnde = -1;
 
         // Zustand des gerade gelesenen Laufs
         private final char[] fenster = new char[FENSTER];
@@ -1362,7 +1379,7 @@ final class KvNumberScanner {
         private int ziffernkette(int start) {
             boolean anfang = zeilenanfang;
             zeilenanfang = false;
-            if (art.buchstabenform() && angeklebtAnBuchstabe(start)) {
+            if (art.buchstabenform() && start != ipBuchstabeEnde && angeklebtAnBuchstabe(start)) {
                 int ende = ziffernEnde(start);
                 fuellwort(); // G-K4: Ziffern direkt an einem Buchstaben sind keine Nummer dieser Art
                 return ende;
@@ -1453,7 +1470,43 @@ final class KvNumberScanner {
             if (j >= n || !istBuchstabenAnfang(j)) {
                 return -1;
             }
+            if (ipv4GestaltHinter(j)) {
+                ipBuchstabeEnde = j + 1; // die Ziffern dahinter sind eine reine Ziffernfolge, kein Nummernteil
+                return -1;
+            }
             return sperrBuchstabeDesKontextworts(j) ? -1 : j;
+        }
+
+        /**
+         * Stehen hinter dem ASCII-Buchstaben bei {@code j} (nach hoechstens einem Gruppentrenner) vier durch je einen
+         * Punkt getrennte Gruppen von je ein bis drei Ziffern (IPv4-Gestalt; die vierte Gruppe darf nicht von einer
+         * weiteren Ziffer fortgesetzt werden, weitere Zeichen dahinter sind gleichgueltig)? Dann ist der Buchstabe
+         * kein Kettenanfang. Vorgriff von hoechstens 17 Zeichen hinter dem Buchstaben (ein Trenner, drei Gruppen zu je
+         * drei Ziffern mit Punkt, eine letzte Gruppe zu drei Ziffern und das Zeichen dahinter), unabhaengig von der
+         * Textlaenge.
+         */
+        private boolean ipv4GestaltHinter(int j) {
+            int p = j + 1;
+            if (p < n && istTrenner(text.charAt(p))) {
+                p++;
+            }
+            for (int gruppe = 0; gruppe < IPV4_GRUPPEN; gruppe++) {
+                int ziffern = 0;
+                while (p < n && istZiffer(text.charAt(p)) && ziffern <= IPV4_GRUPPE_MAX) {
+                    ziffern++;
+                    p++;
+                }
+                if (ziffern == 0 || ziffern > IPV4_GRUPPE_MAX) {
+                    return false;
+                }
+                if (gruppe < IPV4_GRUPPEN - 1) {
+                    if (p >= n || text.charAt(p) != '.') {
+                        return false;
+                    }
+                    p++;
+                }
+            }
+            return true;
         }
 
         /** Ist der ASCII-Buchstabe bei {@code j}, hinter einem Trenner der Sperrfolge, deren letzter Buchstabe? */

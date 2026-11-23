@@ -44,11 +44,26 @@ import java.util.List;
  * folgt; nicht bei einer Sperrung mit Punkt und Leerzeichen oder mehreren Leerzeichen (Weit-Folge) und nicht bei
  * {@code K V N R} mit Ziffern ohne Trenner dahinter (dann Buchstabe einer Nummer).
  *
+ * <p>IPv4-Gestalt (Nachtrag zu T-6): Stehen direkt hinter dem Buchstaben (oder Buchstabe und einem Gruppentrenner)
+ * vier durch je einen Punkt getrennte Gruppen von je ein bis drei Ziffern, ist der Buchstabe kein Nummernanfang; es
+ * gibt keinen Fund in Buchstabenform, die Ziffern gelten wie eine reine Ziffernfolge (hoechstens 0.40, hinter
+ * {@code KV-Nr.} kein Fund). Ein bestehender IP-Fund bleibt so erhalten. Bekannte Grenze: Eine KVNR, deren neun
+ * Ziffern mit Punkten in genau vier Gruppen geschrieben sind, verliert den Buchstaben im Fund; in zwei oder drei
+ * Gruppen und mit anderen Trennern bleibt sie unveraendert.
+ *
  * <p>Nachgestelltes Kompositum (nur KVNR): Steht hinter einer Nummer ein Wort mit unmittelbar folgendem {@code -} und
  * einem Kontextwort ({@code N (Patienten-KVNR)}, {@code N, Pat.-KVNR}, {@code N (eGK-Versichertennummer)}), zaehlt das
  * Ganze als nachgestelltes Kontextwort: 0.80, hinter Komma oder Semikolon 0.60 (ungueltige Pruefziffer 0.50). Zwei
  * Woerter davor, ein Strich mit Leerraum und ein Wort, das kein Kontextwort bildet ({@code Patienten-VKNR}), ergeben
  * keinen Fund. LANR und IK kennen diese Form nicht.
+ *
+ * <p>Vorrang des Bestands (Nachtrag 2 und 3 zu T-6): Der Erkenner ist {@linkplain #nachrangig() nachrangig}. Der
+ * {@code TextScanner} schneidet jeden seiner Kandidaten, der sich mit den Funden der Typen E-Mail, IP, URL oder
+ * Pfad (Bestand, Einzelheiten im Javadoc des {@code TextScanner}) ueberschneidet, auf die Teile ausserhalb zu; diese
+ * Funde bleiben so unveraendert. Ein Reststueck mit
+ * mindestens drei Ziffern bleibt als Fund (Quelle {@value #SOURCE_REST}, hoechstens 0,80). Bekannte Grenze: Der
+ * Teil einer Nummer im anderen Fund traegt dessen Typ; ein Buchstabe oder ein Rest mit weniger als drei Ziffern
+ * ausserhalb bleibt stehen. Auf Erkennerebene (ohne Scanner) liefert der Erkenner die Kandidaten unveraendert.
  *
  * <p>Der Erkenner ist zustandslos und deterministisch; die Regeln und der Linearitaetsbeleg stehen im Javadoc von
  * {@link KvNumberScanner}. Es entsteht kein Netz- oder Dateizugriff, und Meldungen enthalten keinen Text, keine
@@ -66,8 +81,23 @@ public final class KvnrRecognizer implements Recognizer {
     /** Quelle der Funde mit abweichender Form (6 bis 12 Ziffern ausser neun mit Buchstabe, reine Ziffernfolge). */
     public static final String SOURCE_FORM_ABWEICHEND = "kvnr-form-abweichend";
 
+    /** Quelle der Reststuecke, die der {@code TextScanner} beim Zuschneiden an Bestandsfunden behaelt. */
+    public static final String SOURCE_REST = "kvnr-rest";
+
     @Override
     public List<Finding> detect(String text) {
         return KvNumberScanner.detect(KvArt.KVNR, text);
+    }
+
+    /** Der KVNR-Erkenner ist nachrangig: Der {@code TextScanner} schneidet seine Kandidaten, die E-Mail-, IP-,
+     * URL- oder Pfad-Kandidaten schneiden, auf die Teile ausserhalb zu. */
+    @Override
+    public boolean nachrangig() {
+        return true;
+    }
+
+    @Override
+    public String restQuelle() {
+        return SOURCE_REST;
     }
 }

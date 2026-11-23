@@ -25,4 +25,27 @@ public interface Recognizer {
      * @return die Kandidaten, nie {@code null}
      */
     List<Finding> detect(String text);
+
+    /**
+     * Ob dieser Erkenner nachrangig ist (Grundsatz "Bestand hat Vorrang", Plan kvnr-bsnr-erkennung, Nachtrag 2 und 3
+     * zu T-6). Der {@link TextScanner} schneidet Kandidaten eines nachrangigen Erkenners, die sich mit einem
+     * Kandidaten der Typen E-Mail, IP, URL oder Pfad ueberschneiden, auf die Teile ausserhalb zu, bevor er die
+     * Konflikte aufloest (Zuschneiden statt Verwerfen). Standard: {@code false}.
+     *
+     * @return {@code true} fuer die Erkenner der neuen Arten (KVNR, spaeter BSNR)
+     */
+    default boolean nachrangig() {
+        return false;
+    }
+
+    /**
+     * Quelle der Restfunde, die beim Zuschneiden eines Kandidaten dieses (nachrangigen) Erkenners entstehen
+     * (Format wie {@link Finding#source()}, z. B. {@code kvnr-rest}). Ein nachrangiger Erkenner ueberschreibt sie
+     * mit seiner eigenen Quelle. Ohne Bedeutung, solange {@link #nachrangig()} {@code false} ist.
+     *
+     * @return die Quelle, nie {@code null}
+     */
+    default String restQuelle() {
+        return "rest";
+    }
 }

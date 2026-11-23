@@ -28,6 +28,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 import java.util.function.UnaryOperator;
 import org.junit.jupiter.api.Test;
 
@@ -49,6 +50,10 @@ import org.junit.jupiter.api.Test;
  * Haelfte zufaellig aus allen 255 Zerlegungen mit mindestens zwei Gruppen (mit der ungruppierten Form alle 256).
  * Die Aufzaehlung trennt mit Komma, Semikolon, {@code und}, {@code /} mit Leerzeichen oder einem Zeilenumbruch (LF);
  * ab der zweiten Nummer gilt 0,80 (direkter Kontext nur fuer die erste).
+ * Bildet eine Buchstabenform-Nummer hinter dem Buchstaben (und einem Trenner) vier Punkt-Gruppen zu je ein bis drei
+ * Ziffern (IPv4-Gestalt, Nachtrag zu T-6), ist der Buchstabe kein Nummernanfang; der Generator ersetzt dann den
+ * ersten Punkt zwischen den Gruppen durch einen Bindestrich (Zaehler {@code form.vierPunktGruppenUmgestellt}, der
+ * Zufallsstrom bleibt gleich). Das Verhalten der Gestalt selbst pruefen die Einzeltests in {@link KvnrKontextTest}.
  *
  * <p>Negativbloecke (kein Fund erwartet): vier oder fuenf Fuellwoerter, Leerzeile, {@code KV-Nr.} (auch nachgestellt)
  * vor einer reinen Ziffernfolge, Woerter ausserhalb von D-2, Nummer ohne Kontext. Sie verwenden nur ungueltige
@@ -278,7 +283,28 @@ class KvnrEigenschaftTest {
         } else {
             sb.append(ziffern);
         }
-        return new Nummer(sb.toString(), true, art);
+        return new Nummer(ohneIpv4Gestalt(sb.toString(), s), true, art);
+    }
+
+    /** Vier Punkt-Gruppen zu je ein bis drei Ziffern, danach keine weitere Ziffer (IPv4-Gestalt, Nachtrag zu T-6). */
+    private static final Pattern IPV4_GESTALT = Pattern.compile("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}(?!\\d).*",
+            Pattern.DOTALL);
+
+    /**
+     * Die Buchstabenform soll hier die Regel "Buchstabe ist Nummernanfang" pruefen, nicht die IPv4-Gestalt hinter
+     * dem Buchstaben (Nachtrag zu T-6: dort ist der Buchstabe kein Anfang, bekannte Grenze, Einzeltests in
+     * {@link KvnrKontextTest}). Bilden die Gruppen hinter Buchstabe und optionalem Trenner diese Gestalt, wird der
+     * erste Punkt zwischen den Gruppen durch einen Bindestrich ersetzt; der Zufallsstrom bleibt unveraendert.
+     */
+    private static String ohneIpv4Gestalt(String nummer, Statistik s) {
+        int p = Character.isDigit(nummer.charAt(1)) ? 1 : 2;
+        String rest = nummer.substring(p);
+        if (!IPV4_GESTALT.matcher(rest).matches()) {
+            return nummer;
+        }
+        s.zaehle("form.vierPunktGruppenUmgestellt");
+        int punkt = p + rest.indexOf('.');
+        return nummer.substring(0, punkt) + "-" + nummer.substring(punkt + 1);
     }
 
     private static String trennerName(String t) {
@@ -722,6 +748,7 @@ class KvnrEigenschaftTest {
         einzeln(s, "quelle.kvnr-pruefziffer-ungueltig", 900); // Ist 1295
         einzeln(s, "quelle.kvnr-form-abweichend", 1200); // Ist 1731
         einzeln(s, "waechter.gueltigeFormen", 1900); // Ist 2790
+        einzeln(s, "form.vierPunktGruppenUmgestellt", 45); // Ist 65 (IPv4-Gestalt hinter dem Buchstaben, ersetzt)
     }
 
     /**

@@ -1,5 +1,6 @@
 package de.skillshield.core.recognizer.kv;
 
+import static de.skillshield.core.SynthetischeKvNummern.IK_FORM_DOKU_IP;
 import static de.skillshield.core.SynthetischeKvNummern.IK_GUELTIG;
 import static de.skillshield.core.SynthetischeKvNummern.KVNR_GUELTIG;
 import static de.skillshield.core.SynthetischeKvNummern.KVNR_GUELTIG_BUCHSTABE_C;
@@ -7,10 +8,12 @@ import static de.skillshield.core.SynthetischeKvNummern.KVNR_GUELTIG_ZWEI;
 import static de.skillshield.core.SynthetischeKvNummern.KVNR_LEHRBEISPIEL;
 import static de.skillshield.core.SynthetischeKvNummern.KVNR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN;
 import static de.skillshield.core.SynthetischeKvNummern.KVNR_UNGUELTIG_VERTAUSCHT;
+import static de.skillshield.core.SynthetischeKvNummern.LAENGE_6;
 import static de.skillshield.core.SynthetischeKvNummern.LANR_GUELTIG;
 import static de.skillshield.core.recognizer.kv.KvTestHilfen.GESCH_BINDESTRICH;
 import static de.skillshield.core.recognizer.kv.KvTestHilfen.HALBGEVIERT;
 import static de.skillshield.core.recognizer.kv.KvTestHilfen.LRM;
+import static de.skillshield.core.recognizer.kv.KvTestHilfen.NBSP;
 import static de.skillshield.core.recognizer.kv.KvTestHilfen.SHY;
 import static de.skillshield.core.recognizer.kv.KvTestHilfen.VS16;
 import static de.skillshield.core.recognizer.kv.KvTestHilfen.ZWSP;
@@ -614,5 +617,133 @@ class KvnrKontextTest {
             assertEquals(WEITER, funde.get(1).confidence(), "Konfidenz der Nummer");
             assertTrue(G.equals(funde.get(1).originalValue()), "Wert der Nummer");
         }
+    }
+
+    // ------------------------------------------------------------------ IPv4-Gestalt hinter dem Buchstaben (T-6)
+
+    /** Eine IPv4-Adresse aus dem Dokumentationsbereich, neun Ziffern in vier Punkt-Gruppen. */
+    private static final String IP = IK_FORM_DOKU_IP;
+
+    /** Kein Fund beginnt mit einem Buchstaben oder liegt ueber 0,40; Rueckgabe: die Fundliste. */
+    private static List<Finding> scanOhneBuchstabenform(String text) {
+        List<Finding> funde = scanKvnr(text);
+        for (Finding f : funde) {
+            assertTrue(Character.isDigit(f.originalValue().charAt(0)), "Fund in Buchstabenform");
+            assertTrue(f.confidence() <= FORM, "Konfidenz ueber 0,40");
+        }
+        return funde;
+    }
+
+    @Test
+    void ipv4Gestalt_hinterKontextwort_buchstabeIstKeinNummernanfang_fundNurUeberDieZiffern() {
+        for (String vor : List.of("KVNR Z", "KVNR z", "KVNR Z ", "KVNR Z-", "KVNR z/", "KVNR: Z.", "KVNR Z" + NBSP,
+                "Versichertennummer Z ", "eGK-Nummer: Z", "Patient KVNR Z ")) {
+            List<Finding> funde = scanOhneBuchstabenform(vor + IP);
+            assertEquals(1, funde.size(), "Anzahl Funde");
+            assertTrue(IP.equals(funde.get(0).originalValue()), "Fund genau ueber die Ziffern");
+            assertEquals(vor.length(), funde.get(0).start(), "Start");
+            assertEquals(FORM, funde.get(0).confidence(), "Konfidenz");
+        }
+    }
+
+    @Test
+    void ipv4Gestalt_hinterKvNr_keinFund_gegenprobeNormaleNummerHatFund() {
+        for (String vor : List.of("KV-Nr. Z", "KV-Nr. Z ", "KV-Nummer: z-", "KV Nr. Z")) {
+            assertKeinFund(vor + IP);
+        }
+        for (String vor : List.of("KV-Nr. ", "KV-Nummer: ", "KV Nr. ")) {
+            assertFund(vor, G, "", SICHER);
+        }
+    }
+
+    @Test
+    void ipv4Gestalt_unsichtbaresZeichenVorDemBuchstaben_dieselbeRegel() {
+        for (String vor : List.of("KVNR " + UZ + "Z", "KVNR " + ZWSP + "Z-", "KVNR" + ZWSP + " Z",
+                "KVNR: " + SHY + "z ")) {
+            List<Finding> funde = scanOhneBuchstabenform(vor + IP);
+            assertEquals(1, funde.size(), "Anzahl Funde");
+            assertTrue(IP.equals(funde.get(0).originalValue()), "Fund genau ueber die Ziffern");
+        }
+        // Gegenprobe: dieselbe Stellung mit einer Nummer ohne IPv4-Gestalt bleibt die Buchstabenform
+        assertFund("KVNR " + ZWSP, G, "", SICHER);
+        assertFund("KVNR " + UZ, BUCHSTABE_G + " " + ZIFFERN_G, "", SICHER);
+    }
+
+    @Test
+    void ipv4Gestalt_gesperrtesKontextwortDavor_dieselbeRegel_gegenprobeNormaleNummer() {
+        for (String vor : List.of("K V N R Z", "K V N R Z ", "K. V. N. R. Z", "K. V. N. R. z ", "K V N R  Z ")) {
+            List<Finding> funde = scanOhneBuchstabenform(vor + IP);
+            assertTrue(funde.size() <= 1, "Anzahl Funde");
+            assertTrue(funde.isEmpty() || IP.equals(funde.get(0).originalValue()), "Fund nur ueber die Ziffern");
+        }
+        assertFund("K V N R ", U, "", PZ);
+        assertFund("K. V. N. R. ", BUCHSTABE_U + " " + ZIFFERN_U, "", PZ);
+    }
+
+    @Test
+    void ipv4Gestalt_normaleFormenBleibenUnveraendert_einFundUeberAlleZeichen() {
+        assertFund("KVNR ", G, "", SICHER);
+        assertFund("KVNR ", BUCHSTABE_G + " " + ZIFFERN_G, "", SICHER);
+        for (String trenner : TRENNER) {
+            assertFund("KVNR ", BUCHSTABE_G + trenner + ZIFFERN_G, "", SICHER);
+        }
+        // Punkt-Gruppen in zwei oder drei Gruppen: keine IPv4-Gestalt
+        for (int[] gruppen : List.of(new int[] {4, 5}, new int[] {3, 3, 3}, new int[] {2, 7}, new int[] {1, 2, 6})) {
+            assertFund("KVNR ", BUCHSTABE_G + gruppiert(ZIFFERN_G, gruppen, "."), "", SICHER);
+            assertFund("KVNR ", BUCHSTABE_G + "." + gruppiert(ZIFFERN_G, gruppen, "."), ", Rest", SICHER);
+        }
+        // vier Gruppen mit anderen Trennern: nur der Punkt zaehlt als IPv4-Gestalt
+        for (String trenner : List.of(" ", String.valueOf(NBSP), "-", "/")) {
+            assertFund("KVNR ", BUCHSTABE_G + gruppiert(ZIFFERN_G, new int[] {3, 2, 2, 2}, trenner), "", SICHER);
+            assertFund("KVNR ", BUCHSTABE_G + " " + gruppiert(ZIFFERN_G, new int[] {2, 2, 2, 3}, trenner), "",
+                    SICHER);
+        }
+    }
+
+    @Test
+    void ipv4Gestalt_grenzfaelle_vierZiffernInEinerGruppe_bleibenBuchstabenform() {
+        // vier Gruppen, aber eine mit vier Ziffern: keine IPv4-Gestalt
+        assertFund("KVNR ", BUCHSTABE_G + gruppiert(ZIFFERN_G, new int[] {4, 2, 2, 1}, "."), "", SICHER);
+        assertFund("KVNR ", BUCHSTABE_G + gruppiert(ZIFFERN_G, new int[] {1, 4, 2, 2}, "."), "", SICHER);
+        assertFund("KVNR ", BUCHSTABE_G + gruppiert(ZIFFERN_G, new int[] {2, 2, 1, 4}, "."), "", SICHER);
+        // vierte Gruppe mit vier Ziffern (zwoelf Ziffern, Buchstabe): abweichende Form mit Buchstaben
+        assertFund("KVNR ", "Z" + IP + "234", "", FORM);
+    }
+
+    @Test
+    void ipv4Gestalt_grenzfaelle_fuenfPunktGruppen_dieErstenVierGruppenBildenDieGestalt() {
+        String fuenf = gruppiert(ZIFFERN_G, new int[] {2, 2, 2, 2, 1}, ".");
+        List<Finding> funde = scanOhneBuchstabenform("KVNR " + BUCHSTABE_G + fuenf);
+        assertEquals(1, funde.size(), "Anzahl Funde");
+        assertTrue(fuenf.equals(funde.get(0).originalValue()), "Fund genau ueber die Ziffern");
+    }
+
+    @Test
+    void ipv4Gestalt_weitereZiffernDahinter_dieRegelGreiftTrotzdem() {
+        for (String rest : List.of(" " + LAENGE_6, " 12", ".5", ".5.6", "/12")) {
+            List<Finding> funde = scanOhneBuchstabenform("KVNR Z" + IP + rest);
+            assertTrue(funde.size() <= 2, "Anzahl Funde");
+            for (Finding f : funde) {
+                assertTrue(f.start() >= "KVNR Z".length(), "Fund beginnt hinter dem Buchstaben");
+            }
+        }
+    }
+
+    /**
+     * Bekannte Grenze (Nachtrag zu T-6, Punkt 3): Eine KVNR, deren neun Ziffern mit Punkten in genau vier Gruppen zu je
+     * ein bis drei Ziffern stehen, verliert den Buchstaben im Fund; es bleibt ein Fund 0,40 ueber die Ziffern. Die
+     * Schreibweise ist fuer eine KVNR nicht ueblich. Der Test haelt das Verhalten fest und ist kein Soll fuer
+     * kuenftige Erweiterungen. Gegenprobe: dieselbe Nummer in drei Punkt-Gruppen bleibt ein Fund ueber alle Zeichen.
+     */
+    @Test
+    void bekannteGrenze_kvnrInVierPunktGruppen_fundNurUeberDieZiffern_gegenprobeDreiGruppenVollerFund() {
+        for (int[] gruppen : List.of(new int[] {3, 3, 2, 1}, new int[] {2, 2, 2, 3}, new int[] {1, 3, 3, 2})) {
+            String vier = gruppiert(ZIFFERN_G, gruppen, ".");
+            List<Finding> funde = scanOhneBuchstabenform("KVNR " + BUCHSTABE_G + vier);
+            assertEquals(1, funde.size(), "Anzahl Funde");
+            assertTrue(vier.equals(funde.get(0).originalValue()), "Fund nur ueber die Ziffern");
+            assertEquals(FORM, funde.get(0).confidence(), "Konfidenz");
+        }
+        assertFund("KVNR ", BUCHSTABE_G + gruppiert(ZIFFERN_G, new int[] {3, 3, 3}, "."), "", SICHER);
     }
 }
