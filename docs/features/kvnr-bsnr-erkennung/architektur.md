@@ -1370,3 +1370,19 @@ Tests in `KvnrGrenzenTest`, sofern nicht anders genannt. Diese Liste ergänzt un
   `KvStandLueckenDifferenzTest`, `KvnrFuzzBestandTest`, `RoundtripFuzzTest`. Bei einer Rücknahme (T-R) werden
   diese Stellen auf den im Kommentar genannten alten Wert zurückgesetzt. Regel 12 Satz 3 gilt mit dieser
   erweiterten Liste.
+- **Nachtrag zu T-11 (Entscheidung der Hauptsitzung, 23.11.2026; geht der Task-Beschreibung T-11 vor):**
+  1. `KvStandTrennerDifferenzTest` bleibt eingefroren. Siegel/Messwerte für Teil 1g (K-1 als exakter Messwert mit
+     Mindestzahl, S-1 bis S-3) stehen in der **neuen** Klasse `test/…/KvnrOhneKontextFuzzBestandTest.java`
+     (Paket `de.skillshield.core`, 1b-Inventar); Muster wie `KvnrFuzzBestandTest`.
+  2. Teil 1g enthält zusätzlich die seit T-6 vorgemerkten **Bestand-Bausteine**: gültige KVNR-Form unmittelbar an
+     bzw. in einem EMAIL-/IP-/URL-/PFAD-Fund, darunter der Fall „Rest genau drei Ziffern" (`MIN_REST_ZIFFERN`);
+     Erwartung nach dem Grundsatz „Bestand hat Vorrang" (Bestandsfund unverändert, Roundtrip zeichengleich, kein
+     Klartext der Nummer außerhalb eines Fundes, soweit die Zuschneide-Regel einen Restfund vorsieht).
+  3. Mitzunehmen aus security T-8 (vorgemerkt): (a) Javadoc des ersten G-K15-Tests in `KvnrGrenzenTest` auf die
+     Fassung der Richtigstellung bringen; (b) zwei Lastfälle in `GrenzlastTest`: „gesperrtes Kontextwort +
+     Buchstabe + IP" und „Lauf unsichtbarer Zeichen + IP". G-K1 und G-K15 in `KvnrGrenzenTest` an den Stand mit
+     1b anpassen (Regel 12: betroffene „kein Fund"-Zeilen wurden so gebaut, dass 1b sie nicht trifft – prüfen),
+     dazu die neuen `bekannteGrenzeOhneKontext…`-Tests (klein, Trenner, Wortgrenze, D-4-Wort davor, ungültige
+     Prüfziffer, Nicht-ASCII-Ziffer als Nachbar).
+  4. Eingefroren bleiben außerdem der Prüfstand T-9 (Tag `kb-t9-pruefstand`) und alle bestehenden
+     Seeds/Hashes/Siegel/Mindestzahlen. Wird ein bestehender Test rot: nicht anpassen, anhalten, melden.
