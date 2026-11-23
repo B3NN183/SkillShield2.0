@@ -55,7 +55,7 @@ import java.util.Set;
  * drei Leerraumzeichen); ein unsichtbares Zeichen zwischen zwei Buchstaben ohne Luecke bildet einen Lauf mit zwei
  * Buchstaben und ist keine Luecke (Grenze 14a). Weit-Folge: maximale Folge von Einzelbuchstaben, je durch eine
  * Weit-Luecke verbunden; eine Luecke hinter dem letzten Buchstaben gehoert nicht zum Vergleich. Weit-Kontextwort: eine
- * Weit-Folge mit mindestens einer erweiterten Luecke und vier bis 23 Buchstaben, deren gefaltete Buchstaben genau
+ * Weit-Folge mit mindestens einer erweiterten Luecke und vier bis 27 Buchstaben, deren gefaltete Buchstaben genau
  * einem Eintrag von {@link KvArt#kontextwoerter()} gleichen (nie das Zwei-Buchstaben-Wort: {@code I. K.}, {@code I  K}
  * und {@code I<Tab>K} bleiben ohne Wirkung). Eine Weit-Folge ohne erweiterte Luecke ist die strenge Sperrfolge und
  * bleibt beim Sperr-Verfolger. Nicht zulaessig (die Folge endet): Zeilenumbruch, {@code ,}, {@code ;}, {@code :},
@@ -213,9 +213,10 @@ import java.util.Set;
  *
  * <p><b>Linearitaet.</b> Ein Durchlauf, keine Rekursion, kein regulaerer Ausdruck, kein Zuruecksetzen der
  * Leseposition der Hauptschleife. Jeder Lauf wird in einem Zug gelesen. Dabei fuehrt der Durchlauf nur ein Fenster
- * der letzten 24 Buchstaben des Laufs (laengere Teilstuecke koennen keinem Eintrag gleichen, das laengste Kontextwort
- * hat 23 Zeichen) und eine Bitmaske der Teilstueckanfaenge darin. Am Ende jedes Teilstuecks werden die Fenstersuffixe
- * ab einem Teilstueckanfang verglichen: hoechstens 24 Vergleiche mit Texten von hoechstens 23 Zeichen, also
+ * der letzten 28 Buchstaben des Laufs (laengere Teilstuecke koennen keinem Eintrag gleichen, das laengste Kontextwort
+ * hat hoechstens 27 Zeichen) und eine Bitmaske der Teilstueckanfaenge darin. Am Ende jedes Teilstuecks werden die
+ * Fenstersuffixe ab einem Teilstueckanfang verglichen: hoechstens 28 Vergleiche mit Texten von hoechstens 27 Zeichen,
+ * also
  * konstanter Aufwand je Teilstueck; jedes Zeichen des Laufs wird einmal gelesen, unsichtbare Zeichen werden ohne
  * Speicherung uebersprungen. Das Nachsatzwort hinter einem Kontextwort desselben Laufs wird ueber dieselbe Zaehlung
  * der Buchstaben seit dem Kontextwort (hoechstens sechs) erkannt, ohne Vorausschau. Hinter einem Vorwort am Ende
@@ -229,16 +230,16 @@ import java.util.Set;
  * konstanter Zeit gesetzt oder geloescht und braucht weder Vorgriff noch Rueckkehr; {@code CR} gefolgt von einer
  * Million unsichtbarer Zeichen ist ein einziger Lauf. Der Weit-Verfolger (erweiterte Trenner) macht je Zeichen
  * ausserhalb eines Laufs und je Lauf ebenfalls konstante Arbeit und setzt die Leseposition nie zurueck: Er fuehrt einen
- * Puffer fester Groesse (23 Buchstaben) plus Zaehler, hoechstens drei Leerraumzeichen je Luecke (danach endet die
+ * Puffer fester Groesse (27 Buchstaben) plus Zaehler, hoechstens drei Leerraumzeichen je Luecke (danach endet die
  * Folge, weitere Leerzeichen kosten je Zeichen konstante Zeit), das Abbild der offenen Segmente (sechs Werte) und
- * vergleicht einmal je Folgenende hoechstens 23 Zeichen mit acht Eintraegen. Der Vorgriff {@code vorausArt} (Lauf
+ * vergleicht einmal je Folgenende hoechstens 27 Zeichen mit acht Eintraegen. Der Vorgriff {@code vorausArt} (Lauf
  * hinter einer Luecke bis zum zweiten Buchstaben oder Laufende) ist fuer beide Verfolger gemeinsam und wird je
  * Laufanfang hoechstens einmal ausgefuehrt, nur wenn der Weit-Verfolger in einer Luecke steht; da ein Lauf mit mehreren
  * Buchstaben jede Folge beendet, trifft er nie denselben Lauf wie der Nachsatz-Vorgriff. Der Sperr-Verfolger macht
  * je Zeichen ausserhalb eines Laufs und je Lauf konstante Arbeit und setzt die Leseposition nie zurueck: Er fuehrt
- * einen Puffer fester Groesse (23 Buchstaben) plus Zaehler (laengere Folgen koennen keinem Kontextwort gleichen)
+ * einen Puffer fester Groesse (27 Buchstaben) plus Zaehler (laengere Folgen koennen keinem Kontextwort gleichen)
  * und das Abbild der offenen Segmente (sechs Werte, Wiederherstellen O(1)); der Vergleich mit den
- * Kontextwoertern geschieht einmal je Folgenende mit hoechstens 23 Zeichen und acht Eintraegen.
+ * Kontextwoertern geschieht einmal je Folgenende mit hoechstens 27 Zeichen und acht Eintraegen.
  * Jedes offene Segment wird hoechstens einmal ausgegeben, weil das Ereignis die Folge leert. Der Vorgriff auf
  * Einzelbuchstabe liest nur den einen Lauf hinter einem Sperr-Trenner (bis zum zweiten Buchstaben oder Laufende) und
  * beginnt nie im Lauf des Nachsatz-Vorgriffs (dieser betrifft den Lauf hinter einem Vorwort-Lauf mit mehreren
@@ -279,9 +280,12 @@ final class KvNumberScanner {
     private static final int MIN_LAENGE = 6;
     private static final int MAX_LAENGE = 12;
     private static final int MAX_FUELLWOERTER = 3;
-    private static final int FENSTER = 24;
+    private static final int FENSTER = 28;
     private static final int MAX_ABKUERZUNG = 4;
-    /** Laengstes Kontextwort ({@code institutionskennzeichen}) und damit Puffergroesse der Sperrfolge. */
+    /**
+     * Laengstes denkbares Kontextwort (27 Zeichen, Reserve fuer {@code nebenbetriebsstaettennummer}) und damit
+     * Puffergroesse von Sperr- und Weit-Folge.
+     */
     private static final int MAX_KONTEXTWORT = FENSTER - 1;
     /**
      * Kuerzeste gesperrte Folge, die ein Ereignis ausloest ({@code I K}, D-3); genau diese Laenge gilt nur fuer die
@@ -843,7 +847,7 @@ final class KvNumberScanner {
 
         /**
          * Die Weit-Folge ist zu Ende. Nur hier schreibt der Weit-Verfolger in den Bestandszustand: Hat die Folge
-         * mindestens eine erweiterte Luecke, vier bis 23 Buchstaben und gleicht sie einem Kontextwort der Art, beginnt
+         * mindestens eine erweiterte Luecke, vier bis 27 Buchstaben und gleicht sie einem Kontextwort der Art, beginnt
          * ein Kontext wie bei einem gesperrten Kontextwort ab drei Buchstaben; ein laufender Kontext wird dabei
          * neu begonnen, ohne das Abbild der offenen Segmente wiederherzustellen (Plan Kap. 3.2.5).
          */
