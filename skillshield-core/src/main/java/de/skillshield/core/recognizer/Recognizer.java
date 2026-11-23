@@ -29,8 +29,9 @@ public interface Recognizer {
     /**
      * Ob dieser Erkenner nachrangig ist (Grundsatz "Bestand hat Vorrang", Plan kvnr-bsnr-erkennung, Nachtrag 2 und 3
      * zu T-6). Der {@link TextScanner} schneidet Kandidaten eines nachrangigen Erkenners, die sich mit einem
-     * Kandidaten der Typen E-Mail, IP, URL oder Pfad ueberschneiden, auf die Teile ausserhalb zu, bevor er die
-     * Konflikte aufloest (Zuschneiden statt Verwerfen). Standard: {@code false}.
+     * aufgeloesten Bestandsfund ueberschneiden (einem Fund der Typen E-Mail, IP, URL oder Pfad im Scan ohne die
+     * nachrangigen Erkenner, nicht mit rohen Kandidaten), auf die Teile ausserhalb zu, bevor er alle Konflikte
+     * aufloest (Zuschneiden statt Verwerfen). Standard: {@code false}.
      *
      * @return {@code true} fuer die Erkenner der neuen Arten (KVNR, spaeter BSNR)
      */

@@ -58,12 +58,13 @@ import java.util.List;
  * keinen Fund. LANR und IK kennen diese Form nicht.
  *
  * <p>Vorrang des Bestands (Nachtrag 2 und 3 zu T-6): Der Erkenner ist {@linkplain #nachrangig() nachrangig}. Der
- * {@code TextScanner} schneidet jeden seiner Kandidaten, der sich mit den Funden der Typen E-Mail, IP, URL oder
- * Pfad (Bestand, Einzelheiten im Javadoc des {@code TextScanner}) ueberschneidet, auf die Teile ausserhalb zu; diese
- * Funde bleiben so unveraendert. Ein Reststueck mit
- * mindestens drei Ziffern bleibt als Fund (Quelle {@value #SOURCE_REST}, hoechstens 0,80). Bekannte Grenze: Der
- * Teil einer Nummer im anderen Fund traegt dessen Typ; ein Buchstabe oder ein Rest mit weniger als drei Ziffern
- * ausserhalb bleibt stehen. Auf Erkennerebene (ohne Scanner) liefert der Erkenner die Kandidaten unveraendert.
+ * {@code TextScanner} schneidet jeden seiner Kandidaten, der sich mit den aufgeloesten Bestandsfunden (den Funden der
+ * Typen E-Mail, IP, URL oder Pfad im Scan ohne die nachrangigen Erkenner, Einzelheiten im Javadoc des
+ * {@code TextScanner}) ueberschneidet, auf die Teile ausserhalb zu; diese Funde bleiben so unveraendert. Ein
+ * Reststueck mit mindestens drei Ziffern bleibt als Fund (Quelle {@value #SOURCE_REST}, hoechstens 0,80). Bekannte
+ * Grenze: Der Teil einer Nummer im anderen Fund traegt dessen Typ; ein Buchstabe oder ein Rest mit weniger als drei
+ * Ziffern ausserhalb bleibt stehen. Auf Erkennerebene (ohne Scanner) liefert der Erkenner die Kandidaten
+ * unveraendert.
  *
  * <p>Der Erkenner ist zustandslos und deterministisch; die Regeln und der Linearitaetsbeleg stehen im Javadoc von
  * {@link KvNumberScanner}. Es entsteht kein Netz- oder Dateizugriff, und Meldungen enthalten keinen Text, keine
@@ -89,8 +90,9 @@ public final class KvnrRecognizer implements Recognizer {
         return KvNumberScanner.detect(KvArt.KVNR, text);
     }
 
-    /** Der KVNR-Erkenner ist nachrangig: Der {@code TextScanner} schneidet seine Kandidaten, die E-Mail-, IP-,
-     * URL- oder Pfad-Kandidaten schneiden, auf die Teile ausserhalb zu. */
+    /** Der KVNR-Erkenner ist nachrangig: Der {@code TextScanner} schneidet seine Kandidaten, die einen aufgeloesten
+     * Bestandsfund (E-Mail, IP, URL oder Pfad im Scan ohne die nachrangigen Erkenner) schneiden, auf die Teile
+     * ausserhalb zu. */
     @Override
     public boolean nachrangig() {
         return true;

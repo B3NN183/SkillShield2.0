@@ -2,6 +2,7 @@ package de.skillshield.core.recognizer;
 
 import de.skillshield.core.conflict.ConflictResolver;
 import de.skillshield.core.model.Finding;
+import de.skillshield.core.model.FindingType;
 import de.skillshield.core.recognizer.general.EmailRecognizer;
 import de.skillshield.core.recognizer.general.Ipv4Recognizer;
 import de.skillshield.core.recognizer.general.PathRecognizer;
@@ -9,7 +10,6 @@ import de.skillshield.core.recognizer.general.UrlRecognizer;
 import de.skillshield.core.recognizer.kv.IkRecognizer;
 import de.skillshield.core.recognizer.kv.KvnrRecognizer;
 import de.skillshield.core.recognizer.kv.LanrRecognizer;
-import de.skillshield.core.model.FindingType;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;

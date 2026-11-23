@@ -1168,3 +1168,55 @@ Begründung Kap. 1 und R-4).
   4. Javadoc von `Recognizer#nachrangig` und `KvnrRecognizer` sprechen noch von „Kandidaten" statt von den
      aufgelösten Bestandsfunden (Nachtrag 4); T-7 gleicht das an. T-8 ergänzt Direkttests für das Kürzen der
      Ränder (Nicht-ASCII-Ziffer, Surrogatpaar, unsichtbares Zeichen).
+- **Nachtrag zu T-7 (Befund des engineers im Fuzz 1f, Entscheidung der Hauptsitzung):** Folge von G-K7 (Plan
+  Kap. 4.2: hinter `KV-Nr.`/`KV-Nummer` zählt eine reine Ziffernfolge als Füllwort): Ist der Kontext eines
+  KV-Vorworts noch aktiv und steht hinter einer reinen Ziffernfolge (6 bis 12 Ziffern) ein nachgestelltes
+  vollwertiges KVNR-Kontextwort (`KV-Nr. … <Ziffern> (KVNR)`), bleibt die Ziffernfolge ohne Fund, weil sie schon
+  als Füllwort verbraucht ist. Entscheidung: **dokumentierte Grenze, keine Produktänderung.** Begründung: Betroffen
+  ist nur eine reine Ziffernfolge ohne Buchstaben, also keine KVNR-Form; ohne das `KV-Nr.` davor entstünde ein Fund
+  der niedrigsten Stufe (0,40). Die Regel „`KV-Nr.` gilt nur für die Buchstabenform" (D-2, G-K7) soll verhindern,
+  dass Nummern der KV selbst als Versichertennummer gelten; sie für diesen seltenen Fall aufzuweichen, würde die
+  Scannerlogik in einem Test-Task ändern. Im Fuzz 1f wird der Fall als Markierungsklasse `kv-vorwort-ziffern`
+  geführt (Regel aus dem Text: Block ist eine reine Ziffernfolge, und im selben Absatz davor steht ein KV-Vorwort
+  mit `Nr`/`Nummer`), exakt gezählt. T-8 legt den Test `bekannteGrenze…` dazu an und nimmt den Fall in Kap. 11 und
+  das Javadoc auf. K-3 kommt im Fuzz 1f nicht vor (exakt 0, kein Mindestwert).
+- **Nachtrag 2 zu T-7 (aus der Prüfung von T-7; Entscheidungen der Hauptsitzung):**
+  1. **Genaue Ursache der Grenze „Pfad/URL zwischen Kontextwort und Nummer" (korrigiert Nachtrag 5 zu T-6 Punkt 3;
+     für T-8 verbindlich):** Nicht die Länge ist maßgeblich, sondern zwei Regeln des Scanners: (a) jedes Pfad- oder
+     URL-Segment zählt als Füllwort, ab dem vierten ist der Kontext erloschen; (b) der Punkt der Dateiendung hinter
+     einem Wort mit mehr als vier Buchstaben gilt als Satzende. Ohne Fund bleiben deshalb auch kurze Fälle (Pfad mit
+     vier Segmenten, Pfad mit zwei Segmenten und Dateiendung, jede URL mit Schema); abgedeckt bleiben Pfade mit
+     höchstens drei Segmenten ohne Endungspunkt. T-8 dokumentiert das so in Kap. 11 und im Javadoc und legt den
+     Test `bekannteGrenze…` mit kurzem Pfad, Dateiendung und URL an. Die geschlossene, großgeschriebene, gültige
+     Form fängt Teil 1b; gruppierte und kleingeschriebene Formen bleiben in dieser Stellung ungeschützt.
+  2. **Keine Behebung in diesem Feature.** Ein Prototyp von security (zweiter Lauf des KVNR-Erkenners mit durch ein
+     neutrales Wort ersetzten Bestandsbereichen) deckt die Fälle ab, verletzt aber den Bestandsschutz (sechs Tests
+     rot). Die Grenze wird als Kandidat für ein eigenes Folgefeature („Kontext über Pfade und URLs hinweg", mit
+     Prüfung durch security) im Abschlussbericht des Features genannt; dasselbe gilt für „Kontextwort direkt am
+     Buchstaben der Nummer" (Nachtrag zu T-4 Punkt 3), bei der ebenfalls eine vollständige KVNR-Form stehen bleibt.
+  3. **Markierungsklasse `kv-vorwort-ziffern` enger fassen (reviewer):** zusätzlich muss gelten, dass zwischen dem
+     letzten KV-Vorwort und dem Block kein vollwertiges KVNR-Kontextwort steht und höchstens drei Füllwörter sowie
+     höchstens ein Zeilenumbruch liegen (das Füllwortfenster des Scanners; Nummern und Satzzeichen dazwischen sind
+     wie im Scanner zu behandeln, aus dem Text bestimmt und nicht aus dem Erkenner), und das nachgestellte
+     Kontextwort muss zum Block gehören (unmittelbar hinter der Nummer in Klammern bzw. hinter Komma/Semikolon,
+     ohne weitere Nummer dazwischen).
+  4. **Ausnahme der Schutzgarantie im Fuzz (reviewer):** In Texten, in denen ein nachrangiger Kandidat einen
+     Bestandsfund schneidet, ist nicht jede Lücke befreit, sondern nur, was Nachtrag 3 zu T-6 zusagt: Jede
+     zusammenhängende, von keinem Fund abgedeckte Strecke innerhalb des Kandidaten und außerhalb des Bestands
+     enthält weniger als drei ASCII-Ziffern.
+  5. **Für T-11 (Fuzz 1g):** Bestand-Bausteine auch mit gültiger Nummer und mit einem Reststück von genau drei
+     Ziffern, damit Mutanten der Restfund-Schwelle (3 → 4) und des Konfidenzdeckels (0,80 → 0,95) auch im Fuzz
+     auffallen (bisher nur in den T-6-Tests).
+- **Nachtrag 3 zu T-7 (security, Richtigstellung zu Nachtrag 2 Punkt 1/2; für T-8 und den Abschlussbericht
+  verbindlich):** Der Satz „die geschlossene, großgeschriebene, gültige Form fängt Teil 1b" gilt nur bedingt.
+  Ohne Einschränkung zu dokumentieren ist: (a) **Pfad/URL zwischen Kontextwort und Nummer:** Solange Teil 1b nicht
+  gebaut ist oder falls er nach D-5 zurückgenommen wird, bleibt in dieser Stellung jede KVNR-Form ohne Fund, auch
+  die geschlossene; mit Teil 1b bleiben die gruppierte und die kleingeschriebene Form sowie Nummern mit falscher
+  Prüfziffer ohne Fund. (b) **Kontextwort direkt am Buchstaben der Nummer:** Hier schützt auch Teil 1b nicht, weil
+  er vor dem Buchstaben eine Wortgrenze verlangt (Kap. 4.3); jede KVNR-Form bleibt ohne Fund. T-8 schreibt beides
+  so in Kap. 11, ins Javadoc und in die Tests `bekannteGrenze…`. Der Abschlussbericht legt dem Nutzer beide Grenzen
+  ausdrücklich als Restrisiko vor (mit dem Vorschlag eines Folgefeatures); die Abnahme des Features setzt voraus,
+  dass der Nutzer dieses Restrisiko kennt.
+- **Vermerk (23.11.2026):** Der Nutzer hat das in Nachtrag 3 zu T-7 beschriebene Restrisiko (Pfad/URL zwischen
+  Kontextwort und Nummer; Kontextwort direkt am Buchstaben) zur Kenntnis genommen („ja das ist ok so dann bitte
+  weiter"). Es bleibt Gegenstand des Abschlussberichts samt Vorschlag eines Folgefeatures.
