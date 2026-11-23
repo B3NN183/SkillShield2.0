@@ -1287,3 +1287,20 @@ Tests in `KvnrGrenzenTest`, sofern nicht anders genannt. Diese Liste ergänzt un
     mitzunehmen:** (a) Javadoc des ersten G-K15-Tests in `KvnrGrenzenTest` präzisieren („URL mit Schema" →
     Fassung der Richtigstellung); (b) zwei eigene Lastfälle in `GrenzlastTest`: „gesperrtes Kontextwort +
     Buchstabe + IP" und „Lauf unsichtbarer Zeichen + IP" (bisher nur indirekt abgedeckt, Laufzeit linear gemessen).
+- **Nachtrag zu T-9 (Entscheidung der Hauptsitzung, 23.11.2026; geht der Task-Beschreibung T-9 vor):**
+  1. `KvnrBsnrHilfen` ist seit T-1 eingefroren (Nachtrag zu T-3). Alles, was T-9 dort ergänzen sollte
+     (`kvnrOhneKontextReferenz`, Fremdtext-Bausteine, künstliche Erkenner), steht in der **neuen** Klasse
+     `test/…/recognizer/kv/KvnrOhneKontextHilfen.java`. Die enge Referenz `kvnrFormEng` aus `KvnrBsnrHilfen` wird
+     nur gelesen. Regel 13 (Einfrieren) gilt ab Abnahme für `KvnrOhneKontextFehlalarmTest` und
+     `KvnrOhneKontextHilfen`.
+  2. **AK-16 (a), Fassung des Prüfstands:** Die enge Referenz trifft laut T-1 einzelne Bestandstexte (zufällig
+     gültige Form). „0 zusätzliche KVNR-Funde" wird deshalb so geprüft: Auf den Bestandsmengen (Fuzz 1 bis 1e,
+     Korpus ohne `kvnrFaelle()`, Generatoren, `TestTexte`) liegt **kein** KVNR-Fund von `standard()` außerhalb der
+     Stellen, die `kvnrOhneKontextReferenz` trifft. Die Zahl der Referenztreffer wird je Menge exakt festgehalten
+     (Konstante mit Istwert) und im Bericht ausgewiesen, getrennt nach „Ziffern schon durch einen Bestandsfund
+     abgedeckt" und „bisher frei". Auf dem Stand nach T-8 ist die Zahl der KVNR-Funde zusätzlich genau 0.
+     Begründung: Ein Fund auf einer vollständig gültigen KVNR-Form ist kein Fehlalarm im Sinn von D-5, sondern
+     die gewollte Wirkung von Teil 1b; die Hauptsitzung bewertet die Zahlen in T-10 gegen die Nutzervorgabe
+     („bei vermehrten Fehlalarmen lassen").
+  3. Mengen, die absichtlich KVNR enthalten (Fuzz 1f, `kvnrFaelle()`, KVNR-Testklassen), gehören nicht zu den
+     Bestandsmengen von (a).
