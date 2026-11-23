@@ -73,6 +73,12 @@ import org.junit.jupiter.params.provider.MethodSource;
  * die Faelle {@code ku-...} und {@code bekannteGrenze15Rest-...} (kv-trenner-und-umbruch T-4) decken {@code CR UZ+ LF}
  * als einen Zeilenumbruch, die Gegenproben mit zwei Umbruechen und die Restgrenze 15R ab.
  *
+ * <p>Korpus Teil 2 (kv-trenner-und-umbruch, AK-7 bis AK-21): {@link #kvTrennerFaelle()} haelt die Faelle
+ * {@code kt-...}.
+ * Die Liste ist bewusst von {@link #kvFaelle()} getrennt: Die Faelle dort bleiben als eingefrorene Textmenge der
+ * Vorgaenger-Features (Hashes, Siegel, Mindestzahlen der Differenztests) unveraendert; Teil 2 wird getrennt gezaehlt
+ * und hat eigene Untergrenzen. Die Fallnamen sind disjunkt zu {@link #kvFaelle()}.
+ *
  * <p>Testdaten sind synthetisch ({@code *.invalid}, {@code *.example}, 192.0.2.0/24, erfundene Namen).
  * Backslashes werden über {@link TestTexte#bs(String)} geschrieben; Nicht-ASCII-, unsichtbare und typografische
  * Zeichen stehen nur als Escapes im Quelltext, Zeilenenden nur als Escapes.
@@ -1116,6 +1122,127 @@ class RoundtripKorpusTest {
                 "L A N R [[LANR_1]]\nI K [[IK_2]]", "LANR,IK"));
     }
 
+    private static String zeichen(int codepunkt) {
+        return String.valueOf((char) codepunkt);
+    }
+
+    /**
+     * Korpusfaelle zu kv-trenner-und-umbruch Teil 2 (T-9, AK-7 bis AK-21, AK-25): Weit-Kontextwoerter ab vier
+     * Buchstaben mit Punkt und Leerzeichen, mehreren Leerraumzeichen, Tab und gemischten Luecken, je Fall mit dem
+     * erwarteten pseudonymisierten Text; die Gegenproben aus AK-13, AK-14 und AK-17 sind Faelle ohne Fund
+     * ({@code kein}). Eigene Liste, nicht Teil von {@link #kvFaelle()}: Die Faelle dort bleiben als Textmenge der
+     * Differenztests unveraendert. Unsichtbare und typografische Zeichen kommen als {@code (char)}-Konstanten.
+     */
+    static List<KvFall> kvTrennerFaelle() {
+        List<KvFall> f = new ArrayList<>();
+        String lanr = LANR_GUELTIG;
+        String ik = IK_GUELTIG;
+        String nb = zeichen(0xA0);
+        String thin = zeichen(0x2009);
+        String nnb = zeichen(0x202F);
+        String zw = uzAk1Texte()[0];
+        String bom = uzAk1Texte()[2];
+        // AK-7: Punkt und Leerzeichen (D-2 c)
+        f.add(ein("kt-ak7-punkt-leerzeichen", "L. A. N. R. ", lanr, "LANR", ""));
+        f.add(ein("kt-ak7-doppelpunkt", "L. A. N. R.: ", lanr, "LANR", ""));
+        f.add(ein("kt-ak7-kleinschreibung", "l. a. n. r. ", lanr, "LANR", ""));
+        f.add(ein("kt-ak7-ohne-schlusspunkt", "L. A. N. R ", lanr, "LANR", ""));
+        f.add(ein("kt-ak7-punkt-zwei-leerzeichen", "L.  A.  N.  R. ", lanr, "LANR", ""));
+        f.add(ein("kt-ak7-nbsp-thin-nnbsp", "L." + nb + "A." + thin + "N." + nnb + "R. ", lanr, "LANR", ""));
+        // AK-8: mehrere Leerraumzeichen (D-2 b)
+        f.add(ein("kt-ak8-zwei-leerzeichen", "L  A  N  R ", lanr, "LANR", ""));
+        f.add(ein("kt-ak8-drei-leerzeichen", "L   A   N   R ", lanr, "LANR", ""));
+        f.add(ein("kt-ak8-zwei-nbsp", "L" + nb + nb + "A" + nb + nb + "N" + nb + nb + "R ", lanr, "LANR", ""));
+        f.add(ein("kt-ak8-gemischt", "L " + nb + "A" + thin + thin + "N" + nnb + " R ", lanr, "LANR", ""));
+        // AK-9: Tab (D-2 d)
+        f.add(ein("kt-ak9-tab-nummer-nach-tab", "L\tA\tN\tR\t", lanr, "LANR", ""));
+        f.add(ein("kt-ak9-tab-nummer-nach-leerzeichen", "L\tA\tN\tR ", lanr, "LANR", ""));
+        // AK-10: gemischte Formen
+        f.add(ein("kt-ak10-punkt-leerzeichen-zwei-leerzeichen", "L. A N  R ", lanr, "LANR", ""));
+        f.add(ein("kt-ak10-punkt-zwei-leerzeichen-tab", "L.  A\tN. R. ", lanr, "LANR", ""));
+        f.add(ein("kt-ak10-punkt-ohne-leerzeichen", "L.A. N R. ", lanr, "LANR", ""));
+        f.add(ein("kt-ak10-bindestrich", "L. A-N R ", lanr, "LANR", ""));
+        // AK-11: laengere Kontextwoerter und IK
+        f.add(ein("kt-ak11-arztnr", "A. R. Z. T. N. R. ", lanr, "LANR", ""));
+        f.add(ein("kt-ak11-arztnummer", "A  R  Z  T  N  U  M  M  E  R ", lanr, "LANR", ""));
+        f.add(ein("kt-ak11-iknr", "I. K. N. R. ", ik, "IK", ""));
+        f.add(ein("kt-ak11-iknummer-leerzeichen", "I  K  N  U  M  M  E  R ", ik, "IK", ""));
+        f.add(ein("kt-ak11-iknummer-punkte", "I. K. N. U. M. M. E. R. ", ik, "IK", ""));
+        f.add(ein("kt-ak11-lanrnr", "L. A. N. R. N. R. ", lanr, "LANR", ""));
+        f.add(ein("kt-ak11-iknr-tab", "I\tK\tN\tR ", ik, "IK", ""));
+        // AK-12: Pruefziffer und Laenge (Fund mit 0,50 bzw. 0,40, der Typ bleibt)
+        f.add(ein("kt-ak12-lanr-ungueltig", "L. A. N. R. ", LANR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN, "LANR", ""));
+        f.add(ein("kt-ak12-ik-ungueltig", "I  K  N  R ", IK_UNGUELTIG_KOMPLEMENT, "IK", ""));
+        f.add(ein("kt-ak12-lanr-laenge", "L. A. N. R. ", LAENGE_7, "LANR", ""));
+        f.add(ein("kt-ak12-ik-laenge", "I. K. N. R. ", LAENGE_7, "IK", ""));
+        // AK-13: das Zwei-Buchstaben-Wort bleibt ausgeschlossen, der Bestand mit einem Trenner bleibt
+        for (String vor : new String[] {"I. K. ", "I. K.: ", "i. k. ", "I. K ", "I  K ", "I   K ", "I\tK ", "I.  K. ",
+            "I" + nb + nb + "K ", "Dr. I. K. ", "Prof. I. K. ", "I. K.-Nr. ", "I. K. Mustermann ",
+            "I. K. Mustermann, Rechnung "}) {
+            f.add(kein("kt-ak13-ik-zwei-buchstaben-" + f.size(), vor + ik));
+        }
+        f.add(kein("kt-ak13-nachgestellt-klammer", ik + " (I. K.)"));
+        f.add(kein("kt-ak13-nachgestellt-komma", ik + ", I  K"));
+        f.add(ein("kt-ak13-bestand-ein-trenner-leerzeichen", "I K ", ik, "IK", ""));
+        f.add(ein("kt-ak13-bestand-ein-trenner-punkte", "I.K. ", ik, "IK", ""));
+        f.add(ein("kt-ak13-bestand-ein-trenner-bindestrich", "I-K ", ik, "IK", ""));
+        // AK-14: Fehlalarmschutz durch die maximale Folge
+        for (String text : new String[] {"A. L. A. N. R. " + lanr, "L. A. N. R. X " + lanr, "L. A. N. " + lanr,
+            "L. A. N. X. R. " + lanr, "L. A. N. R. L. A. N. R. " + lanr, "LA. NR. " + lanr, "L. ANR " + lanr,
+            "Herr A. L. A. N. R. " + lanr, "I. K. N. " + ik, "A. I. K. N. R. X " + ik, "L. A. N. R.",
+            "Bitte eintragen: L. A. N. R. und fertig"}) {
+            f.add(kein("kt-ak14-maximale-folge-" + f.size(), text));
+        }
+        // AK-17: nicht zulaessige Trenner
+        String vier = " " + nb + thin + nnb;
+        for (String text : new String[] {"L    A    N    R " + lanr, "L" + vier + "A" + vier + "N" + vier + "R " + lanr,
+            "L\t\tA\t\tN\t\tR " + lanr, "L\t A\t N\t R " + lanr, "L. A.\nN. R. " + lanr, "L\r\nA N R " + lanr,
+            "L, A, N, R " + lanr, "L; A; N; R " + lanr, "L/A/N/R " + lanr, "L_A_N_R " + lanr, "L: A: N: R " + lanr,
+            "L .A .N .R " + lanr, "L.. A.. N.. R.. " + lanr, "L - A - N - R " + lanr,
+            "L " + zeichen(0x2013) + " A " + zeichen(0x2013) + " N " + zeichen(0x2013) + " R " + lanr}) {
+            f.add(kein("kt-ak17-nicht-zulaessiger-trenner-" + f.size(), text));
+        }
+        // AK-18: volle Kontextregeln
+        f.add(ein("kt-ak18-fuellwoerter", "L. A. N. R. des Behandlers ", lanr, "LANR", ""));
+        f.add(kein("kt-ak18-vier-fuellwoerter", "L. A. N. R. der Praxis von Frau Beispiel " + lanr));
+        f.add(kvFall("kt-ak18-aufzaehlung", "L. A. N. R. " + lanr + ", " + LANR_GUELTIG_ZWEI,
+                "L. A. N. R. [[LANR_1]], [[LANR_2]]", "LANR,LANR"));
+        f.add(ein("kt-ak18-umbruch", "L. A. N. R.:\n", lanr, "LANR", ""));
+        f.add(kein("kt-ak18-leerzeile", "L. A. N. R.:\n\n" + lanr));
+        f.add(ein("kt-ak18-nr", "L. A. N. R. Nr. ", lanr, "LANR", ""));
+        f.add(ein("kt-ak18-bindestrich-nummer", "L. A. N. R.-Nummer ", lanr, "LANR", ""));
+        f.add(ein("kt-ak18-ik-bindestrich-nr", "I. K. N. R.-Nr. ", ik, "IK", ""));
+        // AK-19: nachgestellt, laufender Kontext, Bestand
+        f.add(ein("kt-ak19-nachgestellt-klammer", "", lanr, "LANR", " (L. A. N. R.)"));
+        f.add(ein("kt-ak19-nachgestellt-ohne-klammer", "", lanr, "LANR", " L  A  N  R"));
+        f.add(ein("kt-ak19-nachgestellt-komma", "", lanr, "LANR", ", L. A. N. R."));
+        f.add(ein("kt-ak19-nachgestellt-ik-klammer", "", ik, "IK", " (I. K. N. R.)"));
+        f.add(ein("kt-ak19-laufender-kontext", "LANR: L. A. N. R. ", lanr, "LANR", ""));
+        f.add(kein("kt-ak19-ik-zwei-buchstaben-laufender-kontext", "IK: Praxis I. K. Nr " + ik));
+        // AK-20: unsichtbare Zeichen an Buchstaben und in Luecken, UZ zwischen zwei Buchstaben bleibt Grenze 14a
+        f.add(ein("kt-ak20-uz-vor-dem-wort", zw + "L. A. N. R. ", lanr, "LANR", ""));
+        f.add(ein("kt-ak20-uz-hinter-buchstabe", "L" + zw + ". A. N. R. ", lanr, "LANR", ""));
+        f.add(ein("kt-ak20-uz-zwischen-punkt-und-leerzeichen", "L." + zw + " A. N. R. ", lanr, "LANR", ""));
+        f.add(ein("kt-ak20-uz-in-leerzeichenfolge", "L " + bom + " A  N  R ", lanr, "LANR", ""));
+        f.add(ein("kt-ak20-uz-hinter-dem-wort", "L. A. N. R" + zw + ". ", lanr, "LANR", ""));
+        f.add(kein("kt-ak20-uz-zwischen-zwei-buchstaben", "L" + zw + "A. N. R. " + lanr));
+        f.add(ein("kt-ak20-bestand-uz-als-wort", "L" + zw + "A" + zw + "N" + zw + "R ", lanr, "LANR", ""));
+        // AK-21: der Fund umfasst nur die Nummer
+        f.add(ein("kt-ak21-satzpunkt-nach-der-nummer", "L. A. N. R. ", lanr, "LANR", "."));
+        // AK-25: Mischung mit CR UZ LF und mit anderen Funden
+        f.add(ein("kt-mischung-cr-uz-lf-nach-weit-kontextwort", "L. A. N. R.:\r" + zw + "\n", lanr, "LANR", ""));
+        f.add(ein("kt-mischung-cr-uz-lf-vor-weit-kontextwort", "Praxis\r" + zw + "\nL. A. N. R. ", lanr, "LANR", ""));
+        f.add(kein("kt-mischung-weit-kontextwort-und-leerzeile-mit-uz",
+                "L. A. N. R.:\r" + zw + "\n\r" + zw + "\n" + lanr));
+        f.add(kvFall("kt-mischung-mail-weit-ip", "Mail " + MAIL + ", L. A. N. R. " + lanr + ", Server 192.0.2.10",
+                "Mail [[EMAIL_1]], L. A. N. R. [[LANR_2]], Server [[IP_3]]", "EMAIL,LANR,IP"));
+        f.add(kvFall("kt-mischung-zwei-arten", "L. A. N. R. " + lanr + "\nI. K. N. R. " + ik,
+                "L. A. N. R. [[LANR_1]]\nI. K. N. R. [[IK_2]]", "LANR,IK"));
+        f.add(kvFall("kt-mischung-weit-und-sperrschrift", "L. A. N. R. " + lanr + "; L A N R " + LANR_GUELTIG_ZWEI,
+                "L. A. N. R. [[LANR_1]]; L A N R [[LANR_2]]", "LANR,LANR"));
+        return f;
+    }
+
     /** Die Texte aller KV-Korpusfaelle (fuer den Differenztest). */
     static List<String> kvTexte() {
         List<String> texte = new ArrayList<>();
@@ -1196,6 +1323,33 @@ class RoundtripKorpusTest {
 
     static Stream<Arguments> kvFallStrom() {
         return kvFaelle().stream().map(k -> Arguments.of(k.name(), k));
+    }
+
+    @Test
+    void t9_kvTrenner_korpusIstGrossGenugUndNamenSindEindeutigUndDisjunkt() {
+        List<KvFall> faelle = kvTrennerFaelle();
+        assertTrue(faelle.size() >= 100, "Korpusgroesse Teil 2: " + faelle.size());
+        assertEquals(faelle.size(), faelle.stream().map(KvFall::name).distinct().count(), "Fallnamen eindeutig");
+        List<KvFall> vorgaenger = kvFaelle();
+        assertTrue(faelle.stream().noneMatch(k -> vorgaenger.stream().anyMatch(a -> a.name().equals(k.name()))),
+                "Fallnamen sind disjunkt zum Korpus der Vorgaenger");
+        assertTrue(faelle.stream().filter(k -> k.typen().isEmpty()).count() >= 40, "Gegenproben ohne Fund");
+        assertTrue(faelle.stream().filter(k -> k.typen().contains("LANR")).count() >= 30, "Faelle mit LANR-Fund");
+        assertTrue(faelle.stream().filter(k -> k.typen().contains("IK")).count() >= 8, "Faelle mit IK-Fund");
+    }
+
+    /**
+     * AK-25 (Korpus): Scan, Pseudonymisierung aller Funde, Roundtrip zeichengleich ohne Meldung, keine Ziffernkette
+     * mit 6+ Ziffern im Ausgabetext (Faelle mit Fund), Typen und erwarteter Ausgabetext je Fall.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("kvTrennerFallStrom")
+    void t9_kvTrenner_scanPseudonymisierungRoundtrip_keineLangeZiffernketteImAusgabetext(String name, KvFall k) {
+        kvPruefe(k, !k.typen().isEmpty());
+    }
+
+    static Stream<Arguments> kvTrennerFallStrom() {
+        return kvTrennerFaelle().stream().map(k -> Arguments.of(k.name(), k));
     }
 
     @Test

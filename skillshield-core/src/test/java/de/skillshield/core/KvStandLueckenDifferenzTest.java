@@ -857,4 +857,179 @@ class KvStandLueckenDifferenzTest {
         assertTrue(neuAbgedecktJeTyp(NEU, lanrText, FindingType.LANR) > 0, "Produkt deckt die LANR-Nummer neu ab");
         assertEquals(0, neuAbgedecktJeTyp(NEU, ikText, FindingType.LANR), "Produkt: kein LANR-Zugewinn bei IK");
     }
+
+    // ------------------------------------------------------------------ T-9: Teil 1e und Korpus Teil 2
+
+    /** Siegel ueber die Funde der Kopie auf Fuzz-Teil 1e (hexadezimal, in T-9 gemessen). */
+    static final int SIEGEL_LUECKEN_TEIL_1E = 0xDF08B330;
+
+    private static List<String> teil1e() {
+        List<RoundtripFuzzTest.FallE> faelle = RoundtripFuzzTest.erzeugeKvE(RoundtripFuzzTest.SEED_TEXTE_KV_E);
+        List<String> texte = new ArrayList<>(faelle.size());
+        for (RoundtripFuzzTest.FallE f : faelle) {
+            texte.add(f.text());
+        }
+        return texte;
+    }
+
+    private static List<String> korpusTrenner() {
+        List<String> texte = new ArrayList<>();
+        for (RoundtripKorpusTest.KvFall k : RoundtripKorpusTest.kvTrennerFaelle()) {
+            texte.add(k.text());
+        }
+        return texte;
+    }
+
+    private static final List<String> TEIL_1E = teil1e();
+    private static final List<String> KORPUS_TRENNER = korpusTrenner();
+
+    private static int verlorenGegenVergleichsform(TextScanner neu, String text) {
+        boolean[] jetzt = abdeckung(text.length(), neu.scan(text));
+        KvTestHilfen.Vergleichsform vf = KvTestHilfen.wortVergleichsform(text, KvTestHilfen.LANR_ART,
+                KvTestHilfen.IK_ART);
+        boolean[] erwartet = abdeckung(text.length(), vf.aufOriginal(ALT.scan(vf.text())));
+        int zahl = 0;
+        for (int i = 0; i < text.length(); i++) {
+            zahl += erwartet[i] && !jetzt[i] ? 1 : 0;
+        }
+        return zahl;
+    }
+
+    private static final String[] T9_NAMEN = {"Teil 1e", "Korpus Teil 2"};
+
+    private static List<List<String>> t9Mengen() {
+        return List.of(TEIL_1E, KORPUS_TRENNER);
+    }
+
+    /** Eigenes Siegel fuer Teil 1e (T-9); die Siegel von Teil 1, 1b, 1c und 1d bleiben in den Tests davor. */
+    @Test
+    void t9_standLuecken_fundbildAufTeil1eIstEingefroren() {
+        int teil1e = siegel(TEIL_1E);
+        assertEquals(SIEGEL_LUECKEN_TEIL_1E, teil1e, "Siegel Teil 1e, gemessen 0x" + Integer.toHexString(teil1e));
+    }
+
+    /**
+     * Differenz auf Erkennerebene ueber Teil 1e und den Korpus von Teil 2: Je Text und Art laufen die Waechter, die
+     * Invarianten, der strenge Bestandsschutz gegen beide Kopien und der Fehlalarm-Pruefstand
+     * ({@link KvTestHilfen#scan}); ein zusaetzlicher Fund ohne Weit-Kontextwort bricht ab (Regel 10, D-8). Die Kopie
+     * liefert auf beiden Mengen Funde, die Pruefung laeuft also nicht ins Leere. Messwerte der Funde der Kopie:
+     * Teil 1e LANR 732, IK 994 (Untergrenzen 500, 690), Korpus Teil 2 je 3 (je 2).
+     */
+    @Test
+    void t9_differenz_erkennerebene_teil1eUndKorpusTrenner() {
+        int[] minLanr = {500, 2};
+        int[] minIk = {690, 2};
+        for (int i = 0; i < T9_NAMEN.length; i++) {
+            pruefeMitWaechter(t9Mengen().get(i));
+            int lanr = zaehleAlteFunde(KvTestHilfen.LANR_ART, t9Mengen().get(i));
+            int ik = zaehleAlteFunde(KvTestHilfen.IK_ART, t9Mengen().get(i));
+            assertTrue(lanr >= minLanr[i], T9_NAMEN[i] + ": zu wenig alte LANR-Funde " + lanr);
+            assertTrue(ik >= minIk[i], T9_NAMEN[i] + ": zu wenig alte IK-Funde " + ik);
+        }
+    }
+
+    /**
+     * Differenz auf Scannerebene ueber Teil 1e und den Korpus von Teil 2: keine alt abgedeckte Position geht
+     * verloren, keine alt von einem KV-Fund abgedeckte Position wird nur noch von einem Nicht-KV-Fund abgedeckt, und
+     * die Abdeckung der Wort-Vergleichsform (die Kopie auf dem Text mit je einem Leerzeichen je erweiterter Luecke)
+     * bleibt vollstaendig erhalten (AK-21, AK-22). Der Scanner mit der Kopie liefert auf beiden Mengen KV-Funde.
+     */
+    @Test
+    void t9_differenz_scannerebene_teil1eUndKorpusTrenner() {
+        for (int i = 0; i < T9_NAMEN.length; i++) {
+            List<String> texte = t9Mengen().get(i);
+            assertEquals(0, verloreneTexte(NEU, texte), T9_NAMEN[i] + ": Texte mit verlorener Position");
+            assertEquals(0, typVerlusteTexte(NEU, texte), T9_NAMEN[i] + ": Texte mit Typverlust");
+            int gegenVergleichsform = 0;
+            for (String text : texte) {
+                gegenVergleichsform += verlorenGegenVergleichsform(NEU, text) > 0 ? 1 : 0;
+            }
+            assertEquals(0, gegenVergleichsform, T9_NAMEN[i] + ": Texte mit Verlust gegen die Vergleichsform");
+            assertTrue(alteKvScannerFunde(texte) > 0, T9_NAMEN[i] + ": Kopie ohne KV-Funde auf Scannerebene");
+        }
+    }
+
+    /**
+     * Fehlalarm-Pruefstand ueber Teil 1e und den Korpus von Teil 2 (Plan 9a, Regel 10): Auf Scannerebene deckt der
+     * Scanner keine Position unerklaert neu ab ({@link #fehlalarmScannerebene}), und je Art gibt es weder eine
+     * Abweichung ohne Weit-Kontextwort und ohne {@code CR UZ+ LF} noch eine Verletzung des strengen Bestandsschutzes
+     * ({@link #ungleichOhneErklaerung}). Mindestzahlen mit mehr als 30 % Abstand zu den Messwerten (Teil 1e / Korpus):
+     * geprueft ohne Ausnahme 26 / 47 (18, 32), ausgenommen 974 / 54 (680, 37), alte KV-Funde in den geprueften
+     * Texten 39 / 4 (27, 2), Paare (Text, Art) mit Weit-Kontextwort ohne {@code CR UZ+ LF} 1 247 / 52 (870, 36).
+     */
+    @Test
+    void t9_fehlalarm_teil1eUndKorpusTrenner_keineUnerklaertNeuAbgedecktePositionUndKeineAbweichung() {
+        int[] minGeprueft = {18, 32};
+        int[] minAusgenommen = {680, 37};
+        int[] minAlteFunde = {27, 2};
+        int[] minPaare = {870, 36};
+        for (int i = 0; i < T9_NAMEN.length; i++) {
+            List<String> texte = t9Mengen().get(i);
+            int[] z = fehlalarmScannerebene(NEU, texte);
+            assertEquals(0, z[2], T9_NAMEN[i] + ": Texte mit unerklaert neu abgedeckter Position");
+            assertTrue(z[0] >= minGeprueft[i], T9_NAMEN[i] + ": zu wenig geprueft " + z[0]);
+            assertTrue(z[1] >= minAusgenommen[i], T9_NAMEN[i] + ": zu wenig ausgenommen " + z[1]);
+            assertTrue(z[3] >= minAlteFunde[i], T9_NAMEN[i] + ": zu wenig alte KV-Funde " + z[3]);
+            int[] paare = ungleichOhneErklaerung(texte);
+            assertEquals(0, paare[0], T9_NAMEN[i] + ": Abweichung ohne die Folge und ohne Weit-Kontextwort");
+            assertEquals(0, paare[2], T9_NAMEN[i] + ": Bestandsschutz verletzt");
+            assertTrue(paare[1] >= minPaare[i], T9_NAMEN[i] + ": zu wenig Paare mit Weit-Kontextwort " + paare[1]);
+        }
+    }
+
+    /**
+     * Zugewinn-Beleg (Plan T-9, AK-25): Auf Teil 1e und dem Korpus von Teil 2 deckt das Produkt in vielen Texten ohne
+     * {@code CR UZ+ LF} Positionen ab, die die Kopie nicht abdeckt (Teil 2 wirkt), und jeder Zugewinn hat den Typ der
+     * Wort-Vergleichsform ({@link #jeKvTyp}, unerklaerte Positionen 0). Messwerte (Teil 1e / Korpus): Texte mit neu
+     * abgedeckter Position 723 / 46 (Untergrenzen 500, 32), davon mit LANR-Zugewinn 608 / 38 (420, 26) und
+     * IK-Zugewinn 595 / 9 (410, 6), Texte ohne {@code CR UZ+ LF} 769 / 98 (530, 68), Texte mit der Folge 231 / 3
+     * (160, 2). Mit der Folge weicht die Fundliste von der der Kopie auf 398 / 2 Paaren (Text, Art) ab (275, 1).
+     */
+    @Test
+    void t9_zugewinn_teil1eUndKorpusTrenner_neuAbgedeckteTextePositionenUndTyp() {
+        int[] minZugewinn = {500, 32};
+        int[] minLanr = {420, 26};
+        int[] minIk = {410, 6};
+        int[] minOhneFolge = {530, 68};
+        int[] minMitFolge = {160, 2};
+        int[] minAbweichend = {275, 1};
+        for (int i = 0; i < T9_NAMEN.length; i++) {
+            List<String> texte = t9Mengen().get(i);
+            int zugewinn = 0;
+            int mitFolge = 0;
+            for (String text : texte) {
+                mitFolge += enthaeltCrUnsichtbarLf(text) ? 1 : 0;
+                zugewinn += !enthaeltCrUnsichtbarLf(text) && neuAbgedeckt(NEU, text) > 0 ? 1 : 0;
+            }
+            int[] typ = jeKvTyp(NEU, texte);
+            assertEquals(0, typ[1], T9_NAMEN[i] + ": unerklaert neu abgedeckte LANR-Position");
+            assertEquals(0, typ[2], T9_NAMEN[i] + ": unerklaert neu abgedeckte IK-Position");
+            assertTrue(zugewinn >= minZugewinn[i], T9_NAMEN[i] + ": zu wenig Texte mit Zugewinn " + zugewinn);
+            assertTrue(typ[3] >= minLanr[i], T9_NAMEN[i] + ": zu wenig LANR-Zugewinn " + typ[3]);
+            assertTrue(typ[4] >= minIk[i], T9_NAMEN[i] + ": zu wenig IK-Zugewinn " + typ[4]);
+            assertTrue(typ[0] >= minOhneFolge[i], T9_NAMEN[i] + ": zu wenig Texte ohne die Folge " + typ[0]);
+            assertTrue(mitFolge >= minMitFolge[i], T9_NAMEN[i] + ": zu wenig Texte mit der Folge " + mitFolge);
+            assertEquals(texte.size(), typ[0] + mitFolge, T9_NAMEN[i] + ": jeder Text ist einmal eingeordnet");
+            int abweichend = ungleicheTexte(texte)[1];
+            assertTrue(abweichend >= minAbweichend[i], T9_NAMEN[i] + ": zu wenig Abweichungen mit Folge " + abweichend);
+        }
+    }
+
+    /**
+     * Selbsttest zu {@link #verlorenGegenVergleichsform}: Ein Scanner ohne KV-Erkenner verliert die Position, die die
+     * Kopie auf der Wort-Vergleichsform abdeckt ({@code L. A. N. R. <LANR>} wird zu {@code L A N R <LANR>}); das
+     * Produkt und die Kopie auf einem Text ohne Weit-Kontextwort verlieren nichts.
+     */
+    @Test
+    void t9_selbsttest_verlustGegenDieVergleichsformWirdGemeldet() {
+        TextScanner ohneKv = new TextScanner(List.of(new EmailRecognizer(), new Ipv4Recognizer(),
+                new UrlRecognizer(), new PathRecognizer()));
+        for (String text : List.of("L. A. N. R. " + LANR_GUELTIG, "L  A  N  R " + LANR_GUELTIG,
+                "I\tK\tN\tR\t" + IK_GUELTIG, LANR_GUELTIG + " (L. A. N. R.)")) {
+            assertTrue(verlorenGegenVergleichsform(ohneKv, text) > 0, "Scanner ohne KV verliert Positionen");
+            assertEquals(0, verlorenGegenVergleichsform(NEU, text), "Produkt verliert nichts");
+        }
+        assertEquals(0, verlorenGegenVergleichsform(ALT, "LANR " + LANR_GUELTIG), "Text ohne Weit-Kontextwort");
+        assertTrue(verlorenGegenVergleichsform(ohneKv, "LANR " + LANR_GUELTIG) > 0, "Text ohne Weit-Kontextwort");
+    }
 }

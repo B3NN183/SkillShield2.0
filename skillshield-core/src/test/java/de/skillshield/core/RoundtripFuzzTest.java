@@ -49,6 +49,11 @@ import org.junit.jupiter.api.Test;
  * Generator {@link #erzeugeKvD}, eigene Records {@link BlockD} und {@link FallD}, Hash {@link #HASH_TEIL_1D}): Texte
  * mit {@code CR UZ+ LF} hinter Kontextwoertern (normal und gesperrt), {@code KW N CR UZ+ LF N2}, Gegenproben und
  * Mischung mit Bausteinen aus 1c; dieselben Eigenschaften wie 1c, dazu der strikte Zaehler "Block ohne Scan-Abdeckung".
+ * Teil 1e ({@code SEED_TEXTE_KV_E}, kv-trenner-und-umbruch T-9, eigener Generator {@link #erzeugeKvE}, eigene Records
+ * {@link BlockE} und {@link FallE}, Hash {@link #HASH_TEIL_1E}): Weit-Kontextwoerter beider Arten mit zufaelligen
+ * Luecken (vor der Nummer, nachgestellt, mit Komma), Gegenproben aus AK-13, AK-14 und AK-17, Initialen und Mischung
+ * mit Bausteinen aus 1c und 1d; dieselben Eigenschaften wie 1d, dazu der strikte Zaehler "Block ohne Scan-Abdeckung"
+ * fuer nicht markierte Bloecke (markiert wird nach Grenze 14e, {@link #verbindbar}).
  * Teil 2: {@value #ANZAHL_EINGABEN} Zufallseingaben an {@code restore}.
  *
  * <p>Der Lauf wird einmal ausgeführt ({@link #LAUF}); jede Eigenschaft ist ein eigener Test. Meldungen nennen nur
@@ -109,6 +114,7 @@ class RoundtripFuzzTest {
     private static Lauf LAUF_KV;
     private static Lauf LAUF_KV_C;
     private static Lauf LAUF_KV_D;
+    private static Lauf LAUF_KV_E;
 
     // ------------------------------------------------------------------ Erzeugung
 
@@ -793,6 +799,393 @@ class RoundtripFuzzTest {
         }
     }
 
+    // ------------------------------------------------------------ Teil 1e: Weit-Folgen (kv-trenner-und-umbruch T-9)
+
+    /** Teil 1e: eigene Startwerte, {@value #ANZAHL_TEXTE} Texte mit Weit-Kontextwoertern und Mischbausteinen. */
+    static final long SEED_TEXTE_KV_E = 20261125L;
+    static final long SEED_AUSWAHL_KV_E = 818181L;
+
+    /**
+     * Blockarten von Teil 1e, je ein erwarteter Fund einer gueltigen Nummer: Weit-Kontextwort ab vier Buchstaben mit
+     * mindestens einer erweiterten Luecke vor der Nummer (0,80); dieselbe Nummer vor dem Weit-Kontextwort, in Klammern
+     * oder ohne (nachgestellt, 0,80); dieselbe Nummer mit genau einem Komma oder Semikolon vor dem Weit-Kontextwort
+     * (0,60).
+     */
+    static final int BLOCK_E_WEIT = 0;
+    static final int BLOCK_E_NACH = 1;
+    static final int BLOCK_E_KOMMA = 2;
+    private static final int ANZAHL_BLOCKARTEN_E = 3;
+    private static final String[] BLOCK_NAMEN_E = {"weit", "nachgestellt", "komma"};
+    private static final String[] KLASSE_E = {"kv-weit-fund", "kv-weit-nachgestellt", "kv-weit-komma"};
+    private static final double[] KONFIDENZ_E = {0.80, 0.80, 0.60};
+
+    /** Luecken nach D-2: (a) streng wie im Bestand, (b) zwei bis drei WS4, (c) Punkt und ein bis drei WS4, (d) Tab. */
+    private static final int LUECKE_A = 0;
+    private static final int LUECKE_B = 1;
+    private static final int LUECKE_C = 2;
+    private static final int LUECKE_D = 3;
+    private static final String[] LUECKEN_NAMEN_E = {"a", "b", "c", "d"};
+    private static final String[] WS4_E = {" ", NB, DUENN_C, NNBSP_C};
+
+    /** Unsichtbare Zeichen der Kategorie Format (Teil 1e streut sie in Luecken und an Woerter). */
+    private static final String[] UZ_E = unsichtbareE();
+
+    private static String[] unsichtbareE() {
+        List<String> zeichen = new ArrayList<>(List.of(UZ_D).subList(0, 5));
+        zeichen.add(UZ_D[UZ_D.length - 1]);
+        zeichen.add(String.valueOf((char) 0x200C));
+        return zeichen.toArray(new String[0]);
+    }
+
+    /**
+     * Ein erwarteter Fund einer gueltigen Nummer in einem Text von Teil 1e: Blockart ({@code BLOCK_E_*}), Art der
+     * Nummer, Maske der erweiterten Luecken im Weit-Kontextwort (Bit je {@code LUECKE_*}), Bereich der Nummer,
+     * Bereich der Buchstaben des Weit-Kontextworts (ohne Schlusspunkt und unsichtbare Zeichen davor und danach).
+     * {@code grenze} markiert einen Block, dessen Weit-Folge per Konstruktion ueber eine Luecke nach D-2 mit einem
+     * benachbarten Einzelbuchstaben verbunden sein kann (Grenze 14e, siehe {@link #verbindbar}).
+     */
+    record BlockE(int blockart, boolean lanr, int luecken, int start, int ende, int wortStart, int wortEnde,
+            boolean grenze) {
+        BlockE markiert() {
+            return new BlockE(blockart, lanr, luecken, start, ende, wortStart, wortEnde, true);
+        }
+    }
+
+    /** Ein Text von Teil 1e mit den Bloecken seiner Konstruktion und den Namen der Gegenproben (ohne Block). */
+    record FallE(String text, List<BlockE> bloecke, List<String> gegenproben) {
+    }
+
+    /** Teil 1e: Texte mit Weit-Kontextwoertern, Gegenproben und Mischung mit Bausteinen aus 1c und 1d. */
+    static List<FallE> erzeugeKvE(long seed) {
+        Random r = new Random(seed);
+        List<FallE> faelle = new ArrayList<>(ANZAHL_TEXTE);
+        for (int i = 0; i < ANZAHL_TEXTE; i++) {
+            faelle.add(erzeugeTextE(r));
+        }
+        return faelle;
+    }
+
+    /**
+     * Ein Text aus 3 bis 10 Bausteinen. Die Bausteine von 1c und 1d ziehen aus einem eigenen {@code Random}, dessen
+     * Startwert je Text eine Zufallszahl des Hauptstroms ist; ihre Bloecke werden nicht erfasst. Nach dem Aufbau
+     * werden die Bloecke markiert, deren Weit-Folge ueber eine Luecke nach D-2 mit einem davor oder dahinter
+     * stehenden Einzelbuchstaben verbunden sein kann ({@link #verbindbar}). Die Markierung zieht keine Zufallszahlen.
+     */
+    static FallE erzeugeTextE(Random r) {
+        StringBuilder sb = new StringBuilder();
+        List<BlockE> bloecke = new ArrayList<>();
+        List<String> gegenproben = new ArrayList<>();
+        Random mischung = new Random(r.nextLong());
+        int n = 3 + r.nextInt(8);
+        for (int i = 0; i < n; i++) {
+            kvBausteinE(r, mischung, sb, bloecke, gegenproben);
+            if (r.nextInt(6) == 0) {
+                sb.append(waehle(r, UNSICHTBAR_C));
+            }
+            sb.append(waehle(r, TRENNER_C));
+        }
+        String text = sb.toString();
+        List<BlockE> endgueltig = new ArrayList<>(bloecke.size());
+        for (BlockE block : bloecke) {
+            endgueltig.add(verbindbar(text, block) ? block.markiert() : block);
+        }
+        return new FallE(text, endgueltig, gegenproben);
+    }
+
+    private static String uzE(Random r) {
+        return UZ_E[r.nextInt(UZ_E.length)];
+    }
+
+    /** Eine Luecke der Art {@code art}, mit Wahrscheinlichkeit 1/5 mit einem unsichtbaren Zeichen darin. */
+    private static String lueckeE(Random r, int art) {
+        StringBuilder g = new StringBuilder();
+        switch (art) {
+            case LUECKE_A:
+                g.append(waehle(r, SPERR_TRENNER_C));
+                break;
+            case LUECKE_B:
+                for (int i = 2 + r.nextInt(2); i > 0; i--) {
+                    g.append(waehle(r, WS4_E));
+                }
+                break;
+            case LUECKE_C:
+                g.append('.');
+                for (int i = 1 + r.nextInt(3); i > 0; i--) {
+                    g.append(waehle(r, WS4_E));
+                }
+                break;
+            default:
+                g.append('\t');
+                break;
+        }
+        if (r.nextInt(5) == 0) {
+            g.insert(r.nextInt(g.length() + 1), uzE(r));
+        }
+        return g.toString();
+    }
+
+    /**
+     * Haengt das Wort an: je Buchstabe zufaellige Schreibweise, zwischen zwei Buchstaben eine Luecke, jede einzeln
+     * aus (a) bis (d) gewuerfelt, mindestens eine erweitert; optional ein Schlusspunkt; unsichtbare Zeichen nie
+     * zwischen zwei Buchstaben (das waere ein Lauf mit zwei Buchstaben, Grenze 14a). {@code info}:
+     * {Maske der erweiterten Luecken, Start, Ende der Buchstaben}.
+     */
+    private static void weitWortE(Random r, StringBuilder sb, String wort, boolean schlusspunkt, int[] info) {
+        int n = wort.length();
+        int[] arten = new int[n - 1];
+        boolean erweitert = false;
+        for (int i = 0; i < arten.length; i++) {
+            arten[i] = r.nextInt(4);
+            erweitert |= arten[i] != LUECKE_A;
+        }
+        if (!erweitert) {
+            arten[r.nextInt(arten.length)] = 1 + r.nextInt(3);
+        }
+        int maske = 0;
+        for (int art : arten) {
+            maske |= art == LUECKE_A ? 0 : 1 << art;
+        }
+        if (r.nextInt(6) == 0) {
+            sb.append(uzE(r));
+        }
+        info[0] = maske;
+        info[1] = sb.length();
+        for (int i = 0; i < n; i++) {
+            if (i > 0) {
+                sb.append(lueckeE(r, arten[i - 1]));
+            }
+            char c = wort.charAt(i);
+            sb.append(r.nextBoolean() ? Character.toUpperCase(c) : Character.toLowerCase(c));
+        }
+        info[2] = sb.length();
+        if (schlusspunkt) {
+            sb.append('.');
+        }
+        if (r.nextInt(6) == 0) {
+            sb.append(uzE(r));
+        }
+    }
+
+    /** Eine gueltige Nummer an der aktuellen Stelle; der erwartete Fund wird als Block vermerkt. */
+    private static void fundNummerE(Random r, StringBuilder sb, List<BlockE> bloecke, int blockart, boolean lanr,
+            int[] info) {
+        int start = sb.length();
+        sb.append(kvNummer(r, lanr));
+        bloecke.add(new BlockE(blockart, lanr, info[0], start, sb.length(), info[1], info[2], false));
+    }
+
+    /** Haengt einen Baustein von Teil 1e an; Bloecke und Gegenproben werden vermerkt. */
+    private static void kvBausteinE(Random r, Random mischung, StringBuilder sb, List<BlockE> bloecke,
+            List<String> gegenproben) {
+        boolean lanr = r.nextBoolean();
+        String wort = waehle(r, lanr ? SPERR_LANR_C : SPERR_IK_DREI_C);
+        int[] info = new int[3];
+        int wahl = r.nextInt(100);
+        if (wahl < 30) {
+            sb.append(waehle(r, PRAEFIX_C));
+            weitWortE(r, sb, wort, r.nextInt(3) == 0, info);
+            sb.append(waehle(r, DIR_C));
+            fundNummerE(r, sb, bloecke, BLOCK_E_WEIT, lanr, info);
+        } else if (wahl < 42) {
+            // Nummer, dahinter das Weit-Kontextwort in Klammern oder ohne Klammer und ohne Komma
+            int start = sb.length();
+            sb.append(kvNummer(r, lanr));
+            int ende = sb.length();
+            boolean klammer = r.nextBoolean();
+            sb.append(klammer ? " (" : " ");
+            weitWortE(r, sb, wort, r.nextInt(3) == 0, info);
+            sb.append(klammer ? ")" : "");
+            bloecke.add(new BlockE(BLOCK_E_NACH, lanr, info[0], start, ende, info[1], info[2], false));
+        } else if (wahl < 50) {
+            // Nummer, genau ein Komma oder Semikolon, Luecke, optional Klammer, Weit-Kontextwort
+            int start = sb.length();
+            sb.append(kvNummer(r, lanr));
+            int ende = sb.length();
+            sb.append(r.nextBoolean() ? ',' : ';').append(waehle(r, WS_C));
+            int klammer = r.nextInt(3);
+            sb.append(klammer == 0 ? "(" : klammer == 1 ? "[" : "");
+            weitWortE(r, sb, wort, r.nextInt(3) == 0, info);
+            if (klammer < 2 && r.nextInt(4) != 0) {
+                sb.append(klammer == 0 ? ")" : "]");
+            }
+            bloecke.add(new BlockE(BLOCK_E_KOMMA, lanr, info[0], start, ende, info[1], info[2], false));
+        } else if (wahl < 68) {
+            gegenprobeE(r, sb, lanr, gegenproben);
+        } else if (wahl < 75) {
+            sb.append(waehle(r, INITIALEN_C)).append(r.nextBoolean() ? " " + nummerC(r, lanr) : "");
+        } else if (wahl < 95) {
+            kvBausteinC(mischung, sb, new ArrayList<>());
+        } else {
+            kvBausteinD(mischung, mischung, sb, new ArrayList<>(), new ArrayList<>());
+        }
+    }
+
+    private static final String[] IK_ZWEI_E = {"I. K. ", "I. K.: ", "i. k. ", "I. K ", "I  K ", "I   K ", "I\tK ",
+        "I.  K. ", "Dr. I. K. ", "Prof. I. K. ", "I. K.-Nr. ", "I. K. Mustermann ", "I" + NB + NB + "K "};
+    private static final String[] MAXIMAL_LANR_E = {"A. L. A. N. R. ", "L. A. N. R. X ", "L. A. N. ",
+        "L. A. N. X. R. ", "L. A. N. R. L. A. N. R. ", "LA. NR. ", "L. ANR ", "Herr A. L. A. N. R. "};
+    private static final String[] MAXIMAL_IK_E = {"I. K. N. ", "A. I. K. N. R. X ", "I. K. N. X. R. ",
+        "IK. NR. ", "I. KNR "};
+
+    /** Die Buchstaben des Wortes, je durch {@code trenner} getrennt. */
+    private static String gesperrtE(String wort, String trenner) {
+        StringBuilder s = new StringBuilder();
+        for (int i = 0; i < wort.length(); i++) {
+            s.append(i > 0 ? trenner : "").append(wort.charAt(i));
+        }
+        return s.toString();
+    }
+
+    /**
+     * Gegenproben aus AK-13, AK-14 und AK-17 (ohne Block): das Zwei-Buchstaben-Wort mit Trennern ausserhalb des
+     * Bestands, vier Leerraumzeichen, zwei Tabs, Zeilenumbruch, Satzzeichen, Punkt vor der Luecke, Bindestrich mit
+     * Leerzeichen, die maximale Folge und das Weit-Kontextwort ohne Nummer. Teil 1e prueft hier nur Roundtrip,
+     * Schutzgarantie und vollstaendiges Ersetzen (die Nicht-Erkennung pruefen die Korpus- und Eigenschaftstests, ein
+     * Nachbar-Baustein kann den Kontext neu eroeffnen).
+     */
+    private static void gegenprobeE(Random r, StringBuilder sb, boolean lanr, List<String> gegenproben) {
+        String wort = lanr ? "LANR" : "IKNR";
+        String nummer = kvNummer(r, lanr);
+        switch (r.nextInt(9)) {
+            case 0:
+                sb.append(waehle(r, IK_ZWEI_E)).append(kvNummer(r, false));
+                gegenproben.add("ik-zwei-buchstaben");
+                break;
+            case 1:
+                sb.append(gesperrtE(wort, WS4_E[r.nextInt(4)] + WS4_E[r.nextInt(4)] + WS4_E[r.nextInt(4)]
+                        + WS4_E[r.nextInt(4)])).append(' ').append(nummer);
+                gegenproben.add("vier-leerraumzeichen");
+                break;
+            case 2:
+                sb.append(gesperrtE(wort, r.nextBoolean() ? "\t\t" : "\t ")).append(' ').append(nummer);
+                gegenproben.add("zwei-tabs");
+                break;
+            case 3:
+                sb.append(lanr ? "L. A." : "I. K.").append(r.nextBoolean() ? "\n" : "\r\n")
+                        .append(lanr ? "N. R. " : "N R ").append(nummer);
+                gegenproben.add("zeilenumbruch");
+                break;
+            case 4:
+                sb.append(gesperrtE(wort, waehle(r, new String[] {", ", "; ", "/", "_", ": "}))).append(' ')
+                        .append(nummer);
+                gegenproben.add("satzzeichen");
+                break;
+            case 5:
+                boolean doppelt = r.nextBoolean();
+                sb.append(gesperrtE(wort, doppelt ? ".. " : " .")).append(doppelt ? ".. " : " ").append(nummer);
+                gegenproben.add("punkt-vor-luecke");
+                break;
+            case 6:
+                sb.append(gesperrtE(wort, r.nextBoolean() ? " - " : " " + (char) 0x2013 + " ")).append(' ')
+                        .append(nummer);
+                gegenproben.add("bindestrich-luecke");
+                break;
+            case 7:
+                sb.append(waehle(r, lanr ? MAXIMAL_LANR_E : MAXIMAL_IK_E)).append(nummer);
+                gegenproben.add("maximale-folge");
+                break;
+            default:
+                sb.append(gesperrtE(wort, ". ")).append('.').append(r.nextBoolean() ? " Ende" : "");
+                gegenproben.add("ohne-nummer");
+                break;
+        }
+    }
+
+    private static boolean istWs4E(char c) {
+        return c == ' ' || c == (char) 0xA0 || c == (char) 0x2009 || c == (char) 0x202F;
+    }
+
+    private static boolean istStrengerTrennerE(char c) {
+        return istWs4E(c) || c == '.' || c == '-' || c == (char) 0x2011 || c == (char) 0x2013;
+    }
+
+    /** Der Text ohne unsichtbare Zeichen (je Codepunkt, unabhaengig vom Produkt). */
+    private static String ohneUnsichtbareE(String text) {
+        StringBuilder s = new StringBuilder(text.length());
+        for (int i = 0; i < text.length(); ) {
+            int cp = text.codePointAt(i);
+            if (!KvTestHilfen.unsichtbar(cp)) {
+                s.appendCodePoint(cp);
+            }
+            i += Character.charCount(cp);
+        }
+        return s.toString();
+    }
+
+    /** Steht an {@code pos} ein Buchstabe, der nicht Teil eines laengeren Buchstabenlaufs ist? */
+    private static boolean einzelbuchstabeE(String s, int pos) {
+        return pos >= 0 && pos < s.length() && Character.isLetter(s.charAt(pos))
+                && (pos == 0 || !Character.isLetter(s.charAt(pos - 1)))
+                && (pos + 1 >= s.length() || !Character.isLetter(s.charAt(pos + 1)));
+    }
+
+    /** Endet {@code s} mit einem Einzelbuchstaben und einer Luecke nach D-2 (a) bis (d)? */
+    private static boolean endetMitEinzelbuchstabeUndLueckeE(String s) {
+        int i = s.length();
+        if (i > 0 && s.charAt(i - 1) == '\t') {
+            return einzelbuchstabeE(s, i - 2);
+        }
+        int k = 0;
+        while (k < i && istWs4E(s.charAt(i - 1 - k))) {
+            k++;
+        }
+        if (k > 3) {
+            return false;
+        }
+        int j = i - k;
+        if (k > 0 && j > 0 && s.charAt(j - 1) == '.') {
+            return einzelbuchstabeE(s, j - 2);
+        }
+        if (k > 0) {
+            return einzelbuchstabeE(s, j - 1);
+        }
+        return i > 0 && istStrengerTrennerE(s.charAt(i - 1)) && einzelbuchstabeE(s, i - 2);
+    }
+
+    /** Beginnt {@code s} mit einer Luecke nach D-2 (a) bis (d) und dann einem Einzelbuchstaben? */
+    private static boolean beginntMitLueckeUndEinzelbuchstabeE(String s) {
+        int i = 0;
+        if (s.startsWith("\t")) {
+            i = 1;
+        } else if (s.startsWith(".")) {
+            i = 1;
+            while (i < s.length() && istWs4E(s.charAt(i))) {
+                i++;
+            }
+            if (i > 4) {
+                return false;
+            }
+        } else if (!s.isEmpty() && istWs4E(s.charAt(0))) {
+            while (i < s.length() && istWs4E(s.charAt(i))) {
+                i++;
+            }
+            if (i > 3) {
+                return false;
+            }
+        } else if (!s.isEmpty() && istStrengerTrennerE(s.charAt(0))) {
+            i = 1;
+        }
+        return i > 0 && einzelbuchstabeE(s, i);
+    }
+
+    /**
+     * Grenze 14e fuer Teil 1e: Kann die Weit-Folge des Blocks ueber eine Luecke nach D-2 mit einem Einzelbuchstaben
+     * davor (Bloecke aller Arten) oder dahinter (nachgestellte Bloecke; bei {@code BLOCK_E_WEIT} folgt die Nummer)
+     * verbunden sein? Dann ergibt die maximale Folge nicht mehr genau das Kontextwort. Unsichtbare Zeichen zaehlen
+     * nicht. Konstruktion nach dem Text, unabhaengig vom Produkt.
+     */
+    static boolean verbindbar(String text, BlockE block) {
+        int von = Math.max(0, block.wortStart() - 64);
+        if (endetMitEinzelbuchstabeUndLueckeE(ohneUnsichtbareE(text.substring(von, block.wortStart())))) {
+            return true;
+        }
+        if (block.blockart() == BLOCK_E_WEIT) {
+            return false;
+        }
+        int bis = Math.min(text.length(), block.wortEnde() + 64);
+        return beginntMitLueckeUndEinzelbuchstabeE(ohneUnsichtbareE(text.substring(block.wortEnde(), bis)));
+    }
+
     private static String url(Random r) {
         switch (r.nextInt(4)) {
             case 0:
@@ -936,6 +1329,7 @@ class RoundtripFuzzTest {
         LAUF_KV = fuehreKvAus();
         LAUF_KV_C = fuehreKvCAus();
         LAUF_KV_D = fuehreKvDAus();
+        LAUF_KV_E = fuehreKvEAus();
     }
 
     private static boolean paarGetrennt(String s, int pos) {
@@ -1209,6 +1603,116 @@ class RoundtripFuzzTest {
             }
         }
         return false;
+    }
+
+    /**
+     * Teil 1e (kv-trenner-und-umbruch T-9): dieselben Eigenschaften wie Teil 1d ({@code pruefeText}: Invarianten,
+     * Schutzgarantie, Roundtrip, Waechter) plus {@link #pruefeKvE}: Klassen nach Konstruktion, Zaehler der Bloecke
+     * ohne Scan-Abdeckung und vollstaendiges Ersetzen aller Funde.
+     */
+    private static Lauf fuehreKvEAus() {
+        Lauf lauf = new Lauf(SEED_TEXTE_KV_E);
+        TextScanner scanner = TextScanner.standard();
+        Random auswahl = new Random(SEED_AUSWAHL_KV_E);
+        List<FallE> faelle = erzeugeKvE(SEED_TEXTE_KV_E);
+        for (int it = 0; it < faelle.size(); it++) {
+            FallE fall = faelle.get(it);
+            String text = fall.text();
+            if (KvTestHilfen.neunerfenster(text, "00")[1] != 0) {
+                lauf.verletzt("waechter-gueltiges-neunerfenster-ohne-00", it);
+                continue;
+            }
+            if (text.contains("[[")) {
+                lauf.verletzt("generator-doppelklammer", it);
+                continue;
+            }
+            try {
+                pruefeText(lauf, scanner, auswahl, it, new Fall(text, List.of(), false), text);
+                pruefeKvE(lauf, scanner, it, fall);
+            } catch (RuntimeException e) {
+                lauf.verletzt("ausnahme-im-lauf", it);
+            }
+        }
+        return lauf;
+    }
+
+    /**
+     * Klassen je Text, hoechstens einmal: Ein Erkenner-Kandidat (LANR und IK wie in {@code TextScanner.standard()})
+     * liegt genau auf der Nummer eines Blocks, hat die Quelle der gueltigen Nummer und die erwartete Konfidenz
+     * (0,80 fuer Weit-Kontextwort vor der Nummer und nachgestellt, 0,60 mit Komma). Gezaehlt wird nach Blockart
+     * ({@code kv-weit-fund}, {@code kv-weit-nachgestellt}, {@code kv-weit-komma}, je mit Art), nach Luecke im
+     * Weit-Kontextwort des Fund-Blocks ({@code kv-weit-luecke-b} bis {@code -d}) und fuer Texte mit
+     * {@code CR UZ+ LF} und Fund-Block ({@code kv-weit-mit-cr-uz-lf}). Je Block zaehlt
+     * {@code block-ohne-scan-abdeckung} die nicht markierten Bloecke, deren Nummernbereich von keinem Scan-Fund ganz
+     * abgedeckt ist (strikt 0 erwartet); markierte Bloecke zaehlen getrennt. Danach werden alle Scan-Funde
+     * pseudonymisiert und geprueft, dass jeder Fund vollstaendig durch einen Platzhalter ersetzt ist.
+     */
+    static void pruefeKvE(Lauf lauf, TextScanner scanner, int it, FallE fall) {
+        String text = fall.text();
+        List<List<Finding>> kandidaten = List.of(STANDARD_ERKENNER.get(ERKENNER_LANR).detect(text),
+                STANDARD_ERKENNER.get(ERKENNER_IK).detect(text));
+        boolean[][] gesehen = new boolean[ANZAHL_BLOCKARTEN_E][2];
+        boolean[] lueckeGesehen = new boolean[LUECKE_D + 1];
+        for (BlockE block : fall.bloecke()) {
+            int art = block.lanr() ? 0 : 1;
+            String quelle = block.lanr() ? LanrRecognizer.SOURCE : IkRecognizer.SOURCE;
+            for (Finding c : kandidaten.get(art)) {
+                if (c.start() == block.start() && c.end() == block.ende()
+                        && c.confidence() == KONFIDENZ_E[block.blockart()] && quelle.equals(c.source())) {
+                    gesehen[block.blockart()][art] = true;
+                    for (int l = LUECKE_B; l <= LUECKE_D; l++) {
+                        lueckeGesehen[l] |= block.blockart() == BLOCK_E_WEIT && (block.luecken() >> l & 1) != 0;
+                    }
+                }
+            }
+        }
+        boolean irgendwo = false;
+        for (int b = 0; b < ANZAHL_BLOCKARTEN_E; b++) {
+            boolean mindestensEineArt = false;
+            for (int a = 0; a < 2; a++) {
+                if (gesehen[b][a]) {
+                    lauf.klasse(KLASSE_E[b] + "-" + (a == 0 ? "lanr" : "ik"));
+                    mindestensEineArt = true;
+                }
+            }
+            if (mindestensEineArt) {
+                lauf.klasse(KLASSE_E[b]);
+                irgendwo = true;
+            }
+        }
+        for (int l = LUECKE_B; l <= LUECKE_D; l++) {
+            if (lueckeGesehen[l]) {
+                lauf.klasse("kv-weit-luecke-" + LUECKEN_NAMEN_E[l]);
+            }
+        }
+        if (irgendwo) {
+            lauf.klasse("kv-weit-fund-aus-regel");
+            if (KvTestHilfen.enthaeltCrUnsichtbarLf(text)) {
+                lauf.klasse("kv-weit-mit-cr-uz-lf");
+            }
+        }
+        for (String gegenprobe : fall.gegenproben()) {
+            lauf.klasse("gegenprobe-" + gegenprobe);
+        }
+        List<Finding> scan = scanner.scan(text);
+        for (BlockE block : fall.bloecke()) {
+            String art = BLOCK_NAMEN_E[block.blockart()];
+            String detail = art + "-" + (block.lanr() ? "lanr" : "ik");
+            lauf.klasse("bloecke-" + detail);
+            boolean abgedeckt = imScanAbgedeckt(scan, block.start(), block.ende());
+            if (block.grenze()) {
+                lauf.klasse("block-markiert");
+                lauf.klasse(abgedeckt ? "markiert-mit-abdeckung" : "markiert-ohne-abdeckung");
+                lauf.klasse((abgedeckt ? "markiert-mit-abdeckung-" : "markiert-ohne-abdeckung-") + art);
+            } else if (!abgedeckt) {
+                lauf.klasse("block-ohne-scan-abdeckung");
+                lauf.klasse("block-ohne-scan-abdeckung-" + detail);
+            }
+        }
+        PseudonymizationResult alle = PSEUDONYMIZER.pseudonymize(text, scan);
+        if (!alleFundeErsetzt(text, scan, alle.text())) {
+            lauf.verletzt("ak23-fund-nicht-vollstaendig-ersetzt", it);
+        }
     }
 
     /**
@@ -2103,6 +2607,298 @@ class RoundtripFuzzTest {
         assertEquals(1, lauf.klasse_("block-ohne-scan-abdeckung"), "nicht markierter Block ohne Abdeckung");
         assertEquals(1, lauf.klasse_("block-ohne-scan-abdeckung-kw-lanr"), "nach Blockart und Art");
         pruefeKvD(lauf, TextScanner.standard(), 2, new FallD(text, List.of(leer.markiert()), List.of()));
+        assertEquals(1, lauf.klasse_("block-ohne-scan-abdeckung"), "markierter Block zaehlt nicht dort");
+        assertEquals(1, lauf.klasse_("markiert-ohne-abdeckung"), "markierter Block ohne Abdeckung");
+        assertEquals(1, lauf.klasse_("block-markiert"), "markierter Block gezaehlt");
+        assertEquals(0, lauf.anzahl("ak23-fund-nicht-vollstaendig-ersetzt"), "Ersetzen vollstaendig");
+    }
+
+    // ------------------------------------------------------------------ Teil 1e (kv-trenner-und-umbruch T-9)
+
+    /** Hashwert der Teil-1e-Textfolge (kv-trenner-und-umbruch T-9, nach dem Anlegen des Generators gemessen). */
+    static final int HASH_TEIL_1E = 0x3DB93C45;
+
+    private static List<String> texteTeil1e() {
+        List<String> texte = new ArrayList<>();
+        for (FallE f : erzeugeKvE(SEED_TEXTE_KV_E)) {
+            texte.add(f.text());
+        }
+        return texte;
+    }
+
+    @Test
+    void t9_teil1eTextfolgeIstUnveraendert() {
+        List<String> texte = texteTeil1e();
+        assertEquals(HASH_TEIL_1E, texte.hashCode(), "Hashwert der Teil-1e-Textfolge, Startwert " + SEED_TEXTE_KV_E
+                + ", gemessen 0x" + Integer.toHexString(texte.hashCode()));
+    }
+
+    @Test
+    void t9_teil1eZweiLaeufeMitDemselbenStartwertErzeugenDieselbeTextfolge() {
+        List<String> a = texteTeil1e();
+        assertEquals(ANZAHL_TEXTE, a.size());
+        assertTextfolgeGleich(a, texteTeil1e(), SEED_TEXTE_KV_E, "Teil 1e: Textfolge");
+        List<FallE> ersterLauf = erzeugeKvE(SEED_TEXTE_KV_E);
+        List<FallE> zweiterLauf = erzeugeKvE(SEED_TEXTE_KV_E);
+        assertTrue(ersterLauf.equals(zweiterLauf), "Teil 1e: Bloecke und Gegenproben sind deterministisch");
+        List<String> teil1d = new ArrayList<>();
+        for (FallD f : erzeugeKvD(SEED_TEXTE_KV_E)) {
+            teil1d.add(f.text());
+        }
+        assertNotEquals(a.hashCode(), teil1d.hashCode(), "Teil 1e unterscheidet sich von Teil 1d gleichen Seeds");
+        assertNotEquals(HASH_TEIL_1D, a.hashCode(), "Teil 1e unterscheidet sich von Teil 1d");
+        assertNotEquals(HASH_TEIL_1C, a.hashCode(), "Teil 1e unterscheidet sich von Teil 1c");
+        assertNotEquals(HASH_TEIL_1B, a.hashCode(), "Teil 1e unterscheidet sich von Teil 1b");
+        assertNotEquals(HASH_TEIL_1, a.hashCode(), "Teil 1e unterscheidet sich von Teil 1");
+    }
+
+    /**
+     * Die Textfolgen von Teil 1, 1b, 1c und 1d sind unveraendert (Plan Regel 6): Ihre Hashwerte werden hier noch
+     * einmal gegen die Konstanten geprueft, nachdem Teil 1e dazugekommen ist (kein Generator wurde veraendert).
+     */
+    @Test
+    void t9_bestandsHashesVonTeil1Bis1dSindUnveraendert() {
+        List<String> teil1 = new ArrayList<>();
+        for (Fall f : erzeuge(SEED_TEXTE)) {
+            teil1.add(f.text());
+        }
+        List<String> teil1b = new ArrayList<>();
+        for (Fall f : erzeugeKv(SEED_TEXTE_KV)) {
+            teil1b.add(f.text());
+        }
+        List<String> teil1c = new ArrayList<>();
+        for (FallC f : erzeugeKvC(SEED_TEXTE_KV_C)) {
+            teil1c.add(f.text());
+        }
+        assertEquals(HASH_TEIL_1, teil1.hashCode(), "Hashwert Teil 1");
+        assertEquals(HASH_TEIL_1B, teil1b.hashCode(), "Hashwert Teil 1b");
+        assertEquals(HASH_TEIL_1C, teil1c.hashCode(), "Hashwert Teil 1c");
+        assertEquals(HASH_TEIL_1D, texteTeil1d().hashCode(), "Hashwert Teil 1d");
+    }
+
+    private static void keineE(String eigenschaft) {
+        assertEquals(0, LAUF_KV_E.anzahl(eigenschaft), "Teil 1e: " + LAUF_KV_E.meldung(eigenschaft));
+    }
+
+    @Test
+    void t9_kvE_waechterUndGeneratorSindSauber() {
+        keineE("waechter-gueltiges-neunerfenster-ohne-00");
+        keineE("generator-doppelklammer");
+    }
+
+    @Test
+    void t9_kvE_roundtripIstZeichengleichOhneMeldung() {
+        keineE("ak45-roundtrip-ungleich");
+        keineE("ak45-pseudonymisierung-wirft");
+        keineE("ak45-meldung");
+        keineE("ausnahme-im-lauf");
+    }
+
+    @Test
+    void t9_kvE_scanInvarianteUndListenInvariante() {
+        keineE("ak1-scan-invariante");
+        keineE("ak1-liste-invariante");
+    }
+
+    @Test
+    void t9_kvE_schutzgarantie_jederKandidatDerStandardErkennerIstImScanAbgedeckt() {
+        keineE("ak7a-kandidat-nicht-im-scan");
+    }
+
+    @Test
+    void t9_kvE_keinFremdtextImScanUndBereicheSindDieVerschmolzenenKandidaten() {
+        keineE("ak7e-fremdtext-im-scan");
+        keineE("ak7e-bereiche-nicht-verschmolzen");
+    }
+
+    /** AK-25: keine Ziffernkette eines Fundes im Ausgabetext, die Luecken bleiben zeichengleich. */
+    @Test
+    void t9_kvE_keineZiffernketteEinesFundesImAusgabetext() {
+        keineE("ak23-fund-nicht-vollstaendig-ersetzt");
+    }
+
+    /** Der Scan ist deterministisch: zwei Laeufe liefern auf jedem Text von Teil 1e dieselbe Fundliste. */
+    @Test
+    void t9_kvE_scanIstDeterministisch() {
+        TextScanner scanner = TextScanner.standard();
+        int abweichend = 0;
+        for (FallE fall : erzeugeKvE(SEED_TEXTE_KV_E)) {
+            abweichend += scanner.scan(fall.text()).equals(scanner.scan(fall.text())) ? 0 : 1;
+        }
+        assertEquals(0, abweichend, "Teil 1e: Texte mit abweichender Fundliste im zweiten Lauf");
+    }
+
+    /**
+     * Mindestzahlen der Klassen von Teil 1e. Messwerte bei festem Seed (T-9), je Text hoechstens einmal gezaehlt
+     * (ausser den Bloecken), Untergrenzen bei hoechstens 70 % des Messwerts. Fund mit der erwarteten Konfidenz je
+     * Blockart und Art: Weit-Kontextwort vor der Nummer 848 (LANR 617, IK 603; Untergrenzen 590, 430, 420),
+     * nachgestellt 500 (294, 300; 340, 200, 205), mit Komma 298 (173, 155; 205, 118, 105); Fund aus der neuen Regel
+     * insgesamt 953 (660); je Lueckenart im Weit-Kontextwort (b) 766, (c) 779, (d) 776 (530, 540, 540); Texte mit
+     * {@code CR UZ+ LF} und Fund 219 (150). Bloecke je Blockart und Art (Zahl der Bloecke, nicht der Texte): Weit
+     * 984 / 973 (680, 670), nachgestellt 382 / 404 (260, 275), Komma 259 / 254 (175, 170). Gegenproben (Vorkommen):
+     * kleinster Wert 116 (je 80). Funde je Typ im Scan LANR 887, IK 910 (610, 625), fraglich 717 (490), Scan-Funde 992
+     * (680), manuelle Funde 984 (680), echte Teilmengen der Scan-Funde 815 (560).
+     */
+    @Test
+    void t9_kvE_fuzzPruftNichtInsLeere_jedeKlasseKommtVor() {
+        mindestens(LAUF_KV_E, "kv-weit-fund", 590);
+        mindestens(LAUF_KV_E, "kv-weit-fund-lanr", 430);
+        mindestens(LAUF_KV_E, "kv-weit-fund-ik", 420);
+        mindestens(LAUF_KV_E, "kv-weit-nachgestellt", 340);
+        mindestens(LAUF_KV_E, "kv-weit-nachgestellt-lanr", 200);
+        mindestens(LAUF_KV_E, "kv-weit-nachgestellt-ik", 205);
+        mindestens(LAUF_KV_E, "kv-weit-komma", 205);
+        mindestens(LAUF_KV_E, "kv-weit-komma-lanr", 118);
+        mindestens(LAUF_KV_E, "kv-weit-komma-ik", 105);
+        mindestens(LAUF_KV_E, "kv-weit-fund-aus-regel", 660);
+        mindestens(LAUF_KV_E, "kv-weit-luecke-b", 530);
+        mindestens(LAUF_KV_E, "kv-weit-luecke-c", 540);
+        mindestens(LAUF_KV_E, "kv-weit-luecke-d", 540);
+        mindestens(LAUF_KV_E, "kv-weit-mit-cr-uz-lf", 150);
+        mindestens(LAUF_KV_E, "bloecke-weit-lanr", 680);
+        mindestens(LAUF_KV_E, "bloecke-weit-ik", 670);
+        mindestens(LAUF_KV_E, "bloecke-nachgestellt-lanr", 260);
+        mindestens(LAUF_KV_E, "bloecke-nachgestellt-ik", 275);
+        mindestens(LAUF_KV_E, "bloecke-komma-lanr", 175);
+        mindestens(LAUF_KV_E, "bloecke-komma-ik", 170);
+        for (String gegenprobe : List.of("ik-zwei-buchstaben", "vier-leerraumzeichen", "zwei-tabs", "zeilenumbruch",
+                "satzzeichen", "punkt-vor-luecke", "bindestrich-luecke", "maximale-folge", "ohne-nummer")) {
+            mindestens(LAUF_KV_E, "gegenprobe-" + gegenprobe, 80);
+        }
+        mindestens(LAUF_KV_E, "kv-fund-lanr", 610);
+        mindestens(LAUF_KV_E, "kv-fund-ik", 625);
+        mindestens(LAUF_KV_E, "kv-fraglich", 490);
+        mindestens(LAUF_KV_E, "scan-fund", 680);
+        mindestens(LAUF_KV_E, "manueller-fund", 680);
+        mindestens(LAUF_KV_E, "echte-teilmenge-der-scan-funde", 560);
+    }
+
+    /**
+     * AK-25: Der Zaehler "Block ohne Scan-Abdeckung" ist strikt 0 fuer jeden nicht markierten Block von Teil 1e,
+     * insgesamt und nach Blockart und Art. Ein Wert ungleich 0 ist ein Befund, keine Erwartung zum Anpassen.
+     */
+    @Test
+    void t9_kvE_blockOhneScanAbdeckung_istStriktNull_insgesamtUndNachBlockartUndArt() {
+        assertEquals(0, LAUF_KV_E.klasse_("block-ohne-scan-abdeckung"),
+                "Bloecke ohne Scan-Abdeckung (strikt 0), Startwert " + SEED_TEXTE_KV_E);
+        String basis = "block-ohne-scan-abdeckung-";
+        for (String blockart : BLOCK_NAMEN_E) {
+            assertEquals(0, LAUF_KV_E.klasse_(basis + blockart + "-lanr"), "Blockart " + blockart + ", LANR");
+            assertEquals(0, LAUF_KV_E.klasse_(basis + blockart + "-ik"), "Blockart " + blockart + ", IK");
+        }
+    }
+
+    /**
+     * Die markierten Bloecke (Grenze 14e: die Weit-Folge kann ueber eine Luecke nach D-2 mit einem Einzelbuchstaben
+     * davor oder dahinter verbunden sein) werden einzeln gezaehlt, damit nichts verdeckt wird. Messwerte bei festem
+     * Seed: 188 markierte Bloecke (5,8 % aller Bloecke), davon 132 ohne und 56 mit Scan-Abdeckung; Weit 66 und 11,
+     * nachgestellt 41 und 25, Komma 25 und 20. Eine Aenderung der Zahlen ist ein Befund.
+     */
+    @Test
+    void t9_kvE_markierteBloecke_sindEinzelnGezaehlt() {
+        assertEquals(188, LAUF_KV_E.klasse_("block-markiert"), "markierte Bloecke");
+        assertEquals(132, LAUF_KV_E.klasse_("markiert-ohne-abdeckung"), "markierte Bloecke ohne Abdeckung");
+        assertEquals(56, LAUF_KV_E.klasse_("markiert-mit-abdeckung"), "markierte Bloecke mit Abdeckung");
+        assertEquals(66, LAUF_KV_E.klasse_("markiert-ohne-abdeckung-weit"), "davon Weit ohne Abdeckung");
+        assertEquals(11, LAUF_KV_E.klasse_("markiert-mit-abdeckung-weit"), "davon Weit mit Abdeckung");
+        assertEquals(41, LAUF_KV_E.klasse_("markiert-ohne-abdeckung-nachgestellt"), "nachgestellt ohne Abdeckung");
+        assertEquals(25, LAUF_KV_E.klasse_("markiert-mit-abdeckung-nachgestellt"), "nachgestellt mit Abdeckung");
+        assertEquals(25, LAUF_KV_E.klasse_("markiert-ohne-abdeckung-komma"), "Komma ohne Abdeckung");
+        assertEquals(20, LAUF_KV_E.klasse_("markiert-mit-abdeckung-komma"), "Komma mit Abdeckung");
+        assertEquals(LAUF_KV_E.klasse_("block-markiert"), LAUF_KV_E.klasse_("markiert-ohne-abdeckung")
+                + LAUF_KV_E.klasse_("markiert-mit-abdeckung"), "jeder markierte Block ist einmal eingeordnet");
+    }
+
+    /**
+     * Die Konstruktion haelt, was sie vermerkt: Je Block stehen an der Nummer neun Ziffern, die Buchstaben des
+     * Weit-Kontextworts ergeben ein Wort der Art, die Maske der erweiterten Luecken ist nicht leer, und die Zahl
+     * der markierten Bloecke stimmt mit dem Lauf ueberein und bleibt die Ausnahme (unter 10 % aller Bloecke).
+     */
+    @Test
+    void t9_kvE_generatorBloeckeStimmenMitDemTextUeberein() {
+        int markiert = 0;
+        int bloecke = 0;
+        for (FallE fall : erzeugeKvE(SEED_TEXTE_KV_E)) {
+            for (BlockE block : fall.bloecke()) {
+                bloecke++;
+                markiert += block.grenze() ? 1 : 0;
+                String nummer = fall.text().substring(block.start(), block.ende());
+                assertTrue(nummer.length() == 9 && nummer.chars().allMatch(Character::isDigit), "Nummer des Blocks");
+                StringBuilder buchstaben = new StringBuilder();
+                fall.text().substring(block.wortStart(), block.wortEnde()).chars()
+                        .filter(Character::isLetter).forEach(c -> buchstaben.append(Character.toLowerCase((char) c)));
+                List<String> woerter = block.lanr() ? List.of("lanr", "lanrnr", "arztnummer", "arztnr")
+                        : List.of("iknr", "iknummer", "institutionskennzeichen");
+                assertTrue(woerter.contains(buchstaben.toString()), "Buchstaben des Weit-Kontextworts");
+                assertTrue(block.luecken() != 0, "mindestens eine erweiterte Luecke");
+            }
+        }
+        assertEquals(LAUF_KV_E.klasse_("block-markiert"), markiert, "markierte Bloecke: Generator gegen Lauf");
+        assertTrue(markiert * 10 < bloecke, "Markierung bleibt die Ausnahme: " + markiert + " von " + bloecke);
+    }
+
+    /** Ein Block, dessen Weit-Kontextwort {@code wort} im {@code text} steht (Nummer: letztes Zeichen, unerheblich). */
+    private static BlockE blockE(String text, int blockart, String wort) {
+        int start = text.indexOf(wort);
+        assertTrue(start >= 0, "Testdaten: Wort nicht im Text");
+        return new BlockE(blockart, true, 1 << LUECKE_B, text.length() - 1, text.length(), start,
+                start + wort.length(), false);
+    }
+
+    /**
+     * Selbsttest der Markierung: Ein Einzelbuchstabe vor der Weit-Folge (durch eine Luecke nach D-2 getrennt, auch
+     * mit unsichtbarem Zeichen dazwischen) und einer dahinter (bei nachgestellten Bloecken) markiert; ein Wort, zwei
+     * Buchstaben, vier Leerzeichen, ein Komma, ein Umbruch, die Klammer und ein Punkt mit Tab nicht.
+     */
+    @Test
+    void t9_selbsttest_markierungErkenntEinzelbuchstabenAnDerWeitFolge() {
+        String uz = String.valueOf((char) 0x200B);
+        String wort = "L. A. N. R.";
+        for (String vor : List.of("x ", "x\t", "x.  ", "x. ", "x-", "x" + uz + " ", "x   ", "x." + uz + " ")) {
+            String text = vor + wort + " 7";
+            assertTrue(verbindbar(text, blockE(text, BLOCK_E_WEIT, wort)), "Einzelbuchstabe davor");
+        }
+        for (String vor : List.of("Hallo ", "AB ", "x    ", "x, ", "x\n", "x.\t", "x . ", "", "7 ")) {
+            String text = vor + wort + " 7";
+            assertFalse(verbindbar(text, blockE(text, BLOCK_E_WEIT, wort)), "kein Einzelbuchstabe davor");
+        }
+        String nachgestellt = "L  A  N  R";
+        for (String nach : List.of(" x", ". x", ".x", "\tx", "  x", "-x", ". " + uz + "x")) {
+            String text = "7 " + nachgestellt + nach;
+            assertTrue(verbindbar(text, blockE(text, BLOCK_E_NACH, nachgestellt)), "Einzelbuchstabe dahinter");
+        }
+        for (String nach : List.of(")", " Hallo", ". AB", "    x", ", x", "\nx", ".\tx", "")) {
+            String text = "7 " + nachgestellt + nach;
+            assertFalse(verbindbar(text, blockE(text, BLOCK_E_NACH, nachgestellt)), "kein Einzelbuchstabe dahinter");
+        }
+        String davor = "x " + wort + " 7";
+        assertTrue(verbindbar(davor, blockE(davor, BLOCK_E_NACH, wort)), "davor zaehlt bei jeder Blockart");
+        String dahinter = wort + " x";
+        assertFalse(verbindbar(dahinter, blockE(dahinter, BLOCK_E_WEIT, wort)), "dahinter zaehlt nur nachgestellt");
+    }
+
+    /**
+     * Selbsttest der Zaehler: Ein abgedeckter Block, ein nicht markierter Block ohne Abdeckung und ein markierter
+     * Block ohne Abdeckung werden je in der richtigen Klasse gezaehlt (der strikte Zaehler laeuft nicht ins Leere).
+     */
+    @Test
+    void t9_kvE_selbsttest_zaehlerErkennenBlockOhneAbdeckungUndMarkierte() {
+        String vor = "L. A. N. R. ";
+        String nummer = SynthetischeKvNummern.LANR_GUELTIG;
+        String text = vor + nummer + " Hallo Welt";
+        int ende = vor.length() + nummer.length();
+        BlockE gut = new BlockE(BLOCK_E_WEIT, true, 1 << LUECKE_C, vor.length(), ende, 0, 10, false);
+        BlockE leer = new BlockE(BLOCK_E_WEIT, true, 1 << LUECKE_C, ende + 1, ende + 6, 0, 10, false);
+        Lauf lauf = new Lauf(SEED_TEXTE_KV_E);
+        pruefeKvE(lauf, TextScanner.standard(), 0, new FallE(text, List.of(gut), List.of()));
+        assertEquals(0, lauf.klasse_("block-ohne-scan-abdeckung"), "abgedeckter Block");
+        assertEquals(1, lauf.klasse_("kv-weit-fund-lanr"), "Fund mit 0,80 auf der Nummer erkannt");
+        assertEquals(1, lauf.klasse_("kv-weit-luecke-c"), "Luecke (c) im Weit-Kontextwort");
+        assertEquals(0, lauf.klasse_("kv-weit-luecke-b"), "keine Luecke (b)");
+        pruefeKvE(lauf, TextScanner.standard(), 1, new FallE(text, List.of(leer), List.of()));
+        assertEquals(1, lauf.klasse_("block-ohne-scan-abdeckung"), "nicht markierter Block ohne Abdeckung");
+        assertEquals(1, lauf.klasse_("block-ohne-scan-abdeckung-weit-lanr"), "nach Blockart und Art");
+        pruefeKvE(lauf, TextScanner.standard(), 2, new FallE(text, List.of(leer.markiert()), List.of()));
         assertEquals(1, lauf.klasse_("block-ohne-scan-abdeckung"), "markierter Block zaehlt nicht dort");
         assertEquals(1, lauf.klasse_("markiert-ohne-abdeckung"), "markierter Block ohne Abdeckung");
         assertEquals(1, lauf.klasse_("block-markiert"), "markierter Block gezaehlt");
