@@ -180,6 +180,66 @@ public final class SynthetischeKvNummern {
     /** Buchstabe und zehn Ziffern: zu lang fuer die Neunerform. */
     public static final String KVNR_ZEHN_ZIFFERN = "Z0000123412";
 
+    // ------------------------------------------------------------------ BSNR (kvnr-bsnr-erkennung, AK-27, AK-34)
+
+    // Quellenvermerk (AK-24, sinngemaess): Quelle: Richtlinie der KBV nach Paragraph 75 Absatz 7 SGB V zur Vergabe der
+    // Arzt-, Betriebsstaetten-, Praxisnetz- sowie der Netzverbundnummern, Stand 1. Januar 2024 (kbv.de), Paragraph 6
+    // und Anlage 1, abgerufen am 23.11.2026 (durch die Hauptsitzung). Status: nicht vom Entwickler gegen die
+    // Richtlinie verifiziert. Die BSNR ist neunstellig, die Stellen 1 und 2 sind der Regionalcode, eine Pruefziffer
+    // gibt es nicht. Die Liste der Regionalcodes fuehrt allein das Produkt (BsnrRegionalcodes).
+    //
+    // Bildungsregel (A-6): bekannter Regionalcode (Liste der Anlage 1), Stellen 3 bis 7 gleich 00000, Stellen 8 und 9
+    // frei und verschieden. Der Regionalcode ist so gewaehlt, dass die Zahl nach dem LANR-Verfahren ungueltig ist
+    // (Stelle 7 ist 0, ungueltig, wenn 4*Stelle1 + 9*Stelle2 nicht durch 10 teilbar ist) und nach dem IK-Verfahren
+    // ungueltig (hier geht nur Stelle 8 ein; ungueltig, wenn Stelle 8 ungleich Stelle 9 ist). So bleibt jede
+    // Testnummer ohne Kontextwort der anderen Arten ein reiner BSNR-Fall (D-6, AK-30). Der unbekannte Regionalcode
+    // der Negativvektoren ist 00 (kein Schluessel der Anlage 1); damit er nach dem LANR-Verfahren nicht zufaellig
+    // gueltig ist, steht dort Stelle 7 ungleich 0. Eine BSNR-Testnummer steht nie direkt hinter einem einzelnen
+    // Grossbuchstaben (KVNR-Form).
+    //
+    // Restrisiko (OF-3): Es ist nicht belegt, dass Nummern mit 00000 an den Stellen 3 bis 7 real nie vergeben werden;
+    // eine zufaellige Uebereinstimmung waere ohne Bezug zu einer Praxis und ohne Kontext im Test.
+
+    /**
+     * Bekannter Regionalcode 17 (Anlage 1: 06 bis 21), Stellen 3 bis 7 gleich 00000, Stellen 8 und 9 gleich 3 und 1.
+     * LANR: Summe 4*1 + 9*7 = 67, erwartete Stelle 7 waere 3, ist 0 (ungueltig). IK: Quersummensumme 3, Stelle 9 ist 1
+     * (ungueltig).
+     */
+    public static final String BSNR_BEKANNT = "170000031";
+
+    /**
+     * Bekannter Regionalcode 52 (Anlage 1: 37 bis 73), Stellen 8 und 9 gleich 4 und 7. LANR: Summe 4*5 + 9*2 = 38,
+     * erwartete Stelle 7 waere 2, ist 0 (ungueltig). IK: Quersummensumme 4, Stelle 9 ist 7 (ungueltig).
+     */
+    public static final String BSNR_BEKANNT_ZWEI = "520000047";
+
+    /**
+     * Unbekannter Regionalcode 00, Stellen 3 bis 6 gleich 0000, Stelle 7 gleich 5, Stellen 8 und 9 gleich 3 und 7.
+     * LANR: Summe 0, erwartete Stelle 7 waere 0, ist 5 (ungueltig). IK: Stelle 7 mal 2 ergibt 10, Quersumme 1, dazu
+     * Stelle 8 ergibt 4, Stelle 9 ist 7 (ungueltig).
+     */
+    public static final String BSNR_UNBEKANNT = "000000537";
+
+    /** Bekannter Regionalcode 17 wie {@link #BSNR_BEKANNT}, aber nur acht Ziffern (Stelle 8 gleich 3): zu kurz. */
+    public static final String BSNR_ACHT_ZIFFERN = "17000003";
+
+    /** Bekannter Regionalcode 52 wie {@link #BSNR_BEKANNT_ZWEI}, aber zehn Ziffern (zusaetzlich eine 1): zu lang. */
+    public static final String BSNR_ZEHN_ZIFFERN = "5200000471";
+
+    /**
+     * Nullnummer: neun Nullen (Regionalcode 00, unbekannt) fuer Grenzlast und Aufzaehlungen mit gleichen Ziffern.
+     * Nach LANR- und IK-Verfahren zufaellig gueltig (Summe 0); fuer BSNR-Faelle ohne Folge, weil dort nur das BSNR-
+     * Kontextwort gilt.
+     */
+    public static final String BSNR_NULL = "000000000";
+
+    /**
+     * Marker, bekannter Regionalcode 43 (Anlage 1: 37 bis 73), Stellen 8 und 9 gleich 8 und 2. LANR: Summe 4*4 + 9*3 =
+     * 43, erwartete Stelle 7 waere 7, ist 0 (ungueltig). IK: Quersummensumme 8, Stelle 9 ist 2 (ungueltig). Von allen
+     * anderen Nummern dieser Klasse verschieden, auch in den ersten sechs Ziffern.
+     */
+    public static final String BSNR_MARKER = "430000082";
+
     // ------------------------------------------------------------------ Trennerformen (AK-6)
 
     /** LANR mit Leerzeichen, Gruppen 3-3-3; ohne Trenner {@link #LANR_GUELTIG}. */
@@ -258,6 +318,21 @@ public final class SynthetischeKvNummern {
     public static List<String> alleKvnrUngueltig() {
         return List.of(KVNR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN, KVNR_UNGUELTIG_VERTAUSCHT,
                 KVNR_UNGUELTIG_ZIFFER_GEAENDERT);
+    }
+
+    /** BSNR mit bekanntem Regionalcode (Zahl der Liste im Produkt: 17, 52, 43), neun Ziffern. */
+    public static List<String> alleBsnrBekannt() {
+        return List.of(BSNR_BEKANNT, BSNR_BEKANNT_ZWEI, BSNR_MARKER);
+    }
+
+    /** BSNR-Vektoren ohne bekannten Regionalcode oder mit Laengenabweichung (unbekannt, acht und zehn Ziffern). */
+    public static List<String> alleBsnrUngueltig() {
+        return List.of(BSNR_UNBEKANNT, BSNR_ACHT_ZIFFERN, BSNR_ZEHN_ZIFFERN);
+    }
+
+    /** Alle BSNR-Nummern mit neun Ziffern: bekannte, unbekannte (auch die Nullnummer) und der Marker. */
+    public static List<String> alleBsnrNeunstellig() {
+        return List.of(BSNR_BEKANNT, BSNR_BEKANNT_ZWEI, BSNR_UNBEKANNT, BSNR_NULL, BSNR_MARKER);
     }
 
     // ------------------------------------------------------------------ unabhaengige Referenzpruefungen

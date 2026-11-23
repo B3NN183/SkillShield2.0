@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import de.skillshield.core.recognizer.kv.BsnrSynthetischWaechter;
 import de.skillshield.core.recognizer.kv.KvnrBsnrHilfen;
 import de.skillshield.core.recognizer.kv.KvnrSynthetischWaechter;
 import java.lang.reflect.Field;
@@ -541,5 +542,94 @@ class SynthetischeKvNummernTest {
             assertFalse(andere.contains(n.substring(1)), "KVNR-Ziffern stehen schon in der LANR/IK-Liste");
         }
         assertEquals(15, andere.size(), "die Liste der LANR/IK-Nummern bleibt unveraendert");
+    }
+
+    // ------------------------------------------------------------------ BSNR (kvnr-bsnr-erkennung, AK-34)
+
+    private static boolean bsnrNullblockAnStelle3Bis7(String n) {
+        return n.substring(2, 7).chars().allMatch(c -> c == '0');
+    }
+
+    @Test
+    void ak34_bsnrVektoren_mindestensEinBekannterUndDreiUngueltige_alleNurAsciiZiffern() {
+        assertTrue(alleBsnrBekannt().size() >= 1);
+        assertTrue(alleBsnrUngueltig().size() >= 3);
+        List<String> alle = new ArrayList<>(alleBsnrNeunstellig());
+        alle.addAll(List.of(BSNR_ACHT_ZIFFERN, BSNR_ZEHN_ZIFFERN));
+        for (String n : alle) {
+            assertTrue(istNurAsciiZiffern(n), "BSNR-Vektor mit anderen Zeichen als Ziffern");
+        }
+        assertEquals(8, BSNR_ACHT_ZIFFERN.length());
+        assertEquals(10, BSNR_ZEHN_ZIFFERN.length());
+        for (String n : alleBsnrNeunstellig()) {
+            assertEquals(9, n.length(), "BSNR-Vektor nicht neunstellig");
+        }
+    }
+
+    @Test
+    void ak34_bsnrVektorenMitBekanntemCode_folgenDerBildungsregelA6_undSindNachLanrUndIkUngueltig() {
+        for (String n : alleBsnrBekannt()) {
+            assertTrue(bsnrNullblockAnStelle3Bis7(n), "Stellen 3 bis 7 sind nicht null");
+            assertNotEquals(n.charAt(7), n.charAt(8), "Stellen 8 und 9 sind gleich");
+            assertFalse(lanrGueltigReferenz(n), "BSNR-Vektor ist nach dem LANR-Verfahren gueltig");
+            assertFalse(ikGueltigReferenz(n), "BSNR-Vektor ist nach dem IK-Verfahren gueltig");
+            assertFalse(n.startsWith("00"), "bekannter Regionalcode kann nicht 00 sein");
+        }
+        // die Laengenvektoren folgen der Regel in den Stellen 3 bis 7
+        assertTrue(bsnrNullblockAnStelle3Bis7(BSNR_ACHT_ZIFFERN));
+        assertTrue(bsnrNullblockAnStelle3Bis7(BSNR_ZEHN_ZIFFERN));
+    }
+
+    @Test
+    void ak34_bsnrUnbekannterVektor_hatRegionalcode00_undIstNachLanrUndIkUngueltig() {
+        assertTrue(BSNR_UNBEKANNT.startsWith("00"));
+        assertFalse(lanrGueltigReferenz(BSNR_UNBEKANNT));
+        assertFalse(ikGueltigReferenz(BSNR_UNBEKANNT));
+        // Gegenprobe: mit Nullblock und Code 00 waere die Zahl nach dem LANR-Verfahren gueltig (daher Stelle 7 nicht 0)
+        String mitNullblock = BSNR_UNBEKANNT.substring(0, 6) + "0" + BSNR_UNBEKANNT.substring(7);
+        assertTrue(lanrGueltigReferenz(mitNullblock));
+        assertNotEquals('0', BSNR_UNBEKANNT.charAt(6));
+    }
+
+    @Test
+    void ak34_bsnrNullnummerUndMarker_habenDieBenanntenEigenschaften() {
+        assertEquals(1, BSNR_NULL.chars().distinct().count(), "Nullnummer hat nicht nur gleiche Ziffern");
+        assertEquals('0', BSNR_NULL.charAt(0));
+        assertTrue(alleBsnrBekannt().contains(BSNR_MARKER));
+        for (String n : alleBsnrNeunstellig()) {
+            if (!n.equals(BSNR_MARKER)) {
+                assertNotEquals(n.substring(0, 6), BSNR_MARKER.substring(0, 6), "Marker teilt erste sechs Ziffern");
+                assertNotEquals(n.substring(3), BSNR_MARKER.substring(3), "Marker teilt die letzten sechs Ziffern");
+            }
+        }
+        assertNotEquals(BSNR_MARKER.substring(0, 6), LANR_MARKER.substring(0, 6));
+        assertNotEquals(BSNR_MARKER.substring(0, 6), IK_MARKER.substring(0, 6));
+    }
+
+    @Test
+    void ak34_bsnrNullnummer_istNachLanrUndIkVerfahrenGueltig() {
+        assertTrue(lanrGueltigReferenz(BSNR_NULL), "Nullnummer ist nach dem LANR-Verfahren ungueltig");
+        assertTrue(ikGueltigReferenz(BSNR_NULL), "Nullnummer ist nach dem IK-Verfahren ungueltig");
+    }
+
+    @Test
+    void ak34_bsnrVektoren_sindVerschiedenUndNichtInDerLanrIkListe_dieListeBleibtUnveraendert() {
+        List<String> alle = new ArrayList<>(alleBsnrNeunstellig());
+        alle.addAll(List.of(BSNR_ACHT_ZIFFERN, BSNR_ZEHN_ZIFFERN));
+        assertEquals(alle.size(), new HashSet<>(alle).size(), "doppelte BSNR-Vektoren");
+        List<String> andere = alleNeunstelligenNummern();
+        for (String n : alleBsnrNeunstellig()) {
+            assertFalse(andere.contains(n), "BSNR-Vektor steht schon in der LANR/IK-Liste");
+        }
+        assertEquals(15, andere.size());
+        assertEquals(5, alleBsnrNeunstellig().size());
+    }
+
+    @Test
+    void ak34_bsnrVektoren_bestehenDenWaechterFuerSyntheseUndLaufzeitWaechterDerKvnr() {
+        for (String n : alleBsnrNeunstellig()) {
+            BsnrSynthetischWaechter.assertBsnrSynthetisch("BSNR " + n);
+            assertEquals(0, KvnrSynthetischWaechter.pruefe("BSNR " + n).verstoesse());
+        }
     }
 }

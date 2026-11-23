@@ -81,7 +81,9 @@ import org.junit.jupiter.api.Test;
  * sie, wenn (a) sie Teil eines Platzhalters ist: ein einzelner Ziffernblock, unmittelbar davor {@code [[}, ein
  * Typname ({@code [A-Z][A-Z0-9]{0,31}}) und {@code _}, unmittelbar danach {@code ]]}; (b) sie selbst eine gueltige
  * IPv4 im Dokumentationsbereich ist; (c) sie in der Datei {@code SynthetischeKvNummern.java} steht und jede ihrer
- * neunstelligen Ziffernfolgen (Gesamtzahl neun oder Block aus neun) mit {@code 00} beginnt; oder (d) sie in der
+ * neunstelligen Ziffernfolgen (Gesamtzahl neun oder Block aus neun) mit {@code 00} beginnt oder an den Stellen 3 bis 7
+ * {@code 00000} hat (BSNR-Form nach A-6, Feature kvnr-bsnr-erkennung, T-12; alle anderen Folgen bleiben
+ * {@code ZENTRALE_OHNE_PRAEFIX_00}); oder (d) sie in der
  * geschlossenen Ausnahmeliste {@code AUSNAHMEN_ZIFFERN} steht. Ein Eintrag gilt nur fuer genau eine benannte Datei
  * (Dateiname) und genau diese Kette; ein Eintrag, der in dieser Datei nicht mehr als Verstoss vorkommt, macht den
  * Test rot. Meldungen nennen Datei, Zeile, Spalte und die Art des Verstosses, nie die Ziffern.
@@ -187,7 +189,8 @@ class TestdatenSynthetischTest {
         NEUN_ZIFFERN_BLOCK("Kette mit einem Block aus neun Ziffern"),
         NEUN_ZIFFERN_GLEITEND("Kette mit aufeinanderfolgenden Bloecken aus zusammen neun Ziffern"),
         BACKSLASH_ESCAPE("Unicode-Escape fuer den Rueckwaertsstrich (Escape-Aufloesung waere umgehbar)"),
-        ZENTRALE_OHNE_PRAEFIX_00("neunstellige Folge ohne fuehrende Doppelnull in der zentralen Klasse"),
+        ZENTRALE_OHNE_PRAEFIX_00("neunstellige Folge ohne fuehrende Doppelnull und ohne Nullblock nach dem "
+                + "Regionalcode in der zentralen Klasse"),
         KVNR_FORM("KVNR-Form (Buchstabe, optional ein Trenner, neun Ziffern) trotz Ausnahme ausserhalb der Zentrale"),
         ZENTRALE_KVNR_OHNE_0000("KVNR-Form in der zentralen Klasse ohne vier Nullen am Anfang der Ziffern");
 
@@ -675,6 +678,14 @@ class TestdatenSynthetischTest {
     /** Die Ziffern, mit denen jede KVNR-Form der zentralen Klasse beginnt (Stelle 2 bis 5 der KVNR, A-6, H-1). */
     private static final String KVNR_ZIFFERN_PRAEFIX = "0000";
 
+    /** Die Ziffern an Stelle 3 bis 7 einer BSNR-Testnummer nach A-6 (Feature kvnr-bsnr-erkennung, T-12). */
+    private static final String BSNR_NULLBLOCK = "00000";
+
+    /** Ist die neunstellige Folge eine BSNR-Form nach A-6: {@code 00000} an Stelle 3 bis 7? */
+    static boolean istBsnrForm(String neunerFolge) {
+        return neunerFolge.length() == 9 && neunerFolge.startsWith(BSNR_NULLBLOCK, 2);
+    }
+
     private static boolean istAsciiBuchstabe(char c) {
         return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
     }
@@ -751,7 +762,7 @@ class TestdatenSynthetischTest {
                     if (!folgen.stream().allMatch(f -> f.startsWith(KVNR_ZIFFERN_PRAEFIX))) {
                         verstoesse.add(new KettenVerstoss(datei, zeilenNummer, spalte, Art.ZENTRALE_KVNR_OHNE_0000));
                     }
-                } else if (!folgen.stream().allMatch(f -> f.startsWith("00"))) {
+                } else if (!folgen.stream().allMatch(f -> f.startsWith("00") || istBsnrForm(f))) {
                     verstoesse.add(new KettenVerstoss(datei, zeilenNummer, spalte, Art.ZENTRALE_OHNE_PRAEFIX_00));
                 } else if (gueltigeKvnrOhne0000(zeile, kette.start(), folgen)) {
                     verstoesse.add(new KettenVerstoss(datei, zeilenNummer, spalte, Art.ZENTRALE_KVNR_OHNE_0000));
@@ -990,7 +1001,8 @@ class TestdatenSynthetischTest {
                 }
                 for (String folge : k.neunerFolgen()) {
                     neunstellige++;
-                    assertTrue(folge.startsWith("00"), "Neunstellige Folge ohne Praefix 00 in der zentralen Klasse");
+                    assertTrue(folge.startsWith("00") || istBsnrForm(folge),
+                            "Neunstellige Folge ohne Praefix 00 und ohne BSNR-Form in der zentralen Klasse");
                 }
             }
         }
@@ -1562,6 +1574,70 @@ class TestdatenSynthetischTest {
         Ergebnis escape = pruefe("de/x/A.java", mitEscape, Set.of(), alleKettenAlsAusnahme("A.java", mitEscape),
                 true);
         assertEquals(List.of(Art.KVNR_FORM), escape.kettenVerstoesse().stream().map(KettenVerstoss::art).toList());
+    }
+
+    // ------------------------------------------------------------------ BSNR-Form (Feature kvnr-bsnr-erkennung, T-12)
+
+    @Test
+    void selbsttest_bsnrForm_zentraleKlasse_nullblockAnStelle3Bis7ZulaessigAlleAnderenBleibenVerstoss() {
+        // alle Nummern sind aus der zentralen Klasse abgeleitet, nie als Literal geschrieben
+        String bekannt = SynthetischeKvNummern.BSNR_BEKANNT;
+        String zwei = SynthetischeKvNummern.BSNR_BEKANNT_ZWEI;
+        String nullen = "0".repeat(5);
+        String ohneNullblock = bekannt.substring(0, 4) + "7" + bekannt.substring(5);
+        String nullblockZuFrueh = bekannt.substring(0, 1) + nullen + bekannt.substring(1, 2) + bekannt.substring(7);
+        String nullblockZuSpaet = bekannt.substring(0, 2) + bekannt.charAt(1) + nullen + bekannt.charAt(8);
+        String teilweise = bekannt.substring(0, 4) + "5" + bekannt.substring(5);
+        // Zulaessig: Nullblock an Stelle 3 bis 7 ohne Praefix 00, mit Trennern und als Block einer Kette
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, "x = \"" + bekannt + "\";", Set.of()));
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, bekannt.substring(0, 2) + " " + bekannt.substring(2, 7) + " "
+                + bekannt.substring(7), Set.of()));
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, zwei.substring(0, 2) + "-" + zwei.substring(2, 7) + "-"
+                + zwei.substring(7), Set.of()));
+        // Verstoss wie bisher: der Nullblock steht an einer anderen Stelle oder ist nicht vollstaendig
+        for (String falsch : List.of(ohneNullblock, nullblockZuFrueh, nullblockZuSpaet, teilweise)) {
+            assertEquals(List.of(Art.ZENTRALE_OHNE_PRAEFIX_00), arten(ZENTRALE_DATEI, falsch, Set.of()));
+        }
+        // eine Kette aus zwei Folgen: eine davon ohne Nullblock und ohne Praefix genuegt fuer den Verstoss
+        assertEquals(List.of(Art.ZENTRALE_OHNE_PRAEFIX_00),
+                arten(ZENTRALE_DATEI, bekannt + "-" + ohneNullblock, Set.of()));
+        // die Erweiterung gilt nur in der zentralen Klasse: in jeder anderen Datei bleibt die BSNR-Form ein Verstoss
+        assertEquals(List.of(Art.NEUN_ZIFFERN_GESAMT), arten("a/B.java", bekannt, Set.of()));
+        // Praefix 00 bleibt unveraendert zulaessig, auch ohne Nullblock
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, SynthetischeKvNummern.BSNR_UNBEKANNT, Set.of()));
+        // Hilfsmethode: nur neunstellige Folgen mit Nullblock an Stelle 3 bis 7
+        assertTrue(istBsnrForm(bekannt));
+        assertFalse(istBsnrForm(ohneNullblock));
+        assertFalse(istBsnrForm(bekannt.substring(0, 7)));
+        assertFalse(istBsnrForm(bekannt + "0"));
+    }
+
+    @Test
+    void selbsttest_bsnrForm_zentraleKlasse_kvnrFormBrauchtWeiterDieZiffern0000_auchMitNullblock() {
+        // Buchstabe davor: KVNR-Form, dann gilt die Pflicht 0000 statt des Nullblocks an Stelle 3 bis 7
+        String bekannt = SynthetischeKvNummern.BSNR_BEKANNT;
+        assertEquals(List.of(Art.ZENTRALE_KVNR_OHNE_0000), arten(ZENTRALE_DATEI, "Z" + bekannt, Set.of()));
+        assertEquals(List.of(Art.ZENTRALE_KVNR_OHNE_0000), arten(ZENTRALE_DATEI, "Z " + bekannt, Set.of()));
+        // Gegenprobe: ohne Buchstaben davor zulaessig, und die KVNR-Form mit 0000 bleibt zulaessig
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, "= " + bekannt, Set.of()));
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, SynthetischeKvNummern.KVNR_GUELTIG, Set.of()));
+    }
+
+    @Test
+    void zentraleKlasse_bsnrAbschnitt_wirdErfasstUndKeineMindestzahlSinkt() {
+        String text = lies(QUELLE.resolve(ZENTRALE_DATEI));
+        int bsnrFormen = 0;
+        for (String zeile : text.split("\\R", -1)) {
+            for (Kette k : ziffernKetten(loeseEscapesAuf(zeile))) {
+                for (String folge : k.neunerFolgen()) {
+                    bsnrFormen += istBsnrForm(folge) && !folge.startsWith("00") ? 1 : 0;
+                }
+            }
+        }
+        // Istwert 3 (bekannter Code mit Nullblock ohne Praefix 00: BSNR_BEKANNT, BSNR_BEKANNT_ZWEI, BSNR_MARKER);
+        // Mindestzahl 2 (unter 70 Prozent des Istwerts aufgerundet)
+        assertTrue(bsnrFormen >= 2, "BSNR-Formen ohne Praefix 00 in der zentralen Klasse: " + bsnrFormen);
+        assertEquals(List.of(), pruefe(ZENTRALE_DATEI, text, Set.of(), Set.of()).verstoesse());
     }
 
     // ------------------------------------------------------------------ Selbsttests: E-Mail
