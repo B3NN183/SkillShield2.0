@@ -1405,3 +1405,25 @@ Tests in `KvnrGrenzenTest`, sofern nicht anders genannt. Diese Liste ergänzt un
   `KvNumberScanner` und `KvnrRecognizer`, G-K15-Zusatz: die geschlossene gültige Form ist nur dann ein Fund
   (0,60), wenn sie vom Pfad bzw. der URL abgesetzt steht; direkt hinter `/` als Segment greift G-K18 (kein
   Fund). Maßgeblich bis dahin: dieser Nachtrag und die Tests `bekannteGrenzeGK18_…`.
+- **Nachtrag zu Teil 2 (T-12 bis T-15), Entscheidung der Hauptsitzung, 23.11.2026 (geht den Task-Beschreibungen
+  vor):**
+  1. **Eingefrorene Dateien bleiben unverändert**, auch wo die Task-Beschreibung sie als Ort nennt:
+     `KvnrBsnrHilfen`, `KvNumberScannerStandTrenner`, `KvStandTrenner`, `KvArtBestandTest` (Tag `kb-t1-bestand`),
+     `KvStandTrennerDifferenzTest` (Stand nach T-10), Prüfstand T-9 (Tag `kb-t9-pruefstand`). Stattdessen:
+     T-12 `assertBsnrSynthetisch` → neue Klasse `test/…/recognizer/kv/BsnrSynthetischWaechter.java`;
+     T-14 Ergänzung „S-1 bis S-3 über alle Mengen" → neue Klasse `test/…/BsnrScannerBestandTest.java`;
+     T-15 Siegel 1h → neue Klasse `test/…/BsnrFuzzBestandTest.java`. In `SynthetischeKvNummern` sind nur
+     Ergänzungen erlaubt (`fremdKvnr`/`zufallsKvnr` unverändert).
+  2. **Regionalcodes (OF-2):** maßgeblich ist die Liste im „Nachtrag der Hauptsitzung vom 23.11.2026" der
+     Anforderung (78 Schlüssel laut KBV-Richtlinie, Stand 1.1.2024; Sonderkennungen 35/75; 99 Netzverbund – so
+     behandeln, wie die Anforderung D-7/AK-27 und der Nachtrag es festlegen).
+  3. **BSNR als nachrangiger Erkenner (aus T-6 vorgemerkt):** `BsnrRecognizer` überschreibt nur `nachrangig()`
+     (= true) und `restQuelle()` (= `bsnr-rest`); die Zuschneide-Logik in `TextScanner` bleibt unverändert.
+  4. **Kompositum-Regel (aus T-5 vorgemerkt):** T-13 entscheidet anhand der AK-25 bis AK-29, ob das nachgestellte
+     Kompositum (`Wort[.]-Kontextwort`) auch für BSNR gilt; Vorgabe der Hauptsitzung: ja, wenn LANR/IK dadurch
+     byte-/verhaltensgleich bleiben und kein Bestandstest rot wird – sonst nein und als Grenze dokumentieren.
+  5. **Regel 12 mit 1b:** Teil-2-Tests enthalten keine gültige, geschlossene, großgeschriebene KVNR-Form außerhalb
+     eines beabsichtigten KVNR-Fundes. BSNR-Testnummern (neun Ziffern) dürfen nicht direkt hinter einem einzelnen
+     Großbuchstaben mit Wortgrenze stehen, wenn daraus eine gültige KVNR-Form würde (Wächter).
+  6. Aus T-11 vorgemerkte Javadoc-Korrekturen (G-K18-Schlusssatz, G-K15-Zusatz) nimmt T-13 mit.
+  7. Wird ein bestehender Test rot: nicht anpassen, anhalten, melden (Testname, Zahl, Art – ohne Text/Ziffern).
