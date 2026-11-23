@@ -24,7 +24,15 @@ import java.util.Set;
  * {@code krankenversicherten}, {@code egk}, {@code kv}. Das Vorwort {@code kv} ({@code KV-Nr.}) erschliesst nur die
  * Buchstabenform. Keine Kontextwoerter sind {@code vknr}, {@code versicherungsnummer},
  * {@code rentenversicherungsnummer}, {@code kv} allein und {@code nr} allein. Die Quellen heissen
- * {@code kvnr}, {@code kvnr-pruefziffer-ungueltig} und {@code kvnr-form-abweichend}.
+ * {@code kvnr}, {@code kvnr-pruefziffer-ungueltig} und {@code kvnr-form-abweichend}; die vierte Quelle
+ * {@code kvnr-rest} gehoert nicht zu dieser Klasse, sie entsteht beim Zuschneiden im {@code TextScanner}.
+ *
+ * <p><b>Konfidenzen der KVNR</b> (Buchstabe und neun Ziffern mit gueltiger Pruefziffer): 0,95 bei direktem Kontextwort
+ * ({@link #confidenceDirekt()}), 0,80 bei weiterem Kontext, nachgestelltem Kontextwort oder gesperrt geschriebenem
+ * Kontextwort, 0,60 nachgestellt hinter Komma oder Semikolon; ungueltige Pruefziffer 0,50 (Quelle
+ * {@link #sourcePruefzifferUngueltig()}); abweichende Form (Buchstabe und 6 bis 12 Ziffern ausser neun oder reine
+ * Ziffernfolge) 0,40 (Quelle {@link #sourceLaengeAbweichend()}). Die bekannten Grenzen der KVNR (G-K1 bis G-K17, G-D2)
+ * stehen im Javadoc von {@code KvNumberScanner}.
  */
 enum KvArt {
 

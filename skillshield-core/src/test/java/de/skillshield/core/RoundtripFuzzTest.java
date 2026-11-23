@@ -1205,6 +1205,13 @@ class RoundtripFuzzTest {
 
     // ------------------------------------------------------------ Teil 1f: KVNR mit Kontextwort (kvnr-bsnr T-7)
 
+    // Aufbau dieses Abschnitts: zuerst der Pruefcode (Lauf und Pruefung je Text, ab fuehreKvFAus), danach ab
+    // "Teil 1f: eigene Startwerte" die Seeds, die Blockarten, die Records und der Generator. Das ist anders als in den
+    // Teilen 1d und 1e, wo die Konstanten am Abschnittsanfang stehen. Einen technischen Grund gibt es nicht: Java
+    // erlaubt Vorwaertsbezuege auf statische Konstanten, Methoden und Records, und die Seeds sind Konstanten zur
+    // Uebersetzungszeit; die Reihenfolge der Deklarationen aendert weder die Textfolge noch den Hashwert
+    // HASH_TEIL_1F noch eine Mindestzahl. Wer die Seeds oder Blockarten sucht, findet sie hinter dem Pruefcode.
+
     /**
      * Teil 1f (kvnr-bsnr-erkennung T-7): dieselben Eigenschaften wie Teil 1e ({@code pruefeText}: Invarianten,
      * Roundtrip mit Teilmenge und manuellen Funden, Kandidaten gegen Scan) plus {@link #pruefeKvF}: Klassen nach

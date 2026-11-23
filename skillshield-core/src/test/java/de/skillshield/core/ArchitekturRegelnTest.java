@@ -63,7 +63,10 @@ class ArchitekturRegelnTest {
             "de/skillshield/core/recognizer/kv/KvArt.java",
             "de/skillshield/core/recognizer/kv/KvCheckDigits.java",
             "de/skillshield/core/recognizer/kv/KvNumberScanner.java",
-            "de/skillshield/core/recognizer/kv/LanrRecognizer.java");
+            "de/skillshield/core/recognizer/kv/LanrRecognizer.java",
+            "de/skillshield/core/recognizer/kv/KvnrRecognizer.java",
+            "de/skillshield/core/recognizer/kv/KvnrPruefziffer.java",
+            "de/skillshield/core/recognizer/TextScanner.java");
 
     private static final Pattern PAKET = Pattern.compile("(?m)^\\s*package\\s+([A-Za-z0-9_.]+)\\s*;");
 

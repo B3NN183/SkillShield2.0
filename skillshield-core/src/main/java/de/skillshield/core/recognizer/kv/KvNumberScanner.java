@@ -211,7 +211,9 @@ import java.util.Set;
  * Pruefziffer: {@link #CONFIDENCE_PRUEFZIFFER_UNGUELTIG}. Sechs bis zwoelf Ziffern ausser neun:
  * {@link #CONFIDENCE_LAENGE_ABWEICHEND}. Der Fundbereich ist genau das Segment (Ziffern samt inneren Trennern), nie
  * das Kontextwort und nie ein unsichtbares Zeichen; unsichtbare Zeichen veraendern keinen Index. Die Funde sind nach
- * Position sortiert und ueberlappen nicht, jedes Segment wird hoechstens einmal ausgegeben.
+ * Position sortiert und ueberlappen nicht, jedes Segment wird hoechstens einmal ausgegeben. Die Quelle
+ * {@code kvnr-rest} (Reststueck einer KVNR neben einem Bestandsfund, hoechstens 0,80) entsteht nicht in diesem
+ * Scanner, sondern beim Zuschneiden im {@code TextScanner}.
  *
  * <p><b>Bekannte Grenzen (Feature kv-kontext-luecken, Plan Kap. 11).</b> Geschlossen: Grenze 12 (Komma und Semikolon
  * vor dem nachgestellten Kontextwort) und Grenze 14 (gesperrte Schreibweise) des Vorgaengers, jeweils in den Grenzen
@@ -252,6 +254,77 @@ import java.util.Set;
  * erschliessen eine folgende Zahl (kein Fehler, sondern Folge von D-3). Bei laufendem Kontext wird der Kontext durch
  * das Weit-Kontextwort neu begonnen (siehe oben, Ereignis Weit-Kontextwort). Unveraendert bleiben 12R, 14a, 14b, 14f,
  * 14g und die Restformen nach 14h.
+ *
+ * <p><b>Bekannte Grenzen der KVNR (Feature kvnr-bsnr-erkennung, Teil 1a, Plan Kap. 11).</b> Je Grenze gibt es einen
+ * Test {@code bekannteGrenze...} in {@code KvnrGrenzenTest} (dort die Tabelle "Grenze zu Test"; einzelne Tests stehen
+ * in {@code KvnrKontextTest} und {@code TextScannerKvnrTest}). Die Tests halten das tatsaechliche Verhalten fest und
+ * sind kein Soll fuer kuenftige Erweiterungen. "Kein Fund" heisst: kein KVNR-Fund; die Nummer bleibt im Klartext,
+ * sofern kein anderer Erkenner sie deckt. Jede Grenze gilt fuer die KVNR; LANR und IK sind unveraendert.
+ * <ul>
+ * <li>G-K1: Eine KVNR ohne Kontextwort ist kein Fund, in jeder Schreibweise (auch mit einem Wort wie
+ * {@code Rechnungsnummer} davor).</li>
+ * <li>G-K3: Zwei Buchstaben, Nicht-ASCII-Buchstaben und Nicht-ASCII-Ziffern in der Nummer sowie Woerter ausserhalb der
+ * Kontextwortliste ({@code KVID}, {@code Versicherungsnummer}, {@code Krankenversicherungs-Nr.}) ergeben keinen Fund.
+ * </li>
+ * <li>G-K4: Ziffern direkt an einem Wort ({@code KVNR} und Ziffern ohne Leerzeichen, {@code AB} und Ziffern) ergeben
+ * keinen Fund; bei zwei Buchstaben direkt an gruppierten Ziffern kann ein Teilfund 0,40 ueber die Gruppen nach der
+ * ersten entstehen, der erste Block samt Buchstaben bleibt stehen.</li>
+ * <li>G-K5: Ein Einzelbuchstabe der Sperrschrift, dem unmittelbar Ziffern folgen ({@code K V N R} und Ziffern ohne
+ * Trenner), gilt als Buchstabe einer Nummer; die Folge ist dann kein Kontextwort. Dasselbe gilt fuer eine Sperrung mit
+ * Punkt und Leerzeichen oder mit mehreren Leerzeichen (Weit-Folge), wenn hinter dem letzten Buchstaben genau ein
+ * Trenner und eine reine Ziffernfolge stehen. Geschlossen ist nur {@code K V N R} mit genau einem Trenner vor einer
+ * reinen Ziffernfolge (Fund 0,40).</li>
+ * <li>G-K6 (Folge, kein Fehler): {@code KVNR AB} und Trenner und Ziffern ergibt 0,40 ueber die reinen Ziffern.</li>
+ * <li>G-K7: Hinter {@code KV-Nr.} und {@code KV-Nummer} ist eine reine Ziffernfolge kein Fund (gewollt). Folge:
+ * Ist der Kontext eines KV-Vorworts noch aktiv und steht hinter einer reinen Ziffernfolge ein nachgestelltes
+ * vollwertiges Kontextwort ({@code KV-Nr. ... Ziffern (KVNR)}), bleibt die Ziffernfolge ohne Fund, weil sie schon
+ * als Fuellwort verbraucht ist.</li>
+ * <li>G-K8: Unsichtbare Zeichen zwischen Buchstabe und Ziffern beenden die Kette (Fund hoechstens 0,40 ueber die
+ * Ziffern, der Buchstabe bleibt stehen; ein Variantenwaehler klebt die Ziffern am Buchstaben, dann gibt es keinen
+ * Fund); unsichtbare Zeichen in der Nummer beenden sie ebenfalls.</li>
+ * <li>G-K9: Ein Kontextwort direkt am Buchstaben der Nummer ({@code KVNR} und Buchstabe ohne Trenner, auch mit einem
+ * unsichtbaren Zeichen dazwischen) ergibt keinen Fund; jede Schreibweise der Nummer bleibt stehen. Auch eine Erkennung
+ * ohne Kontextwort schuetzt hier nicht, weil sie vor dem Buchstaben eine Wortgrenze verlangt.</li>
+ * <li>G-K10: Ein Trenner ausserhalb der Gruppentrenner zwischen Buchstabe und Ziffern (Tab, zwei Leerzeichen,
+ * Doppelpunkt mit Leerzeichen, {@code _}, Komma, Halbgeviertstrich, Zeilenumbruch) ergibt hoechstens einen Fund 0,40
+ * ueber die Ziffern (der Buchstabe bleibt stehen), hinter {@code KV-Nr.} keinen Fund. Ein Satzzeichen mit
+ * Satzende-Wirkung ({@code !}, {@code ?}) zwischen Buchstabe und Ziffern oder zwischen Kontextwort samt Leerzeichen
+ * und Buchstabe ergibt gar keinen Fund.</li>
+ * <li>G-K11: Ein nachgestelltes Kontextwort, einfach oder als Kompositum ({@code Patienten-KVNR}), in der naechsten
+ * Zeile hinter der Nummer ergibt keinen Fund: Ein Zeilenumbruch leert die offenen Nummern (Regel der Vorgaenger, fuer
+ * alle Arten gleich).</li>
+ * <li>G-K12: Restgrenzen des nachgestellten Kompositums: ein unsichtbares Zeichen hinter dem Strich, andere Striche
+ * (U+2010, U+2011, U+2013), Leerraum am Strich, doppelte Zeichen und ein Variantenwaehler hinter dem Kontextwort
+ * loesen kein Kompositum aus.</li>
+ * <li>G-K13: Eine KVNR, deren neun Ziffern mit Punkten in genau vier Gruppen stehen, verliert den Buchstaben im Fund
+ * (IPv4-Gestalt).</li>
+ * <li>G-K14: Bestand hat Vorrang: Der Teil einer Nummer im Fund eines anderen Bestandstyps (E-Mail, IP, URL, Pfad)
+ * traegt dessen Typ; ein einzelner Buchstabe oder ein Rest mit weniger als drei Ziffern ausserhalb bleibt stehen,
+ * auch der hintere Teil einer gruppierten Nummer, den der lokale Teil einer E-Mail verschluckt (Einzelheiten im
+ * {@code TextScanner}).</li>
+ * <li>G-K15: Steht zwischen Kontextwort und Nummer ein Pfad oder eine URL, bleibt die Nummer ohne Fund, in jeder
+ * Schreibweise (geschlossen, gruppiert, klein). Ursache ist nicht die Laenge, sondern zwei Regeln dieses Scanners:
+ * (a) jedes Segment eines Pfads oder einer URL zaehlt als Fuellwort, ab dem vierten Segment ist der Kontext
+ * erloschen; (b) der Punkt der Dateiendung gilt hinter einem Wort mit mehr als vier Buchstaben als Satzende. Deshalb
+ * bleiben auch kurze Faelle ohne Fund: ein Pfad mit vier Segmenten, ein Pfad mit zwei Segmenten und Dateiendung hinter
+ * einem Wort mit mehr als vier Buchstaben, eine URL mit Schema und Host mit Punkt hinter einem solchen Wort. Bei URLs
+ * zaehlen das Schema und jedes Host-Label als Segment. Abgedeckt bleiben Pfade mit hoechstens drei Segmenten ohne
+ * Satzende-Punkt und nur eine sehr kurze URL: Schema und hoechstens zwei weitere Segmente (Host-Label oder
+ * Pfadsegmente), kein Punkt hinter einem Wort mit mehr als vier Buchstaben, keine Query. Jede laengere URL, jede URL
+ * mit Domain hinter einem langen Wort, mit zwei Pfadsegmenten hinter dem Host oder mit Query bleibt ohne Fund.
+ * Behebung nicht Teil dieses Features (Kandidat fuer ein Folgefeature "Kontext ueber Pfade und URLs hinweg").</li>
+ * <li>G-K16: Der Pseudonymizer ersetzt nur gefundene Stellen; steht derselbe Wert an einer zweiten, nicht erkannten
+ * Stelle (zum Beispiel mit dem Kontextwort ohne Trenner an den Buchstaben geklebt), bleibt er dort stehen. Ein
+ * Abgleich aller Vorkommen (Leak-Check) ist nicht Teil des Features.</li>
+ * <li>G-K17: Jedes Kombinationszeichen (Kategorien Mn, Mc, Me; darunter U+034F, U+180B, die Variantenwaehler und
+ * U+E0100 bis U+E01EF) und die Fuellzeichen U+115F, U+1160, U+3164 und U+FFA0, die nicht zur Menge der unsichtbaren
+ * Zeichen dieses Scanners gehoeren, verhindern direkt vor dem Buchstaben oder zwischen Buchstabe und Ziffern den
+ * Fund in Buchstabenform; Buchstabe und Ziffern koennen dann vollstaendig stehen bleiben.</li>
+ * <li>G-D2: Ein LANR- oder IK-Kontextwort vor einer KVNR-Form schuetzt nur die Ziffern (Fund LANR bzw. IK, der
+ * Buchstabe bleibt stehen); mit einem KVNR-Kontextwort davor umfasst der Fund Buchstabe und Ziffern (Typ KVNR).</li>
+ * </ul>
+ * Fuer die KVNR gelten ausserdem alle Grenzen der Vorgaenger (12R, 14a, 14b, 14cR, 14d, 14e, 14f, 14g, 14h-Rest, 15R)
+ * sinngemaess, zum Beispiel Kombinationszeichen am Kontextwort und Teilgruppen wie {@code K VNR}.
  *
  * <p><b>Linearitaet.</b> Ein Durchlauf, keine Rekursion, kein regulaerer Ausdruck, kein Zuruecksetzen der
  * Leseposition der Hauptschleife. Jeder Lauf wird in einem Zug gelesen. Dabei fuehrt der Durchlauf nur ein Fenster
@@ -305,7 +378,12 @@ import java.util.Set;
  * gemeinsamen Vorgriff durch die Grenzlast-Tests ({@code GrenzlastTest}, AK-26): je Eingabe mit einer Million Zeichen
  * (zum Beispiel {@code L. } wiederholt, {@code L} und eine Million Leerzeichen, {@code L. A. N. R. N } wiederholt,
  * {@code CR} und eine Million unsichtbarer Zeichen) liefern Scan, Pseudonymisierung und Rueckuebersetzung je in unter
- * zwei Sekunden die exakt erwartete Fundzahl.
+ * zwei Sekunden die exakt erwartete Fundzahl. Dasselbe belegt {@code GrenzlastTest} (Methode
+ * {@code ak22_kvnr_...}) fuer die Buchstabenform: ein Buchstabe und nur Ziffern, {@code A1} wiederholt,
+ * {@code KVNR Z} wiederholt, eine lange Aufzaehlung hinter einem einzigen Kontextwort, Kontextwort und Nummer
+ * wiederholt, gesperrte und Weit-Schreibweise, unsichtbare Zeichen vor dem Buchstaben, das nachgestellte Kompositum,
+ * Buchstabe und IPv4-Gestalt, abwechselnd Bestandsfunde und KVNR-Kandidaten (Zuschneiden im {@code TextScanner}) und
+ * abgebrochene Beinahe-Kontextwoerter; die Formel steht je Fall im Test.
  *
  * <p>Der Durchlauf wirft nur {@link NullPointerException} mit den festen Meldungen {@code art} und {@code text}; er
  * schreibt nichts aus, und kein Fund und keine Meldung enthaelt Ziffern des Textes.

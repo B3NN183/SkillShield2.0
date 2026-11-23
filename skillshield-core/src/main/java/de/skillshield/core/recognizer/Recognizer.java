@@ -31,7 +31,10 @@ public interface Recognizer {
      * zu T-6). Der {@link TextScanner} schneidet Kandidaten eines nachrangigen Erkenners, die sich mit einem
      * aufgeloesten Bestandsfund ueberschneiden (einem Fund der Typen E-Mail, IP, URL oder Pfad im Scan ohne die
      * nachrangigen Erkenner, nicht mit rohen Kandidaten), auf die Teile ausserhalb zu, bevor er alle Konflikte
-     * aufloest (Zuschneiden statt Verwerfen). Standard: {@code false}.
+     * aufloest (Zuschneiden statt Verwerfen). Ein Reststueck bleibt nur mit mindestens drei Ziffern, hat die Quelle
+     * {@link #restQuelle()} und hoechstens die Konfidenz 0,80; ein einzelner Buchstabe oder ein Rest mit weniger
+     * Ziffern bleibt stehen (bekannte Grenze G-K14, Einzelheiten im Javadoc des {@link TextScanner}). Standard:
+     * {@code false}.
      *
      * @return {@code true} fuer die Erkenner der neuen Arten (KVNR, spaeter BSNR)
      */

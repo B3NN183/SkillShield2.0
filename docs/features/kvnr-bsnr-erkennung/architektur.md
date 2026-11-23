@@ -1220,3 +1220,70 @@ Begründung Kap. 1 und R-4).
 - **Vermerk (23.11.2026):** Der Nutzer hat das in Nachtrag 3 zu T-7 beschriebene Restrisiko (Pfad/URL zwischen
   Kontextwort und Nummer; Kontextwort direkt am Buchstaben) zur Kenntnis genommen („ja das ist ok so dann bitte
   weiter"). Es bleibt Gegenstand des Abschlussberichts samt Vorschlag eines Folgefeatures.
+
+## Nachtrag zu Kap. 11 (T-8): Bekannte Grenzen der KVNR nach Teil 1a
+Tests in `KvnrGrenzenTest`, sofern nicht anders genannt. Diese Liste ergänzt und präzisiert Kap. 11.
+- **G-K1** (Teil 1a): Eine KVNR ohne Kontextwort ist in jeder Schreibweise kein Fund. Test `bekannteGrenzeGK1_…`.
+- **G-K2:** gilt nur mit Teil 1b; in Teil 1a nicht testbar, belegt durch den Fehlalarm-Prüfstand von Teil 1b (bzw.
+  T-R, falls 1b entfällt).
+- **G-K3:** zwei Buchstaben, Nicht-ASCII-Buchstaben, vollbreite/arabische Ziffern, `KVID`, `VKNR`,
+  `Versicherungsnummer`, `Krankenversicherungs-Nr.` → kein Fund. Test `bekannteGrenzeGK3_…`.
+- **G-K4** (ergänzt): Ziffern direkt am Wort → kein Fund; zwei Buchstaben direkt an gruppierten Ziffern → Teilfund
+  0,40 über die Gruppen nach der ersten. Tests `KvnrKontextTest#bekannteGrenzeGK4_…`, `bekannteGrenzeGK4_…`.
+- **G-K5** (Rest): `K V N R` direkt vor Ziffern sowie Sperrung mit Punkt + Leerzeichen oder mehreren Leerzeichen,
+  gefolgt von einem Leerzeichen und einer reinen Ziffernfolge → kein Fund. Test `bekannteGrenzeGK5_…`.
+- **G-K6, G-K7:** Tests `bekannteGrenzeGK6_…`, `bekannteGrenzeGK7_…`. **G-K7-Folge:** `KV-Nr. … <Ziffern> (KVNR)`
+  bleibt ohne Fund (Nachtrag zu T-7). Test `bekannteGrenzeGK7_folge_…`.
+- **G-K8** (ergänzt): unsichtbares Format-Zeichen zwischen Buchstabe und Ziffern → höchstens 0,40 über die Ziffern;
+  ein Variantenwähler direkt am Buchstaben → gar kein Fund. Test `bekannteGrenzeGK8_…`.
+- **G-K9** (neu, Restrisiko): Kontextwort direkt am Buchstaben der Nummer (auch mit unsichtbarem Zeichen dazwischen)
+  → jede Schreibweise ohne Fund bzw. höchstens 0,40 über die Ziffern der gruppierten Form; auch Teil 1b schützt
+  hier nicht (Wortgrenze vor dem Buchstaben). Test `bekannteGrenzeGK9_…`.
+- **G-K10** (neu): Trenner außerhalb D-1 zwischen Buchstabe und Ziffern → höchstens 0,40 über die Ziffern, hinter
+  `KV-Nr.` kein Fund. Test `bekannteGrenzeGK10_…`.
+- **G-K11** (neu): nachgestelltes Kontextwort (einfach oder Kompositum) in der nächsten Zeile → kein Fund.
+  Test `bekannteGrenzeGK11_…`.
+- **G-K12** (neu): Restgrenzen des Kompositums. Test `KvnrKontextTest#bekannteGrenze_kompositum_restgrenzen…`.
+- **G-K13** (neu): KVNR in genau vier Punkt-Gruppen verliert den Buchstaben im Fund.
+  Test `KvnrKontextTest#bekannteGrenze_kvnrInVierPunktGruppen…`.
+- **G-K14** (neu): Bestand hat Vorrang – der Teil der Nummer im anderen Fund trägt dessen Typ; ein Buchstabe oder ein
+  Rest mit weniger als drei Ziffern bleibt stehen. Tests `TextScannerKvnrTest#bekannteGrenze_nummerUeberschneidet…`,
+  `bekannteGrenzeGK14_…`.
+- **G-K15** (neu, Restrisiko): Pfad oder URL zwischen Kontextwort und Nummer → kein Fund in jeder Schreibweise.
+  Ursache: jedes Segment zählt als Füllwort (ab dem vierten ist der Kontext erloschen), und der Punkt hinter einem
+  Wort mit mehr als vier Buchstaben (Dateiendung, Host) gilt als Satzende. Abgedeckt bleiben Pfade mit höchstens
+  drei Segmenten ohne solchen Punkt und sehr kurze URLs ohne Punkt im Host mit höchstens drei Segmenten.
+  Tests `bekannteGrenzeGK15_pfadOderUrl…`, `bekannteGrenzeGK15_ursachen_…`.
+- **G-K16** (neu): derselbe Wert an zweiter, nicht erkannter Stelle bleibt stehen (kein Leak-Check).
+  Test `bekannteGrenzeGK16_…`.
+- **G-K17** (neu): U+034F, U+180B, U+E0100 bis U+E01EF, U+115F, U+3164, U+FFA0 vor dem Buchstaben → kein Fund.
+  Test `bekannteGrenzeGK17_…`.
+- **G-D2** (präzisiert): `LANR`/`IK` vor einer KVNR-Form schützt nur die Ziffern; mit KVNR-Kontextwort davor umfasst
+  der Fund Buchstabe und Ziffern (K-1). Test `bekannteGrenzeGD2_…`.
+- **Restrisiko, vom Nutzer zur Kenntnis genommen:** G-K15 und G-K9 (Kandidaten für ein Folgefeature mit Prüfung
+  durch security).
+- **Präzisierungen zum Nachtrag zu Kap. 11 (security, T-8):**
+  - **G-K10:** Satzzeichen mit Satzende-Wirkung (`!`, `?`) zwischen Buchstabe und Ziffern oder zwischen Kontextwort
+    und Nummer ergeben gar keinen Fund (nicht „höchstens 0,40").
+  - **G-K15:** Bei URLs zählen das Schema und jedes Host-Label als Segment; abgedeckt bleibt nur eine sehr kurze URL
+    ohne Punkt im Host mit Schema und höchstens zwei weiteren Segmenten. Jede URL mit Domain (Punkt im Host), mit
+    zwei Pfadsegmenten oder mit Query bleibt ohne Fund. Mit Teil 1b bleiben weiterhin die gruppierte und die
+    kleingeschriebene Form sowie Nummern mit falscher Prüfziffer ohne Fund.
+  - **G-K17 (allgemeiner):** Jedes Kombinationszeichen (Kategorien Mn, Mc, Me – darunter U+034F, U+180B, die
+    Variantenwähler, U+E0100 bis U+E01EF) sowie die Füllzeichen U+115F, U+1160, U+3164 und U+FFA0 direkt vor dem
+    Buchstaben der Nummer oder zwischen Buchstabe und Ziffern verhindern den Fund in Buchstabenform; Buchstabe und
+    Ziffern können dann vollständig stehen bleiben.
+  - **G-K15, Richtigstellung (am Produkt gemessen, T-8 Durchlauf 2):** „Jede URL mit Domain bleibt ohne Fund" war
+    zu streng formuliert. Maßgeblich sind allein die beiden Ursachen: Abgedeckt bleibt eine URL aus Schema und
+    höchstens zwei weiteren Segmenten (Host-Labels und Pfadsegmente zählen einzeln), ohne Punkt hinter einem Wort
+    mit mehr als vier Buchstaben und ohne Query – also etwa ein Host aus zwei kurzen Labels ohne Pfad. Jede URL mit
+    einem längeren Host-Label vor einem Punkt, mit insgesamt mehr als drei Segmenten oder mit Query bleibt ohne
+    Fund; das trifft praktisch alle realen URLs.
+  - **G-K15, Geltung der Richtigstellung (security, T-8 Durchlauf 2):** Die Richtigstellung ersetzt **beide**
+    älteren Formulierungen weiter oben in diesem Nachtrag – „ohne Punkt im Host" ebenso wie „Jede URL mit Domain
+    bleibt ohne Fund". Gemessen ergeben auch Hosts aus zwei kurzen Labels (bis vier Buchstaben vor dem Punkt), mit
+    oder ohne abschließenden Schrägstrich, einen Fund. Maßgeblich ist allein die Richtigstellung.
+  - **Vorgemerkt aus security T-8 (niedrig, kein FAIL-Grund), beim nächsten Task mit Änderung an diesen Dateien
+    mitzunehmen:** (a) Javadoc des ersten G-K15-Tests in `KvnrGrenzenTest` präzisieren („URL mit Schema" →
+    Fassung der Richtigstellung); (b) zwei eigene Lastfälle in `GrenzlastTest`: „gesperrtes Kontextwort +
+    Buchstabe + IP" und „Lauf unsichtbarer Zeichen + IP" (bisher nur indirekt abgedeckt, Laufzeit linear gemessen).

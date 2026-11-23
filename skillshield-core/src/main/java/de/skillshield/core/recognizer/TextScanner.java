@@ -39,8 +39,20 @@ import java.util.TreeMap;
  * unveraendert. Aufwand: zwei Aufloesungen und je Kandidat eine binaere Suche, also O(n log n) in der Zahl der
  * Kandidaten.
  *
- * <p>Bekannte Grenze: Der Teil einer Nummer, der im Bestandsfund liegt, traegt dessen Typ; ein einzelner
- * Buchstabe oder ein Rest mit weniger als drei Ziffern ausserhalb bleibt stehen.
+ * <p>Bekannte Grenze G-K14 (Test {@code bekannteGrenze...} in {@code KvnrGrenzenTest} und {@code TextScannerKvnrTest}):
+ * Der Teil einer Nummer, der im Bestandsfund liegt, traegt dessen Typ; ein einzelner Buchstabe oder ein Rest mit
+ * weniger als drei Ziffern ausserhalb bleibt stehen. Das gilt auch fuer den hinteren Teil einer gruppierten Nummer, den
+ * der lokale Teil einer E-Mail-Adresse verschluckt: Der Anfang bleibt stehen, wenn er weniger als drei Ziffern hat.
+ * Liegt die Nummer ganz im Bestandsfund (zum Beispiel in einem Dateinamen), schuetzt dieser sie mit seinem Typ.
+ *
+ * <p>Bekannte Grenze G-K16: Der Scan liefert nur Fundstellen, und {@code Pseudonymizer} ersetzt nur gefundene
+ * Stellen. Steht derselbe Wert an einer zweiten, nicht erkannten Stelle, bleibt er dort stehen; ein Abgleich aller
+ * Vorkommen (Leak-Check) ist nicht Teil dieses Features. Die weiteren Grenzen der KVNR (G-K1 bis G-K17, G-D2) stehen
+ * im Javadoc von {@code KvNumberScanner} und {@code KvnrRecognizer}.
+ *
+ * <p>Quellen der KVNR-Funde im Scan: {@code kvnr}, {@code kvnr-pruefziffer-ungueltig}, {@code kvnr-form-abweichend}
+ * (Konfidenzen 0,95 bis 0,40 nach den Regeln im Javadoc von {@code KvnrRecognizer}) und {@code kvnr-rest} (Reststueck
+ * neben einem Bestandsfund, hoechstens 0,80).
  */
 public final class TextScanner {
 

@@ -24,25 +24,49 @@ import java.util.List;
  * Buchstabenform; {@code VKNR}, {@code Versicherungsnummer}, {@code Rentenversicherungsnummer}, {@code KV} allein und
  * {@code Nr.} allein sind keine Kontextwoerter, und {@code KV-Nr.} ist fuer LANR und IK kein Kontextwort.
  *
- * <p>Bekannte Grenzen (je ein Test {@code bekannteGrenze...} folgt in T-8): zwei Buchstaben, Nicht-ASCII-Zeichen und
- * Woerter ausserhalb der Liste ({@code KVID}) erschliessen nichts; Ziffern direkt an einem Wort
- * ({@code KVNR} plus Ziffern ohne Leerzeichen) sind keine Nummer; {@code KVNR AB} plus Ziffern ergibt ohne Trenner
- * keinen Fund und mit Trenner 0.40 ueber die reinen Ziffern, zwei Buchstaben direkt an gruppierten Ziffern ergeben 0.40
- * ueber die Gruppen nach der ersten (G-K4; der erste Block samt Buchstaben bleibt ohne Fund); {@code KV-Nr.} vor
- * einer reinen Ziffernfolge ergibt keinen Fund; unsichtbare Zeichen zwischen
- * Buchstabe und Ziffern oder in der Nummer beenden die Kette (unsichtbare Zeichen vor dem Buchstaben sind dagegen
- * kein Hindernis, sofern zwischen Kontextwort und unsichtbarem Zeichen ein Trenner oder Direktzeichen steht; haengt
- * das unsichtbare Zeichen direkt am Kontextwort, Buchstabe und Ziffern folgen ohne sichtbaren Trenner, gilt die
- * folgende Grenze "Kontextwort direkt am Buchstaben"); ein Kontextwort unmittelbar am Buchstaben ohne Trenner
- * ({@code KVNR} und Buchstabe sind ein Wort) und ein Trenner ausserhalb der Gruppentrenner zwischen Buchstabe und
- * Ziffern (Tab, zwei Leerzeichen, Doppelpunkt, {@code _}, Komma, Halbgeviertstrich, Zeilenumbruch) ergeben
- * hoechstens 0,40 ueber die Ziffern, hinter {@code KV-Nr.} keinen Fund. G-K5: Bei gesperrtem Kontextwort mit genau
- * einem Trenner vor einer reinen Ziffernfolge
- * ({@code K V N R 1234...}) ist der letzte Sperr-Buchstabe kein Nummernbuchstabe; die Folge hat 0,40. Ein
- * Buchstabe, der ein gesperrt geschriebenes Kontextwort zu einem Kontextwort ergaenzt, gilt nur dann als dessen
+ * <p>Bekannte Grenzen (je Grenze ein Test {@code bekannteGrenze...}, Tabelle im Javadoc von {@code KvnrGrenzenTest};
+ * Einzelheiten und alle Kennungen im Javadoc von {@link KvNumberScanner}). "Kein Fund" heisst: kein KVNR-Fund, die
+ * Nummer bleibt im Klartext, sofern kein anderer Erkenner sie deckt.
+ * <ul>
+ * <li>G-K1: Eine KVNR ohne Kontextwort ist kein Fund (diese Klasse sucht nur hinter einem Kontextwort).</li>
+ * <li>G-K3: Zwei Buchstaben, Nicht-ASCII-Zeichen in der Nummer und Woerter ausserhalb der Liste ({@code KVID},
+ * {@code Versicherungsnummer}, {@code Krankenversicherungs-Nr.}) erschliessen nichts.</li>
+ * <li>G-K4: Ziffern direkt an einem Wort ({@code KVNR} plus Ziffern ohne Leerzeichen, {@code AB} plus Ziffern) sind
+ * keine Nummer; zwei Buchstaben direkt an gruppierten Ziffern ergeben 0.40 ueber die Gruppen nach der ersten, der
+ * erste Block samt Buchstaben bleibt stehen.</li>
+ * <li>G-K5: {@code K V N R} mit Ziffern ohne Trenner dahinter und eine Sperrung mit Punkt und Leerzeichen oder mit
+ * mehreren Leerzeichen, auf die ein Leerzeichen und eine reine Ziffernfolge folgen, ergeben keinen Fund (der letzte
+ * Buchstabe gilt als Buchstabe einer Nummer); {@code K V N R} mit genau einem Trenner vor einer reinen Ziffernfolge
+ * ist dagegen ein Fund 0.40.</li>
+ * <li>G-K6: {@code KVNR AB} plus Trenner plus Ziffern ergibt 0.40 ueber die reinen Ziffern.</li>
+ * <li>G-K7: {@code KV-Nr.} vor einer reinen Ziffernfolge ergibt keinen Fund; auch nicht, wenn danach ein
+ * nachgestelltes {@code (KVNR)} folgt.</li>
+ * <li>G-K8: Unsichtbare Zeichen zwischen Buchstabe und Ziffern oder in der Nummer beenden die Kette (hoechstens 0.40
+ * ueber die Ziffern; unsichtbare Zeichen vor dem Buchstaben sind dagegen kein Hindernis, solange zwischen Kontextwort
+ * und unsichtbarem Zeichen ein Trenner steht; ein Variantenwaehler direkt am Buchstaben ergibt gar keinen
+ * Fund).</li>
+ * <li>G-K9: Ein Kontextwort unmittelbar am Buchstaben ohne Trenner (auch mit einem unsichtbaren Zeichen dazwischen)
+ * ergibt keinen Fund; auch eine Erkennung ohne Kontextwort (Teil 1b) schuetzt hier nicht, weil sie vor dem
+ * Buchstaben eine Wortgrenze verlangt.</li>
+ * <li>G-K10: Ein Trenner ausserhalb der Gruppentrenner zwischen Buchstabe und Ziffern (Tab, zwei Leerzeichen,
+ * Doppelpunkt, {@code _}, Komma, Halbgeviertstrich, Zeilenumbruch) ergibt hoechstens 0.40 ueber die Ziffern, hinter
+ * {@code KV-Nr.} keinen Fund. {@code !} und {@code ?} (Satzende) zwischen Buchstabe und Ziffern oder zwischen
+ * Kontextwort samt Leerzeichen und Buchstabe ergeben gar keinen Fund.</li>
+ * <li>G-K11 und G-K12: Ein nachgestelltes Kontextwort in der naechsten Zeile und die Restformen des Kompositums
+ * ergeben keinen Fund.</li>
+ * <li>G-K13: Eine KVNR in genau vier Punkt-Gruppen verliert den Buchstaben im Fund.</li>
+ * <li>G-K15: Ein Pfad oder eine URL zwischen Kontextwort und Nummer (Fuellwortzaehlung ab dem vierten Segment,
+ * Satzende am Dateiendungspunkt) laesst die Nummer ohne Fund, auch in kurzen Faellen; bei URLs zaehlen Schema und
+ * jedes Host-Label als Segment, abgedeckt bleibt nur eine sehr kurze URL (Schema und hoechstens zwei weitere
+ * Segmente, kein Punkt hinter einem langen Wort, keine Query); jede URL mit zwei Pfadsegmenten oder mit Query bleibt
+ * ohne Fund.</li>
+ * <li>G-K16: Derselbe Wert an einer zweiten, nicht erkannten Stelle bleibt stehen (kein Leak-Check).</li>
+ * <li>G-K17: Jedes Kombinationszeichen (Kategorien Mn, Mc, Me) und die Fuellzeichen U+115F, U+1160, U+3164 und
+ * U+FFA0 direkt vor dem Buchstaben oder zwischen Buchstabe und Ziffern verhindern den Fund in Buchstabenform.</li>
+ * </ul>
+ * Ein Buchstabe, der ein gesperrt geschriebenes Kontextwort zu einem Kontextwort ergaenzt, gilt nur dann als dessen
  * Ende, wenn das gesperrte Kontextwort einen einzeichigen Sperr-Trenner hat und hinter dem Buchstaben ein Trenner
- * folgt; nicht bei einer Sperrung mit Punkt und Leerzeichen oder mehreren Leerzeichen (Weit-Folge) und nicht bei
- * {@code K V N R} mit Ziffern ohne Trenner dahinter (dann Buchstabe einer Nummer).
+ * folgt.
  *
  * <p>IPv4-Gestalt (Nachtrag zu T-6): Stehen direkt hinter dem Buchstaben (oder Buchstabe und einem Gruppentrenner)
  * vier durch je einen Punkt getrennte Gruppen von je ein bis drei Ziffern, ist der Buchstabe kein Nummernanfang; es
@@ -62,9 +86,10 @@ import java.util.List;
  * Typen E-Mail, IP, URL oder Pfad im Scan ohne die nachrangigen Erkenner, Einzelheiten im Javadoc des
  * {@code TextScanner}) ueberschneidet, auf die Teile ausserhalb zu; diese Funde bleiben so unveraendert. Ein
  * Reststueck mit mindestens drei Ziffern bleibt als Fund (Quelle {@value #SOURCE_REST}, hoechstens 0,80). Bekannte
- * Grenze: Der Teil einer Nummer im anderen Fund traegt dessen Typ; ein Buchstabe oder ein Rest mit weniger als drei
- * Ziffern ausserhalb bleibt stehen. Auf Erkennerebene (ohne Scanner) liefert der Erkenner die Kandidaten
- * unveraendert.
+ * Grenze G-K14: Der Teil einer Nummer im anderen Fund traegt dessen Typ; ein Buchstabe oder ein Rest mit weniger als
+ * drei Ziffern ausserhalb bleibt stehen. Bekannte Grenze G-D2: Ein LANR- oder IK-Kontextwort vor einer KVNR-Form
+ * schuetzt nur die Ziffern (Fund LANR bzw. IK); mit einem KVNR-Kontextwort davor umfasst der Fund auch den
+ * Buchstaben. Auf Erkennerebene (ohne Scanner) liefert der Erkenner die Kandidaten unveraendert.
  *
  * <p>Der Erkenner ist zustandslos und deterministisch; die Regeln und der Linearitaetsbeleg stehen im Javadoc von
  * {@link KvNumberScanner}. Es entsteht kein Netz- oder Dateizugriff, und Meldungen enthalten keinen Text, keine

@@ -2,6 +2,8 @@ package de.skillshield.core;
 
 import static de.skillshield.core.SynthetischeKvNummern.IK_FORM_DOKU_IP;
 import static de.skillshield.core.SynthetischeKvNummern.IK_GUELTIG;
+import static de.skillshield.core.SynthetischeKvNummern.KVNR_NULL;
+import static de.skillshield.core.SynthetischeKvNummern.KVNR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN;
 import static de.skillshield.core.SynthetischeKvNummern.LANR_GUELTIG;
 import static de.skillshield.core.TestTexte.bs;
 import static de.skillshield.core.recognizer.kv.KvTestHilfen.ZWSP;
@@ -18,6 +20,7 @@ import de.skillshield.core.pseudonymize.PseudonymizationResult;
 import de.skillshield.core.pseudonymize.Pseudonymizer;
 import de.skillshield.core.recognizer.Recognizer;
 import de.skillshield.core.recognizer.TextScanner;
+import de.skillshield.core.recognizer.kv.KvnrSynthetischWaechter;
 import de.skillshield.core.reidentify.ReidentificationResult;
 import de.skillshield.core.reidentify.Reidentifier;
 import java.time.Duration;
@@ -672,5 +675,231 @@ class GrenzlastTest {
         // 6 + 13 * 76 922 = 999 992 < 1 000 000). Funde = r = 76 923.
         pruefeNachtragFall("c nummerierte Liste", "LANR:\n", "1. " + LANR_GUELTIG + "\n", "", 76_923, 76_923,
                 ConfidenceLevel.WAHRSCHEINLICH);
+    }
+
+    // ------------------------------------------------------------------ AK-22: KVNR (kvnr-bsnr-erkennung T-8)
+
+    private static final String BACKSLASH = String.valueOf((char) 0x5C);
+
+    /**
+     * Die KVNR-Lastfaelle aus AK-22 und dem Plan zu T-8 (Hinweis H-6), je mit {@code TextScanner.standard()},
+     * Pseudonymisierung und Rueckuebersetzung. Aufbau: Praefix, Baustein, Schluss, Bausteinlaenge, Wiederholungen r
+     * (Formel {@code (1 000 000 - |Praefix| - |Schluss| + |Baustein| - 1) / |Baustein|}, ganzzahlig), erwartete
+     * KVNR-Funde je Stufe (sicher, wahrscheinlich, fraglich), erwartete Funde anderer Typen und der Text, der im
+     * pseudonymisierten Text nicht stehen darf ({@code null}: keiner). Die Zahlen folgen aus den Regeln (Plan Kap.
+     * 4.2), nicht aus einem Probelauf. Die Nullnummer {@code KVNR_NULL} ist gueltig (zehn Zeichen); die Aufzaehlung
+     * hinter einem einzigen Kontextwort (Fall 06) ist die einzige Moeglichkeit, ueber 70 000 Funde zu erreichen, weil
+     * mit wiederholtem Kontextwort nur 62 500 Funde je Million Zeichen entstehen (Fall 07, Hinweis H-6).
+     */
+    static Stream<Arguments> kvnrLastFaelle() {
+        String nullnummer = KVNR_NULL;
+        String unguelt = KVNR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN;
+        String ip = IK_FORM_DOKU_IP;
+        String uz = String.valueOf(ZWSP);
+        return Stream.of(
+            // 01 "S" + 999 999 Nullen: ein Block mit ueber 12 Ziffern, kein Segment: 0 Funde
+            Arguments.of("01 Buchstabe und nur Ziffern", "S", "0", "", 1, 999_999, 0, 0, 0, 0, null),
+            // 02 "KVNR S" (6) + 999 994 Nullen: ueber 12 Ziffern, kein Segment: 0 Funde
+            Arguments.of("02 KVNR Buchstabe und nur Ziffern", "KVNR S", "0", "", 1, 999_994, 0, 0, 0, 0, null),
+            // 03 "A1" = 2 Zeichen, r = (1 000 000 + 1) / 2 = 500 000; ohne Kontextwort: 0 Funde
+            Arguments.of("03 A1 wiederholt", "", "A1", "", 2, 500_000, 0, 0, 0, 0, null),
+            // 04 "KVNR " (5), "Z0 " = 3 Zeichen, r = (1 000 000 - 5 + 2) / 3 = 333 332; ein Buchstabe und eine Ziffer
+            // sind ein Fuellwort, ab dem vierten ist der Kontext erloschen: 0 Funde
+            Arguments.of("04 KVNR und Z0 wiederholt", "KVNR ", "Z0 ", "", 3, 333_332, 0, 0, 0, 0, null),
+            // 05 "KVNR " (5), "Z" = 1 Zeichen, r = (1 000 000 - 5 + 1 - 1) / 1 = 999 995; ein Lauf aus Buchstaben: 0
+            Arguments.of("05 KVNR und Z wiederholt", "KVNR ", "Z", "", 1, 999_995, 0, 0, 0, 0, null),
+            // 06 Aufzaehlung: "KVNR " (5), Nullnummer und Leerzeichen = 11 Zeichen, r = (1 000 000 - 5 + 10) / 11 =
+            // 90 909 (> 70 000): die erste Nummer steht direkt hinter dem Kontextwort (0,95 sicher), alle weiteren in
+            // der Aufzaehlung (0,80 wahrscheinlich): 1 und 90 908
+            Arguments.of("06 Aufzaehlung hinter einem Kontextwort", "KVNR ", nullnummer + " ", "", 11, 90_909, 1,
+                90_908, 0, 0, nullnummer),
+            // 07 Kontextwort und Nullnummer wiederholt: "KVNR " + Nullnummer + " " = 16 Zeichen, r = (1 000 000 + 15) /
+            // 16 = 62 500: je Wiederholung direkt hinter dem Kontextwort, 0,95 sicher: 62 500
+            Arguments.of("07 Kontextwort und Nullnummer wiederholt", "", "KVNR " + nullnummer + " ", "", 16, 62_500,
+                62_500, 0, 0, 0, nullnummer),
+            // 08 "K V N R " = 8 Zeichen, r = (1 000 000 + 7) / 8 = 125 000; eine einzige Sperrfolge ohne Nummer: 0
+            Arguments.of("08 K V N R wiederholt", "", "K V N R ", "", 8, 125_000, 0, 0, 0, 0, null),
+            // 09 "K V N R " + Nullnummer + " " = 19 Zeichen, r = (1 000 000 + 18) / 19 = 52 632; gesperrtes Kontextwort
+            // hat den Deckel 0,80: je Wiederholung 1 wahrscheinlich
+            Arguments.of("09 K V N R und Nullnummer wiederholt", "", "K V N R " + nullnummer + " ", "", 19, 52_632,
+                0, 52_632, 0, 0, nullnummer),
+            // 10 Weit-Schreibweise "K. V. N. R. " (12) + Nullnummer + " " = 23 Zeichen, r = (1 000 000 + 22) / 23 =
+            // 43 479; Deckel 0,80: je Wiederholung 1 wahrscheinlich
+            Arguments.of("10 K. V. N. R. und Nullnummer wiederholt", "", "K. V. N. R. " + nullnummer + " ", "", 23,
+                43_479, 0, 43_479, 0, 0, nullnummer),
+            // 11 "KVNR" (4) + 999 996 Leerzeichen: Kontextwort ohne Nummer: 0 Funde
+            Arguments.of("11 KVNR und nur Leerzeichen", "KVNR", " ", "", 1, 999_996, 0, 0, 0, 0, null),
+            // 12 "KV-Nr. " (7) + Nullnummer + " " = 18 Zeichen, r = (1 000 000 + 17) / 18 = 55 556: 0,95 sicher
+            Arguments.of("12 KV-Nr. und Nullnummer wiederholt", "", "KV-Nr. " + nullnummer + " ", "", 18, 55_556,
+                55_556, 0, 0, 0, nullnummer),
+            // 13 KV-Nr. und reine Ziffernfolge (neun Ziffern, "KV-Nr." gilt nur fuer die Buchstabenform, G-K7):
+            // "KV-Nr. " + LANR + " " = 17 Zeichen, r = (1 000 000 + 16) / 17 = 58 824: 0 Funde
+            Arguments.of("13 KV-Nr. und reine Ziffernfolge wiederholt", "", "KV-Nr. " + LANR_GUELTIG + " ", "", 17,
+                58_824, 0, 0, 0, 0, null),
+            // 14 Versichertennummer und reine Ziffernfolge: "Versichertennummer " (19) + 9 + 1 = 29 Zeichen,
+            // r = (1 000 000 + 28) / 29 = 34 483; je Wiederholung eine abweichende Form 0,40 fraglich
+            Arguments.of("14 Versichertennummer und reine Ziffernfolge wiederholt", "",
+                "Versichertennummer " + LANR_GUELTIG + " ", "", 29, 34_483, 0, 0, 34_483, 0, null),
+            // 15 unsichtbares Zeichen vor dem Buchstaben, Aufzaehlung: "KVNR " (5), ZWSP + Nullnummer + " " = 12
+            // Zeichen, r = (1 000 000 - 5 + 11) / 12 = 83 333: 1 sicher und 83 332 wahrscheinlich
+            Arguments.of("15 unsichtbares Zeichen vor dem Buchstaben in der Aufzaehlung", "KVNR ",
+                uz + nullnummer + " ", "", 12, 83_333, 1, 83_332, 0, 0, nullnummer),
+            // 16 "KVNR " (5), ein Lauf aus 999 985 unsichtbaren Zeichen, Nullnummer (10) am Ende: genau 1 Fund 0,95
+            Arguments.of("16 Lauf unsichtbarer Zeichen vor dem Buchstaben", "KVNR ", uz, nullnummer, 1, 999_985, 1,
+                0, 0, 0, nullnummer),
+            // 17 ZWSP + "Z" = 2 Zeichen, r = 500 000; ein einziger Lauf ohne Ziffern: 0 Funde
+            Arguments.of("17 unsichtbares Zeichen und Buchstabe wiederholt", "", uz + "Z", "", 2, 500_000, 0, 0, 0,
+                0, null),
+            // 18 offene ungueltige Nummer (10 Zeichen) und Leerzeichen (11), dann "Wort-" = 5 Zeichen,
+            // r = (1 000 000 - 11 + 4) / 5 = 199 998; ohne Kontextwort: 0 Funde
+            Arguments.of("18 Kompositum ohne Kontextwort", unguelt + " ", "Wort-", "", 5, 199_998, 0, 0, 0, 0, null),
+            // 19 offene Nummer (11), "a-" = 2 Zeichen, r = (1 000 000 - 11 + 1) / 2 = 499 995; 0 Funde
+            Arguments.of("19 Einzelbuchstabe und Strich wiederholt", unguelt + " ", "a-", "", 2, 499_995, 0, 0, 0, 0,
+                null),
+            // 20 nachgestelltes Kompositum: Nullnummer + " (Pat.-KVNR)" (12) + zwei Zeilenumbrueche = 24 Zeichen,
+            // r = (1 000 000 + 23) / 24 = 41 667; je Wiederholung nachgestellt 0,80 wahrscheinlich
+            Arguments.of("20 Nummer mit nachgestelltem Kompositum wiederholt", "",
+                nullnummer + " (Pat.-KVNR)\n\n", "", 24, 41_667, 0, 41_667, 0, 0, nullnummer),
+            // 21 Kontextwort am Zeilenende vor der Nummer in der naechsten Zeile: "KVNR" + LF (5), Nullnummer + LF +
+            // "KVNR" + LF = 16 Zeichen, r = (1 000 000 - 5 + 15) / 16 = 62 500; jede Nummer steht hinter "KVNR" und
+            // einem Umbruch (0,80); das Kontextwort hinter der Nummer in der naechsten Zeile (G-K11) fuegt nichts hinzu
+            Arguments.of("21 Kontextwort am Zeilenende vor der Nummer", "KVNR\n", nullnummer + "\nKVNR\n", "", 16,
+                62_500, 0, 62_500, 0, 0, null),
+            // 22 IPv4-Gestalt: "KVNR " (5), "Z" + IP + " " = 14 Zeichen, r = (1 000 000 - 5 + 13) / 14 = 71 429; der
+            // Buchstabe gehoert nicht zur Kette, je Wiederholung gewinnt der IP-Fund (0,85): 71 429 Funde Typ IP
+            Arguments.of("22 Buchstabe und IPv4-Gestalt wiederholt", "KVNR ", "Z" + ip + " ", "", 14, 71_429, 0, 0,
+                0, 71_429, ip),
+            // 23 Zuschneiden, abwechselnd IP und Nummer: "KVNR " (5), IP + " " + Nullnummer + " " = 24 Zeichen,
+            // r = (1 000 000 - 5 + 23) / 24 = 41 667; je Wiederholung ein IP-Fund und ein KVNR-Fund (0,80)
+            Arguments.of("23 abwechselnd IP und Nummer", "KVNR ", ip + " " + nullnummer + " ", "", 24, 41_667, 0,
+                41_667, 0, 41_667, nullnummer),
+            // 24 abwechselnd Unix-Pfad mit drei Segmenten und Nummer: "/a/b/c " (7) + Nullnummer + " " = 18 Zeichen,
+            // r = (1 000 000 - 5 + 17) / 18 = 55 556; je Wiederholung ein Pfad-Fund und ein KVNR-Fund (0,80)
+            Arguments.of("24 abwechselnd Unix-Pfad und Nummer", "KVNR ", "/a/b/c " + nullnummer + " ", "", 18,
+                55_556, 0, 55_556, 0, 55_556, nullnummer),
+            // 25 abwechselnd Laufwerkspfad und Nummer: "C:\x " (5) + Nullnummer + " " = 16 Zeichen,
+            // r = (1 000 000 - 5 + 15) / 16 = 62 500; je Wiederholung ein Pfad-Fund und ein KVNR-Fund (0,80)
+            Arguments.of("25 abwechselnd Laufwerkspfad und Nummer", "KVNR ", "C:" + BACKSLASH + "x " + nullnummer
+                + " ", "", 16, 62_500, 0, 62_500, 0, 62_500, nullnummer),
+            // 26 Restfunde: "KVNR " + Buchstabe und drei Ziffern + Leerzeichen + sechs Ziffern in der Adresse
+            // "...@example.invalid " = 34 Zeichen, r = (1 000 000 + 33) / 34 = 29 412; je Wiederholung ein
+            // E-Mail-Fund und ein Restfund (Quelle kvnr-rest, Pruefziffer falsch: 0,50 fraglich)
+            Arguments.of("26 Restfund neben E-Mail wiederholt", "", "KVNR " + unguelt.substring(0, 4) + " "
+                + unguelt.substring(4, 7) + "." + unguelt.substring(7) + "@example.invalid ", "", 34, 29_412, 0, 0,
+                29_412, 29_412, unguelt.substring(0, 4)),
+            // 27 nachgestelltes Kontextwort: Nullnummer + " (KVNR) " = 18 Zeichen, r = (1 000 000 + 17) / 18 =
+            // 55 556; die erste Nummer steht vor dem Kontextwort (nachgestellt 0,80), jede weitere direkt dahinter
+            // (0,95): 1 wahrscheinlich und 55 555 sicher
+            Arguments.of("27 Nummer mit nachgestelltem Kontextwort wiederholt", "", nullnummer + " (KVNR) ", "", 18,
+                55_556, 55_555, 1, 0, 0, nullnummer),
+            // 28 bis 33 abgebrochene Beinahe-Kontextwoerter vor der Nummer mit falscher Pruefziffer (Regel 12: ohne
+            // Kontextwort entsteht kein Fund, auch nicht in einer spaeteren Erkennung ohne Kontextwort): 0 Funde;
+            // Bausteinlaenge je Wort + Nummer (10) + Leerzeichen, r = (1 000 000 + Bausteinlaenge - 1) / Bausteinlaenge
+            Arguments.of("28 K. V. N. und Nummer", "", "K. V. N. " + unguelt + " ", "", 20, 50_000, 0, 0, 0, 0, null),
+            Arguments.of("29 KVN und Nummer", "", "KVN " + unguelt + " ", "", 15, 66_667, 0, 0, 0, 0, null),
+            Arguments.of("30 KVNRX und Nummer", "", "KVNRX " + unguelt + " ", "", 17, 58_824, 0, 0, 0, 0, null),
+            Arguments.of("31 KV allein und Nummer", "", "KV " + unguelt + " ", "", 14, 71_429, 0, 0, 0, 0, null),
+            Arguments.of("32 Versichertennumme und Nummer", "", "Versichertennumme " + unguelt + " ", "", 29, 34_483,
+                0, 0, 0, 0, null),
+            Arguments.of("33 KV-N und Nummer", "", "KV-N " + unguelt + " ", "", 16, 62_500, 0, 0, 0, 0, null),
+            // 34 Kontextwort, Buchstabe und IP mit Praefixlaenge (CIDR): "KVNR Z" + IP + "/24 " = 6 + 12 + 3 + 1 = 22
+            // Zeichen, r = (1 000 000 + 21) / 22 = 45 455; je Wiederholung gewinnt der IP-Fund (die Praefixlaenge
+            // gehoert nicht dazu): 45 455 Funde Typ IP, kein KVNR-Fund
+            Arguments.of("34 Buchstabe und IP mit Praefixlaenge wiederholt", "", "KVNR Z" + ip + "/24 ", "", 22,
+                45_455, 0, 0, 0, 45_455, null),
+            // 35 "KVNR Z" (6) + "0." = 2 Zeichen, r = (1 000 000 - 6 + 2 - 1) / 2 = 499 997; ein einziger Lauf aus
+            // Punkt-Ziffern-Paaren: genau ein IP-Fund (0,85) ueber die ganze Kette, kein KVNR-Fund
+            Arguments.of("35 Punkt-Ziffern-Kette hinter KVNR und Buchstabe", "KVNR Z", "0.", "", 2, 499_997, 0, 0, 0,
+                1, null),
+            // 36 ein URL-Fund umschliesst alle Kandidaten: "http://x/" (9), "KVNR/" + Nullnummer + "/" = 16 Zeichen,
+            // Schluss "y" (1), r = (1 000 000 - 9 - 1 + 15) / 16 = 62 500; genau ein URL-Fund, alle KVNR-Kandidaten
+            // darin entfallen (Bestand hat Vorrang), die Nullnummer steht nicht im Ausgabetext
+            Arguments.of("36 ein URL-Fund umschliesst viele Kandidaten", "http://x/", "KVNR/" + nullnummer + "/", "y",
+                16, 62_500, 0, 0, 0, 1, nullnummer),
+            // 37 wie 36 mit einem Pfad: "/a/" (3), 16 Zeichen, Schluss "y" (1), r = (1 000 000 - 3 - 1 + 15) / 16 =
+            // 62 500; genau ein Pfad-Fund, alle KVNR-Kandidaten darin entfallen
+            Arguments.of("37 ein Pfad-Fund umschliesst viele Kandidaten", "/a/", "KVNR/" + nullnummer + "/", "y", 16,
+                62_500, 0, 0, 0, 1, nullnummer));
+    }
+
+    /**
+     * Kompositum mit zwei sehr langen Woertern am Strich hinter einer offenen Nummer, ueber {@code TextScanner.
+     * standard()}: Die offene (ungueltige) Nummer, ein Leerzeichen, 500 000 Buchstaben, ein Strich und 500 000
+     * Buchstaben (Laenge 10 + 1 + 500 000 + 1 + 500 000 = 1 000 012, ein einziger Lauf, kein Kontextwort): 0 Funde, der
+     * Text bleibt unveraendert, Roundtrip gleich. Der Erkenner allein ist in {@code KvnrKontextTest} geprueft.
+     */
+    @Test
+    void ak22_kvnr_kompositumMitZweiSehrLangenWoertern_dreiSchritteJeUnterZweiSekunden_keinFund() {
+        String unguelt = KVNR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN;
+        drei(unguelt + " " + "a".repeat(5_000) + "-" + "b".repeat(5_000), GRENZE_GROSSER_TEXT);
+        String text = unguelt + " " + "a".repeat(500_000) + "-" + "b".repeat(500_000);
+        assertEquals(1_000_012, text.length(), "Textlaenge");
+        KvnrSynthetischWaechter.assertKvnrSynthetisch(text);
+        Durchlauf d = drei(text, GRENZE_PATHOLOGISCH);
+        assertEquals(0, d.funde().size(), "Fundzahl");
+        assertTrue(text.equals(d.pseudo().text()), "Text ohne Fund veraendert");
+        pruefeRoundtrip(text, d);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("kvnrLastFaelle")
+    void ak22_kvnr_eineMillionZeichen_dreiSchritteJeUnterZweiSekundenMitExakterFundzahl(String name, String praefix,
+            String baustein, String schluss, int bausteinLaenge, int r, int sicher, int wahrscheinlich, int fraglich,
+            int andere, String verboten) {
+        assertEquals(bausteinLaenge, baustein.length(), "Bausteinlaenge " + name);
+        assertEquals(r, kvWiederholungen(praefix, baustein, schluss, MIN_ZEICHEN), "Wiederholungen " + name);
+        // Aufwaermlauf (nicht gemessen) mit 10 000 Zeichen derselben Bauart
+        String warm = kvText(praefix, baustein, schluss, 10_000);
+        KvnrSynthetischWaechter.assertKvnrSynthetisch(warm);
+        assertEquals(0, neunerfenster(warm, "00")[1], "Waechter Aufwaermtext " + name);
+        drei(warm, GRENZE_GROSSER_TEXT);
+
+        String text = kvText(praefix, baustein, schluss, MIN_ZEICHEN);
+        assertTrue(text.length() >= MIN_ZEICHEN, "Textlaenge " + text.length());
+        // Testdatenregeln: keine gueltige KVNR-Form ohne 0000, kein gueltiges Neunerfenster ohne Praefix 00
+        KvnrSynthetischWaechter.assertKvnrSynthetisch(text);
+        assertEquals(0, neunerfenster(text, "00")[1], "Waechter " + name);
+
+        Durchlauf d = drei(text, GRENZE_PATHOLOGISCH);
+        List<Finding> funde = d.funde();
+        List<Finding> kvnr = funde.stream().filter(f -> FindingType.KVNR.equals(f.type())).toList();
+        assertEquals(sicher + wahrscheinlich + fraglich + andere, funde.size(), "Fundzahl " + name);
+        assertEquals(sicher + wahrscheinlich + fraglich, kvnr.size(), "KVNR-Funde " + name);
+        assertEquals(sicher, kvnr.stream().filter(f -> f.level() == ConfidenceLevel.SICHER).count(),
+                "Stufe sicher " + name);
+        assertEquals(wahrscheinlich,
+                kvnr.stream().filter(f -> f.level() == ConfidenceLevel.WAHRSCHEINLICH).count(),
+                "Stufe wahrscheinlich " + name);
+        assertEquals(fraglich, kvnr.stream().filter(f -> f.level() == ConfidenceLevel.FRAGLICH).count(),
+                "Stufe fraglich " + name);
+        pruefeRoundtrip(text, d);
+        if (verboten != null) {
+            assertFalse(d.pseudo().text().contains(verboten), "Klartext im Ausgabetext " + name);
+        } else if (funde.isEmpty()) {
+            assertTrue(text.equals(d.pseudo().text()), "Text ohne Fund veraendert " + name);
+        }
+    }
+
+    /**
+     * Fall 26 im Einzelnen: Die Restfunde haben die Quelle {@code kvnr-rest}, die E-Mails den Typ EMAIL; die Zahl der
+     * Restfunde ist die Zahl der Wiederholungen (jede Wiederholung hat ihr eigenes Kontextwort).
+     */
+    @Test
+    void ak22_kvnr_restfundeNebenEmails_quelleKvnrRestUndTypEmail() {
+        String unguelt = KVNR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN;
+        String baustein = "KVNR " + unguelt.substring(0, 4) + " " + unguelt.substring(4, 7) + "."
+                + unguelt.substring(7) + "@example.invalid ";
+        String text = baustein.repeat(1_000);
+        List<Finding> funde = TextScanner.standard().scan(text);
+        assertEquals(2_000, funde.size(), "Fundzahl");
+        for (int i = 0; i < funde.size(); i++) {
+            Finding f = funde.get(i);
+            if (i % 2 == 0) {
+                assertEquals(FindingType.KVNR, f.type(), "Typ des Restfundes");
+                assertTrue("kvnr-rest".equals(f.source()), "Quelle des Restfundes");
+            } else {
+                assertEquals(FindingType.EMAIL, f.type(), "Typ der E-Mail");
+            }
+        }
     }
 }

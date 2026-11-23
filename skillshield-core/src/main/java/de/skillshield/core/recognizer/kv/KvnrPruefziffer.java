@@ -22,6 +22,12 @@ package de.skillshield.core.recognizer.kv;
  * ungleich neun, Wert außerhalb 0 bis 9) führen zu einer {@link IllegalArgumentException} mit fester Meldung, die
  * keine Werte der Eingabe enthält. Weder Meldung noch Rückgabe enthalten die berechnete Prüfziffer. Kein Regex, keine
  * Zustände.
+ *
+ * <p>Grenzen: Das Verfahren ist nur durch eine Sekundaerquelle belegt (siehe Quellenvermerk). Ein Irrtum darin aendert
+ * nur Stufe und Quelle der Funde (0,95 bzw. 0,80 gegen 0,50), nie, ob mit Kontextwort ein Fund entsteht. Nicht
+ * Gegenstand ist die zwanzigstellige Nummer mit dem Institutionskennzeichen der Kasse und einer zweiten Pruefziffer.
+ * Die Pruefziffer erkennt zufaellig passende Fremdnummern nicht (etwa jede zehnte Nummer ist gueltig); sie ist kein
+ * Echtheitsnachweis.
  */
 final class KvnrPruefziffer {
 
