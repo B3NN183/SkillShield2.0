@@ -753,6 +753,39 @@ class KlartextFreiheitTest {
         assertAusgabeKlartextfrei("KV-Umbruch-Test", ausgabe);
     }
 
+    /**
+     * kv-trenner-und-umbruch Teil 2 (AK-28): Funde aus gesperrt geschriebenen Kontextwoertern mit erweiterten
+     * Trennern (Punkt, mehrere Leerzeichen, Tab, nachgestellt in Klammern und mit Komma). Die Suchfunktion findet den
+     * Marker im Eingabetext; im Fund, in der Fundliste, in {@code source}, im pseudonymisierten Text, im Mapping und im
+     * Ergebnis der Rueckuebersetzung (jeweils {@code toString()}) und auf Standard- und
+     * Fehlerausgabe steht kein Marker.
+     */
+    @Test
+    void ak28_kvTrenner_fundeAusErweitertenTrennernSindKlartextfrei() {
+        String[] texte = {"L. A. N. R. " + LANR_MARKER, "I  K  N  R " + IK_MARKER, IK_MARKER + " (I. K. N. R.)",
+            "L\tA\tN\tR\t" + LANR_MARKER, LANR_MARKER + ", L  A  N  R", "I. K. N. R.\n" + IK_MARKER};
+        Ausgabe ausgabe = erfasse(() -> {
+            for (int i = 0; i < texte.length; i++) {
+                String text = texte[i];
+                List<Finding> funde = TextScanner.standard().scan(text);
+                assertEquals(1, funde.size(), "genau ein Fund in Text " + i);
+                Finding f = funde.get(0);
+                assertTrue(findeMarker(text).isPresent(), "Suchfunktion findet den Marker im Eingabetext " + i);
+                assertToStringKlartextfrei("KV-Finding.toString Trenner-Text " + i, f);
+                assertToStringKlartextfrei("Liste der Funde Trenner-Text " + i, funde);
+                assertToStringKlartextfrei("Finding.source Trenner-Text " + i, f.source());
+                PseudonymizationResult pseudo = PSEUDONYMIZER.pseudonymize(text, funde);
+                assertTrue(findeMarker(pseudo.text()).isEmpty(), "Marker im pseudonymisierten Text " + i);
+                assertToStringKlartextfrei("PseudonymizationResult Trenner-Text " + i, pseudo);
+                assertToStringKlartextfrei("PlaceholderMapping Trenner-Text " + i, pseudo.mapping());
+                ReidentificationResult zurueck = REIDENTIFIER.restore(pseudo.text(), pseudo.mapping());
+                assertTrue(text.equals(zurueck.text()), "Roundtrip Trenner-Text " + i);
+                assertToStringKlartextfrei("ReidentificationResult Trenner-Text " + i, zurueck);
+            }
+        });
+        assertAusgabeKlartextfrei("KV-Trenner-Test", ausgabe);
+    }
+
     @Test
     void selbsttest_kvMarkerUndIhreErstenSechsZiffernWerdenGefunden() {
         assertTrue(findeMarker("x " + LANR_MARKER + " y").isPresent(), "LANR voll");

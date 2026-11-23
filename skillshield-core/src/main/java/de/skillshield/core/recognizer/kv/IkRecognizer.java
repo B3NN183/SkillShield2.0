@@ -22,7 +22,15 @@ import java.util.List;
  * {@value #SOURCE_LAENGE_ABWEICHEND}). Bei bereits laufendem Kontext ist {@code I K} kein Fuellwort, und ein
  * Nachsatzwort dahinter ist es ebenfalls nicht ({@code IK: Praxis I K Nr N}: 0.80, Grenze 14h geschlossen). Das
  * Zwei-Buchstaben-Wort mit erweiterten Trennern ({@code I. K.}, {@code I  K}, {@code I<Tab>K}) ist kein Kontextwort
- * (Rest 14cR). Der Fund umfasst nur die Ziffern samt inneren Trennern.
+ * (Rest 14cR). Ein Zeilenumbruch aus {@code CR}, unsichtbaren Zeichen und {@code LF} zaehlt als einer. Der Fund
+ * umfasst nur die Ziffern samt inneren Trennern.
+ *
+ * <p>Bekannte Grenzen (je ein Test {@code bekannteGrenze...}): 15R (CR mit Leerraum, Buchstabe oder nicht
+ * unsichtbarem Zeichen vor LF sind zwei Umbrueche), 14cR (das Zwei-Buchstaben-Wort mit erweiterten Trennern, erweiterte
+ * Trenner ausserhalb von zwei bis drei Leerraumzeichen, Punkt mit Tab), 14d und 14e mit erweiterten
+ * Trennern (ein davor- oder dahinterstehender Einzelbuchstabe verlaengert die Folge, auch bei der nachgestellten Form
+ * {@code N I. K. N. R. B.}), Folge 14cF (Initialen, die ein Kontextwort ergeben, erschliessen eine Zahl), 14g und die
+ * Restformen nach 14h.
  *
  * <p>Der Erkenner ist zustandslos und deterministisch; die Regeln und der Linearitaetsbeleg stehen im Javadoc von
  * {@link KvNumberScanner}. Es entsteht kein Netz- oder Dateizugriff, und Meldungen enthalten keinen Text.

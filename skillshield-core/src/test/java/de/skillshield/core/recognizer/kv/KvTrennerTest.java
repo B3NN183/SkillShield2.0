@@ -298,6 +298,62 @@ class KvTrennerTest {
         }
     }
 
+    /**
+     * Restgrenze 14d, 14e mit erweiterten Trennern (Plan Kap. 11): Eine Folge, die durch einen davor- oder
+     * dahinterstehenden Einzelbuchstaben ueber eine Luecke nach D-2 verlaengert wird, ist kein Kontextwort.
+     */
+    @Test
+    void bekannteGrenze14dUnd14eErweitert_maximaleFolgeUndEinzelbuchstabeDavorOderDahinter_keinFund() {
+        for (Art a : ARTEN) {
+            String w = wort(a);
+            String f = folge(w, ". ") + ". ";
+            kein(a, f + f);
+            kein(a, "Herr A. " + f);
+            kein(a, f + "X ");
+            kein(a, f + "x. ");
+            kein(a, "A  " + folge(w, "  ") + " ");
+            kein(a, folge(w, "\t") + "\tX\t");
+        }
+    }
+
+    /**
+     * Restgrenze 14e mit erweiterten Trennern, nachgestellte Form (Plan Kap. 11, Nachtrag security T-9): Folgt auf das
+     * nachgestellte Weit-Kontextwort ein Einzelbuchstabe oder eine Initiale ueber eine Luecke nach D-2, ist die Folge
+     * um einen Buchstaben laenger und kein Kontextwort; die Nummer davor bleibt ohne Fund. Gegenprobe: dieselbe
+     * Form ohne den folgenden Einzelbuchstaben, oder mit Komma, Klammer, Strich oder Umbruch dazwischen (der
+     * Buchstabe schliesst dann nicht ueber eine Luecke an), liefert den Fund 0,80 ueber die Nummer.
+     */
+    @Test
+    void bekannteGrenze14eErweitert_nachgestellteFormMitFolgendemEinzelbuchstaben_keinFundUeberDasKontextwort() {
+        for (Art a : ARTEN) {
+            String w = wort(a);
+            String g = a.gueltig;
+            String[] ohneFund = {
+                g + " " + folge(w, ". ") + ". B. Beispiel",
+                g + " " + folge(w, ". ") + ". B",
+                g + " " + folge(w, ". ") + ". b ",
+                g + " " + folge(w, "  ") + " b",
+                g + " " + folge(w, "  ") + "  b",
+                g + " " + folge(w, "\t") + "\tb"};
+            for (String text : ohneFund) {
+                assertKein(a, text);
+            }
+            String[] mitFund = {
+                g + " " + folge(w, ". ") + ".",
+                g + " " + folge(w, ". ") + ". Beispiel",
+                g + " " + folge(w, ". ") + ". BB",
+                g + " " + folge(w, ". ") + "., B. Beispiel",
+                g + " " + folge(w, ". ") + ".\nB. Beispiel",
+                g + " " + folge(w, ". ") + ". - B.",
+                g + " " + folge(w, ". ") + ". (B.) Beispiel",
+                g + " (" + folge(w, ". ") + ".) B. Beispiel",
+                g + " (" + folge(w, "  ") + ") a"};
+            for (String text : mitFund) {
+                assertEin(a, "", g, text.substring(g.length()), SPERR, a.quelle);
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ AK-20: unsichtbare Zeichen
 
     private static boolean leerraum4(char c) {

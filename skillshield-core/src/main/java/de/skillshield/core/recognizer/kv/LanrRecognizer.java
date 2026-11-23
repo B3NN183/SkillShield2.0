@@ -14,7 +14,14 @@ import java.util.List;
  * Trennern ab vier Buchstaben ({@code L. A. N. R.}, {@code L  A  N  R}, {@code L<Tab>A<Tab>N<Tab>R}; Deckel 0.80 in
  * jedem Zustand, nachgestellt mit Komma 0.60), ungueltig 0.50 (Quelle
  * {@value #SOURCE_PRUEFZIFFER_UNGUELTIG}), Laenge 6 bis 12 ausser neun 0.40 (Quelle
- * {@value #SOURCE_LAENGE_ABWEICHEND}). Der Fund umfasst nur die Ziffern samt inneren Trennern.
+ * {@value #SOURCE_LAENGE_ABWEICHEND}). Ein Zeilenumbruch aus {@code CR}, unsichtbaren Zeichen und {@code LF} zaehlt als
+ * einer. Der Fund umfasst nur die Ziffern samt inneren Trennern.
+ *
+ * <p>Bekannte Grenzen (je ein Test {@code bekannteGrenze...}): 15R (CR mit Leerraum, Buchstabe oder nicht
+ * unsichtbarem Zeichen vor LF sind zwei Umbrueche), 14cR (erweiterte Trenner ausserhalb von zwei bis drei
+ * Leerraumzeichen, Punkt mit Tab), 14d und 14e mit erweiterten Trennern (ein davor- oder
+ * dahinterstehender Einzelbuchstabe verlaengert die Folge, auch bei der nachgestellten Form {@code N L. A. N. R. B.}),
+ * Folge 14cF (Initialen, die ein Kontextwort ergeben, erschliessen eine Zahl).
  *
  * <p>Der Erkenner ist zustandslos und deterministisch; die Regeln und der Linearitaetsbeleg stehen im Javadoc von
  * {@link KvNumberScanner}. Es entsteht kein Netz- oder Dateizugriff, und Meldungen enthalten keinen Text.

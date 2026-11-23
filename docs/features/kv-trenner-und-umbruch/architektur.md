@@ -931,6 +931,14 @@ entfallen; AK-22 bis AK-30 gelten für Teil 1 und sind mit T-1 bis T-4 erfüllt;
   U+2002, U+3000) als Lücke → kein Fund (T-6).
 - **14d, 14e mit erweiterten Trennern:** maximale Folge (`L. A. N. R. L. A. N. R. N`, `Herr A. L. A. N. R. N`,
   `L. A. N. R. X N`) → kein Fund (AK-14, T-6).
+  **Nachtrag (security, T-9):** Dasselbe gilt für die nachgestellte Form mit folgendem Einzelbuchstaben oder
+  folgender Initiale (`N L. A. N. R. B. Beispiel`, `N L  A  N  R b`, soweit der Buchstabe über eine Lücke nach D-2
+  an die Folge anschließt) → kein Fund über das nachgestellte Kontextwort. Schließt der Buchstabe nicht an (Klammer,
+  Komma, Zeilenumbruch oder ` - ` dazwischen, z. B. `N (L  A  N  R) a`), bleibt es beim Fund 0,80 (in T-10 am
+  Produkt festgestellt und im Test festgehalten). Im Fuzz Teil 1e sind das 132 von 3256
+  Blöcken; kein Rückschritt gegenüber dem Stand vor Teil 2 (dort 0 dieser Blöcke gefunden). Bewusst nicht
+  geschlossen: Eine Regel „Teilfolge genügt" würde Initialenketten zu Kontextwörtern machen und widerspräche der
+  Nutzervorgabe gegen Fehlalarme (D-8). T-10 hält die Form als Test `bekannteGrenze14eErweitert…` fest.
 - **Folge 14cF (dokumentiert, kein Fehler):** Initialen oder Einzelbuchstaben, die zusammengelesen exakt ein
   Kontextwort ab vier Buchstaben ergeben (`Prof. L. A. N. R. Beispiel, Rechnung <Zahl>`), erschließen eine folgende
   Zahl (6 bis 12 Ziffern, auch Telefon- oder Rechnungsnummern) als Fund 0,80/0,50/0,40 (T-6).

@@ -285,6 +285,44 @@ class TextScannerKvTest {
         assertRoundtrip(text, mit);
     }
 
+    /**
+     * kv-trenner-und-umbruch AK-29 (Teil 2): {@code L. A. N. R.} und gueltige LANR liefert einen Fund (0,80); ohne
+     * Uebergabe bleibt der Text unveraendert, mit dem Fund wird nur die Nummer ersetzt, Kontextwort und Trenner
+     * bleiben zeichengleich (auch IK, Tab-Form und nachgestellte Form), die Rueckuebersetzung stellt den Text her.
+     */
+    @Test
+    void kvTrennerUndUmbruch_ak29_erweiterteTrenner_fundOhneUebergabeUnveraendertMitFundNurNummerErsetzt() {
+        String[] vor = {"L. A. N. R. ", "I  K  N  R ", "L\tA\tN\tR\t"};
+        String[] nummer = {LANR_GUELTIG, IK_GUELTIG, LANR_GUELTIG};
+        String[] platzhalter = {"[[LANR_1]]", "[[IK_1]]", "[[LANR_1]]"};
+        for (int i = 0; i < vor.length; i++) {
+            String text = vor[i] + nummer[i];
+            List<Finding> funde = scan(text);
+            assertEquals(1, funde.size(), "ein Fund in Text " + i);
+            Finding f = funde.get(0);
+            assertEquals(i == 1 ? FindingType.IK : FindingType.LANR, f.type(), "Typ in Text " + i);
+            assertEquals(0.80, f.confidence(), "Konfidenz in Text " + i);
+            assertEquals(vor[i].length(), f.start(), "Start in Text " + i);
+            assertEquals(text.length(), f.end(), "Ende in Text " + i);
+            assertTrue(nummer[i].equals(f.originalValue()), "Wert in Text " + i);
+
+            PseudonymizationResult ohne = PSEUDONYMIZER.pseudonymize(text, List.of());
+            assertTrue(text.equals(ohne.text()), "Text ohne Fund veraendert " + i);
+            PseudonymizationResult mit = PSEUDONYMIZER.pseudonymize(text, funde);
+            assertTrue((vor[i] + platzhalter[i]).equals(mit.text()), "nur die Nummer ersetzt " + i);
+            assertRoundtrip(text, mit);
+        }
+        String nachgestellt = LANR_GUELTIG + " (L. A. N. R.)";
+        List<Finding> funde = scan(nachgestellt);
+        assertEquals(1, funde.size(), "ein Fund in der nachgestellten Form");
+        assertEquals(0.80, funde.get(0).confidence(), "Konfidenz nachgestellt");
+        PseudonymizationResult mit = PSEUDONYMIZER.pseudonymize(nachgestellt, funde);
+        assertTrue("[[LANR_1]] (L. A. N. R.)".equals(mit.text()), "Kontextwort und Trenner zeichengleich");
+        assertRoundtrip(nachgestellt, mit);
+        assertTrue(nachgestellt.equals(PSEUDONYMIZER.pseudonymize(nachgestellt, List.of()).text()),
+                "nachgestellte Form ohne Fund veraendert");
+    }
+
     @Test
     void ak27_fraglicherFundBleibtImScanUndOhneUebergabeBleibtDerTextUnveraendert() {
         String text = "LANR " + LANR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN;

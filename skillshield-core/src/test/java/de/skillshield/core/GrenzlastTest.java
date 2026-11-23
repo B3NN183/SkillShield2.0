@@ -530,18 +530,57 @@ class GrenzlastTest {
         }
     }
 
-    // ------------------------------------------------------------------ AK-26 (g), (h): kv-trenner-und-umbruch (T-4)
+    // ------------------------------------------------------------------ AK-26 (a) bis (k) und Zusatzfaelle (l), (m)
 
     /**
-     * Die Faelle (g) und (h) aus AK-26 des Features kv-trenner-und-umbruch ueber die ganze Kette (Teil 1, CR UZ+ LF).
-     * Aufbau wie bei {@link #kvKontextLueckenFaelle}: Praefix, Baustein, Schluss, Bausteinlaenge, r (Formel
+     * Die Faelle (a) bis (k) aus AK-26 des Features kv-trenner-und-umbruch ueber die ganze Kette: (g) und (h) zu
+     * Teil 1 (CR UZ+ LF), (a) bis (f) und (i) bis (k) zu Teil 2 (Weit-Kontextwoerter), dazu die Zusatzfaelle (l)
+     * (abgebrochene Beinahe-Kontextwoerter) und (m) (lange Laeufe unsichtbarer Zeichen). Aufbau wie bei
+     * {@link #kvKontextLueckenFaelle}: Praefix, Baustein, Schluss, Bausteinlaenge, r (Formel
      * {@code (1 000 000 - |Praefix| - |Schluss| + |Baustein| - 1) / |Baustein|}), Funde je Stufe, Typ. Die Zahlen
-     * folgen aus den Regeln (Plan Kap. 3.1), nicht aus einem Probelauf. Die uebrigen Faelle (a) bis (f) und (i) bis
-     * (k) gehoeren zu Teil 2 (T-10) und kommen in diese Methode hinzu. Die Nummer ist eine {@code 00}-Nummer.
+     * folgen aus den Regeln (Plan Kap. 3.1 und 3.2), nicht aus einem Probelauf. Die Nummern sind {@code 00}-Nummern.
      */
     static Stream<Arguments> kvTrennerUndUmbruchFaelle() {
         String umbruch = "\r" + ZWSP + "\n";
+        String l = LANR_GUELTIG;
+        String n = IK_GUELTIG;
         return Stream.of(
+            // (a) "L. " = 3 Zeichen, r = (1 000 000 + 2) / 3 = 333 334; ein einzelner Buchstabe je Folge: 0 Funde
+            Arguments.of("a L Punkt", "", "L. ", "", 3, 333_334, 0, 0, 0, null),
+            // (b) "I.  K.  " = 8 Zeichen, r = (1 000 000 + 7) / 8 = 125 000; Zwei-Buchstaben-Wort (D-4), ohne Nummer: 0
+            Arguments.of("b I K Punkt zwei Leerzeichen", "", "I.  K.  ", "", 8, 125_000, 0, 0, 0, null),
+            // (c) "L" + 999 999 Leerzeichen, r = (1 000 000 - 1 + 1 - 1) / 1 = 999 999; keine Luecke ueber drei: 0
+            Arguments.of("c L und Leerzeichen", "L", " ", "", 1, 999_999, 0, 0, 0, null),
+            // (d) "L" + ".  A" (4 Zeichen), r = (1 000 000 - 1 + 3) / 4 = 250 000; nie ein Kontextwort: 0 Funde
+            Arguments.of("d L Punkt zwei Leerzeichen A", "L", ".  A", "", 4, 250_000, 0, 0, 0, null),
+            // (e) "L. A. N. R. " + LANR + " " = 12 + 9 + 1 = 22 Zeichen, r = (1 000 000 + 21) / 22 = 45 455 (> 40 000);
+            // je Wiederholung ein Fund, gueltig, Weit-Kontextwort: 0,80 wahrscheinlich
+            Arguments.of("e1 L. A. N. R. Nummer", "", "L. A. N. R. " + l + " ", "", 22, 45_455, 0, 45_455, 0,
+                FindingType.LANR),
+            // (e) IK entsprechend: "I. K. N. R. " + IK + " " = 22 Zeichen, r = 45 455, 0,80 wahrscheinlich
+            Arguments.of("e2 I. K. N. R. Nummer", "", "I. K. N. R. " + n + " ", "", 22, 45_455, 0, 45_455, 0,
+                FindingType.IK),
+            // (f) "L" Tab "A" Tab "N" Tab "R" Tab + LANR + " " = 8 + 9 + 1 = 18 Zeichen, r = (1 000 000 + 17) / 18 =
+            // 55 556; je Wiederholung ein Fund 0,80
+            Arguments.of("f1 L Tab A Tab N Tab R Nummer", "", "L\tA\tN\tR\t" + l + " ", "", 18, 55_556, 0, 55_556,
+                0, FindingType.LANR),
+            // (f) IK entsprechend: 18 Zeichen, r = 55 556
+            Arguments.of("f2 I Tab K Tab N Tab R Nummer", "", "I\tK\tN\tR\t" + n + " ", "", 18, 55_556, 0, 55_556,
+                0, FindingType.IK),
+            // (i) "L    A    N    R " (vier Leerzeichen je Luecke) = 17 Zeichen, r = (1 000 000 + 16) / 17 = 58 824;
+            // keine Luecke nach D-2, keine Nummer: 0 Funde
+            Arguments.of("i1 vier Leerzeichen ohne Nummer", "", "L    A    N    R ", "", 17, 58_824, 0, 0, 0,
+                null),
+            // (i) mit Nummer: 17 + 9 + 1 = 27 Zeichen, r = (1 000 000 + 26) / 27 = 37 038; kein Kontextwort: 0 Funde
+            Arguments.of("i2 vier Leerzeichen LANR", "", "L    A    N    R " + l + " ", "", 27, 37_038, 0, 0, 0,
+                null),
+            Arguments.of("i3 vier Leerzeichen IK", "", "I    K    N    R " + n + " ", "", 27, 37_038, 0, 0, 0,
+                null),
+            // (j) "A. " = 3 Zeichen, r = 333 334; kein Kontextwort: 0 Funde
+            Arguments.of("j A Punkt", "", "A. ", "", 3, 333_334, 0, 0, 0, null),
+            // (k) "I. K. " + IK + " " = 6 + 9 + 1 = 16 Zeichen, r = (1 000 000 + 15) / 16 = 62 500;
+            // Zwei-Buchstaben-Wort (D-4) ausgenommen, kein Kontextwort: 0 Funde
+            Arguments.of("k I. K. Nummer", "", "I. K. " + n + " ", "", 16, 62_500, 0, 0, 0, null),
             // (g) "LANR:" + CR ZWSP LF + Nummer + " " = 5 + 3 + 9 + 1 = 18 Zeichen, r = (1 000 000 + 17) / 18 = 55 556;
             // je Wiederholung ein Fund: ein Umbruch zaehlt wie CR LF, der Deckel ist 0,80 (wahrscheinlich)
             Arguments.of("g1 LANR Umbruch Nummer", "", "LANR:" + umbruch + LANR_GUELTIG + " ", "", 18, 55_556, 0,
@@ -553,7 +592,28 @@ class GrenzlastTest {
             // 1) / 1 = 999 999; ein einziger Lauf nach dem CR, kein Kontextwort: 0 Funde
             Arguments.of("h1 CR und unsichtbare Zeichen", "\r", String.valueOf(ZWSP), "", 1, 999_999, 0, 0, 0, null),
             // (h) "CR ZWSP LF" = 3 Zeichen wiederholt, r = (1 000 000 + 2) / 3 = 333 334; kein Kontextwort: 0 Funde
-            Arguments.of("h2 CR UZ LF wiederholt", "", umbruch, "", 3, 333_334, 0, 0, 0, null));
+            Arguments.of("h2 CR UZ LF wiederholt", "", umbruch, "", 3, 333_334, 0, 0, 0, null),
+            // (l1) "L. A. N. " = 9 Zeichen, r = (1 000 000 + 8) / 9 = 111 112; drei Buchstaben "LAN" sind kein
+            // Kontextwort, die Folge reisst nie ab, ohne Nummer: 0 Funde
+            Arguments.of("l1 L. A. N. wiederholt", "", "L. A. N. ", "", 9, 111_112, 0, 0, 0, null),
+            // (l2) "L. A. N. " + LANR + " " = 9 + 9 + 1 = 19 Zeichen, r = (1 000 000 + 18) / 19 = 52 632; das
+            // Beinahe-Kontextwort "LAN" steht je Wiederholung vor der Nummer, kein Kontextwort: 0 Funde
+            Arguments.of("l2 L. A. N. Nummer", "", "L. A. N. " + l + " ", "", 19, 52_632, 0, 0, 0, null),
+            // (m1) "L. " (3) + ein Lauf aus 999 997 unsichtbaren Zeichen, r = (1 000 000 - 3 + 1 - 1) / 1 = 999 997;
+            // ein einziger Lauf, kein Kontextwort: 0 Funde
+            Arguments.of("m1 L Punkt und ein Lauf unsichtbarer Zeichen", "L. ", String.valueOf(ZWSP), "", 1,
+                999_997, 0, 0, 0, null),
+            // (m2) "Arzt " (5, Vorwort) + ein Lauf aus 999 995 unsichtbaren Zeichen, r = 999 995; 0 Funde
+            Arguments.of("m2 Arzt und ein Lauf unsichtbarer Zeichen", "Arzt ", String.valueOf(ZWSP), "", 1,
+                999_995, 0, 0, 0, null),
+            // (m3) "L. " + 100 unsichtbare Zeichen = 103 Zeichen, r = (1 000 000 + 102) / 103 = 9 709
+            // (103 * 9 709 = 1 000 027 >= 1 000 000, 103 * 9 708 = 999 924); viele kuerzere Laeufe, 0 Funde
+            Arguments.of("m3 L Punkt und viele kurze Laeufe", "", "L. " + String.valueOf(ZWSP).repeat(100), "",
+                103, 9_709, 0, 0, 0, null),
+            // (m4) "Arzt " + 100 unsichtbare Zeichen = 105 Zeichen, r = (1 000 000 + 104) / 105 = 9 524
+            // (105 * 9 524 = 1 000 020 >= 1 000 000, 105 * 9 523 = 999 915); 0 Funde
+            Arguments.of("m4 Arzt und viele kurze Laeufe", "", "Arzt " + String.valueOf(ZWSP).repeat(100), "",
+                105, 9_524, 0, 0, 0, null));
     }
 
     @ParameterizedTest(name = "{0}")

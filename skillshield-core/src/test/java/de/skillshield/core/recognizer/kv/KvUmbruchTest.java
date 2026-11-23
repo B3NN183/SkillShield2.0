@@ -294,6 +294,22 @@ class KvUmbruchTest {
         }
     }
 
+    /**
+     * Restgrenze 15R, Nachtrag security T-4 (Plan Kap. 11): Zeichen, die man nicht sieht, aber nicht unter die Regel
+     * "unsichtbar" fallen (Variantenwaehler-Ergaenzung, Combining Grapheme Joiner, Hangul-Fueller), zaehlen nicht als
+     * unsichtbares Zeichen; CR + eines dieser Zeichen + LF sind zwei Umbrueche, die Nummer bleibt ohne Fund.
+     */
+    @Test
+    void bekannteGrenze15Rest_unsichtbareZeichenAusserhalbDerUzRegel_zweiUmbrueche() {
+        int[] codepunkte = {0xE0100, 0xE01EF, 0x34F, 0x3164, 0x115F};
+        for (Art a : ARTEN) {
+            for (int cp : codepunkte) {
+                String z = new String(Character.toChars(cp));
+                assertKein(a, a.kw + ":\r" + z + "\n" + a.gueltig);
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ Zusaetzliche Funde nur mit CR UZ+ LF
 
     private static List<String> bausteine() {

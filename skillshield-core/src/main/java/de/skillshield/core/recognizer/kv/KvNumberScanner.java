@@ -177,7 +177,8 @@ import java.util.Set;
  * nachgestellten Kontextwort), 14a (Teilgruppen wie {@code LA NR}), 14b (gesperrtes Vor- und Nachsatzwort), 14c
  * (Initialen mit Punkt und Leerzeichen, Tab, Zeilenumbruch, zwei Trenner; seit kv-trenner-und-umbruch bis auf den
  * Rest 14cR geschlossen, siehe unten), 14d (unmittelbar wiederholte Sperrschrift
- * ist eine Folge), 14e (Einzelbuchstabe direkt vor oder hinter der Folge), 14f ({@code I K} ohne Fuellwoerter,
+ * ist eine Folge), 14e (Einzelbuchstabe direkt vor oder hinter der Folge; mit erweiterten Trennern siehe unten),
+ * 14f ({@code I K} ohne Fuellwoerter,
  * Aufzaehlung, Umbruch, nachgestellten Kontext), 14g (0,50 statt 0,80 fuer eine von {@code I K} und einem
  * nachgestellten Kontextwort erschlossene Nummer; die Position bleibt abgedeckt), die Restformen nach 14h
  * (mehrere Vorwoerter vor {@code I K}, Fuellwort zwischen {@code I K} und Nachsatzwort, zwei Zeilenumbrueche,
@@ -189,15 +190,26 @@ import java.util.Set;
  * unsichtbare Zeichen, LF zaehlen als ein Zeilenumbruch, D-1). Rest 15R, je als Test
  * {@code bekannteGrenze15Rest...}: CR, Leerraum und LF, CR, ein Buchstabe oder Kombinationszeichen und LF, CR, ein
  * unsichtbares Zeichen und CR, und jede Kombination mit U+0085, U+2028 oder U+2029 zaehlen weiter als zwei
- * Zeilenumbrueche. Geschlossen (Teil 2, T-6): Grenze 14c (Initialen mit Punkt und Leerzeichen, mehrere Leerzeichen
- * und Tab zwischen den Buchstaben eines gesperrten Kontextworts ab vier Buchstaben, D-2 bis D-4), bis auf den Rest
- * 14cR, je als Test {@code bekannteGrenze14cRest...}: das Zwei-Buchstaben-Wort mit erweiterten Trennern ({@code I. K.},
- * {@code I  K}, {@code I<Tab>K}) ohne Fund, ebenso vier und mehr Leerraumzeichen, zwei Tabs, Tab mit Leerraum, Punkt
- * mit Tab, Leerraum vor dem Punkt, zwei Punkte, {@code -} oder U+2013 mit Leerraum, Zeilenumbruch, {@code ,},
- * {@code ;}, {@code :}, {@code /}, {@code _} und andere Unicode-Leerraeume (U+2002, U+3000) als Luecke. Bekannte
- * Folge 14cF: Initialen oder Einzelbuchstaben, die zusammengelesen genau ein Kontextwort ab vier Buchstaben ergeben
- * ({@code Prof. L. A. N. R. Beispiel, Rechnung N}), erschliessen eine folgende Zahl. Bei laufendem Kontext wird
- * er durch das Weit-Kontextwort neu begonnen (T-7, siehe oben).
+ * Zeilenumbrueche. Dazu gehoeren auch Zeichen, die man nicht sieht, aber nicht unter die Regel "unsichtbares Zeichen"
+ * fallen (U+E0100 bis U+E01EF, U+034F, U+3164, U+115F): {@code CR}, eines davon und {@code LF} sind zwei Umbrueche
+ * (Schwere niedrig, nur bei praepariertem Text). Geschlossen: Grenze 14c (Initialen mit Punkt und Leerzeichen, mehrere
+ * Leerzeichen und Tab zwischen den Buchstaben eines gesperrten Kontextworts ab vier Buchstaben, D-2 bis D-4), bis auf
+ * den Rest 14cR, je als Test {@code bekannteGrenze14cRest...}: das Zwei-Buchstaben-Wort mit erweiterten Trennern
+ * ({@code I. K.}, {@code I  K}, {@code I<Tab>K}) ohne Fund, ebenso vier und mehr Leerraumzeichen, zwei Tabs, Tab mit
+ * Leerraum, Punkt mit Tab, Leerraum vor dem Punkt, zwei Punkte, {@code -} oder U+2013 mit Leerraum, Zeilenumbruch,
+ * {@code ,}, {@code ;}, {@code :}, {@code /}, {@code _} und andere Unicode-Leerraeume (U+2002, U+3000) als Luecke.
+ * Grenzen 14d und 14e mit erweiterten Trennern, je als Test {@code bekannteGrenze14dUnd14eErweitert...} und
+ * {@code bekannteGrenze14eErweitert...}: Eine Folge, die ein davor- oder dahinterstehender Einzelbuchstabe ueber eine
+ * Luecke nach D-2 verlaengert ({@code L. A. N. R. L. A. N. R. N}, {@code Herr A. L. A. N. R. N},
+ * {@code L. A. N. R. X N}), ist kein Kontextwort. Das gilt auch fuer die nachgestellte Form: Folgt auf
+ * {@code N L. A. N. R.} ein Einzelbuchstabe oder eine Initiale ({@code N L. A. N. R. B. Beispiel}), bleibt die Nummer
+ * ohne Fund; steht ein Komma, eine Klammer, ein Strich oder ein Umbruch dazwischen, ist es ein Fund 0,80. Das ist kein
+ * Rueckschritt gegenueber dem Stand vor diesem Feature und bewusst nicht geschlossen: Eine Regel "Teilfolge genuegt"
+ * machte Initialenketten zu Kontextwoertern. Bekannte Folge 14cF: Initialen oder Einzelbuchstaben, die
+ * zusammengelesen genau ein Kontextwort ab vier Buchstaben ergeben ({@code Prof. L. A. N. R. Beispiel, Rechnung N}),
+ * erschliessen eine folgende Zahl (kein Fehler, sondern Folge von D-3). Bei laufendem Kontext wird der Kontext durch
+ * das Weit-Kontextwort neu begonnen (siehe oben, Ereignis Weit-Kontextwort). Unveraendert bleiben 12R, 14a, 14b, 14f,
+ * 14g und die Restformen nach 14h.
  *
  * <p><b>Linearitaet.</b> Ein Durchlauf, keine Rekursion, kein regulaerer Ausdruck, kein Zuruecksetzen der
  * Leseposition der Hauptschleife. Jeder Lauf wird in einem Zug gelesen. Dabei fuehrt der Durchlauf nur ein Fenster
@@ -225,16 +237,20 @@ import java.util.Set;
  * Buchstaben jede Folge beendet, trifft er nie denselben Lauf wie der Nachsatz-Vorgriff. Der Sperr-Verfolger macht
  * je Zeichen ausserhalb eines Laufs und je Lauf konstante Arbeit und setzt die Leseposition nie zurueck: Er fuehrt
  * einen Puffer fester Groesse (23 Buchstaben) plus Zaehler (laengere Folgen koennen keinem Kontextwort gleichen)
- * und das Abbild der
- * offenen Segmente (sechs Werte, Wiederherstellen O(1)); der
- * Vergleich mit den Kontextwoertern geschieht einmal je Folgenende mit hoechstens 23 Zeichen und acht Eintraegen.
+ * und das Abbild der offenen Segmente (sechs Werte, Wiederherstellen O(1)); der Vergleich mit den
+ * Kontextwoertern geschieht einmal je Folgenende mit hoechstens 23 Zeichen und acht Eintraegen.
  * Jedes offene Segment wird hoechstens einmal ausgegeben, weil das Ereignis die Folge leert. Der Vorgriff auf
  * Einzelbuchstabe liest nur den einen Lauf hinter einem Sperr-Trenner (bis zum zweiten Buchstaben oder Laufende) und
  * beginnt nie im Lauf des Nachsatz-Vorgriffs (dieser betrifft den Lauf hinter einem Vorwort-Lauf mit mehreren
  * Buchstaben, also ohne laufende Sperrfolge); jedes Zeichen wird damit hoechstens zweimal gelesen. Die Zustandsmerker
  * aendern sich je Ereignis in konstanter Zeit; die Folge der offenen Segmente waechst um drei Zahlen je Segment und
  * wird hoechstens einmal ausgegeben oder verworfen. Gesamtaufwand O(n), Zusatzspeicher O(1)
- * plus Fundliste plus Folge der offenen Segmente.
+ * plus Fundliste plus Folge der offenen Segmente. Belegt ist das fuer alle Verfolger, den Merker {@code crOffen}
+ * und den
+ * gemeinsamen Vorgriff durch die Grenzlast-Tests ({@code GrenzlastTest}, AK-26): je Eingabe mit einer Million Zeichen
+ * (zum Beispiel {@code L. } wiederholt, {@code L} und eine Million Leerzeichen, {@code L. A. N. R. N } wiederholt,
+ * {@code CR} und eine Million unsichtbarer Zeichen) liefern Scan, Pseudonymisierung und Rueckuebersetzung je in unter
+ * zwei Sekunden die exakt erwartete Fundzahl.
  *
  * <p>Der Durchlauf wirft nur {@link NullPointerException} mit den festen Meldungen {@code art} und {@code text}; er
  * schreibt nichts aus, und kein Fund und keine Meldung enthaelt Ziffern des Textes.
