@@ -8,10 +8,9 @@ import java.util.List;
  * Erkennt Krankenversichertennummern (KVNR, ein Buchstabe und neun Ziffern) hinter einem Kontextwort ({@code KVNR},
  * {@code Versichertennummer}, {@code eGK-Nummer}, {@code KV-Nr.} ...). Eine Nummer ohne Kontextwort ist nur dann ein
  * Fund, wenn sie die enge Form von Teil 1b hat (siehe den Absatz "ohne Kontextwort" weiter unten). Alle
- * Kontextregeln von LANR und IK gelten
- * unveraendert: bis drei Fuellwoerter, ein Zeilenumbruch (auch {@code CR}, unsichtbare Zeichen, {@code LF}),
- * Aufzaehlung, nachgestelltes Kontextwort, Komma-Regel und gesperrte Schreibweise ({@code K V N R},
- * {@code K. V. N. R.}).
+ * Kontextregeln von LANR und IK gelten unveraendert: bis drei Fuellwoerter, ein Zeilenumbruch (auch {@code CR},
+ * unsichtbare Zeichen, {@code LF}), Aufzaehlung, nachgestelltes Kontextwort, Komma-Regel und gesperrte Schreibweise
+ * ({@code K V N R}, {@code K. V. N. R.}).
  *
  * <p>Die Pruefziffer ({@link KvnrPruefziffer}) bestimmt nur Stufe und Quelle: Buchstabe und neun Ziffern mit
  * gueltiger Pruefziffer und direktem Kontext 0.95 (Quelle {@value #SOURCE}), gueltig bei weiterem Kontext 0.80
@@ -70,8 +69,14 @@ import java.util.List;
  * <li>G-K15: Ein Pfad oder eine URL zwischen Kontextwort und Nummer (Fuellwortzaehlung ab dem vierten Segment,
  * Satzende am Dateiendungspunkt) laesst die Nummer ohne Fund, auch in kurzen Faellen; bei URLs zaehlen Schema und
  * jedes Host-Label als Segment, abgedeckt bleibt nur eine sehr kurze URL (Schema und hoechstens zwei weitere
- * Segmente, kein Punkt hinter einem langen Wort, keine Query); jede URL mit zwei Pfadsegmenten oder mit Query bleibt
- * ohne Fund.</li>
+ * Segmente, kein Punkt hinter einem langen Wort, keine Query); jede URL mit einem laengeren Host-Label vor einem
+ * Punkt, mit mehr als drei Segmenten oder mit Query bleibt ohne Fund. Mit Teil 1b ist die geschlossene,
+ * grossgeschriebene, gueltige Form in dieser Stellung ein Fund (0.60); die gruppierte und die kleingeschriebene Form
+ * sowie Nummern mit falscher Pruefziffer bleiben ohne Fund.</li>
+ * <li>G-K18 (Restrisiko, Nachtrag 2 zu T-11): Eine gueltige, geschlossene Nummer ohne Kontextwort mit {@code _},
+ * {@code -}, {@code /}, {@code \} oder {@code @} direkt daran (Dateiname ohne Pfad, URL ohne Schema, Nummer per
+ * {@code /} an einer IP) bleibt im Klartext, wenn kein E-Mail-, URL-, Pfad- oder IP-Fund sie umschliesst; Einzelheiten
+ * im Javadoc von {@link KvnrOhneKontext}.</li>
  * <li>G-K16: Derselbe Wert an einer zweiten, nicht erkannten Stelle bleibt stehen (kein Leak-Check).</li>
  * <li>G-K17: Jedes Kombinationszeichen (Kategorien Mn, Mc, Me) und die Fuellzeichen U+115F, U+1160, U+3164 und
  * U+FFA0 direkt vor dem Buchstaben oder zwischen Buchstabe und Ziffern verhindern den Fund in Buchstabenform.</li>
@@ -101,7 +106,10 @@ import java.util.List;
  * Grenze G-K14: Der Teil einer Nummer im anderen Fund traegt dessen Typ; ein Buchstabe oder ein Rest mit weniger als
  * drei Ziffern ausserhalb bleibt stehen. Bekannte Grenze G-D2: Ein LANR- oder IK-Kontextwort vor einer KVNR-Form
  * schuetzt nur die Ziffern (Fund LANR bzw. IK); mit einem KVNR-Kontextwort davor umfasst der Fund auch den
- * Buchstaben. Auf Erkennerebene (ohne Scanner) liefert der Erkenner die Kandidaten unveraendert.
+ * Buchstaben, und bei einer gueltigen, geschlossenen, grossgeschriebenen Form (Teil 1b, Kollisionsfall K-1) ist der
+ * Fund ein KVNR-Fund 0.60 ueber Buchstabe und Ziffern, der den LANR- oder IK-Fund umschliesst. Die bekannten Grenzen
+ * von Teil 1b stehen vollstaendig im Javadoc von {@link KvnrOhneKontext}. Auf Erkennerebene (ohne Scanner) liefert
+ * der Erkenner die Kandidaten unveraendert.
  *
  * <p>Der Erkenner ist zustandslos und deterministisch; die Regeln und der Linearitaetsbeleg stehen im Javadoc von
  * {@link KvNumberScanner}. Es entsteht kein Netz- oder Dateizugriff, und Meldungen enthalten keinen Text, keine

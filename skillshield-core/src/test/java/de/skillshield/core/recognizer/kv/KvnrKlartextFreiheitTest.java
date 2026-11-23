@@ -127,6 +127,80 @@ class KvnrKlartextFreiheitTest {
         }
     }
 
+    // ------------------------------------------------------------------ KVNR ohne Kontextwort (T-11)
+
+    /**
+     * Texte mit einer gueltigen KVNR ohne Kontextwort: Name des Falls, Text und erwartete Zahl der Funde der Regel 1b
+     * (bei {@code mit-kontextwort-davor} 0: der Fund stammt aus Teil 1a).
+     */
+    private static List<String[]> texteOhneKontext() {
+        return List.of(
+                new String[] {"allein", MARKER, "1"},
+                new String[] {"im-satz", "Der Patient " + MARKER + " kam gestern", "1"},
+                new String[] {"k1-lanr", "LANR " + MARKER, "1"},
+                new String[] {"k1-ik", "IK: " + MARKER + " Ende", "1"},
+                new String[] {"dateiname", MARKER + ".pdf", "1"},
+                new String[] {"zweimal", MARKER + " ... " + MARKER, "2"},
+                new String[] {"mit-kontextwort-davor", "Rechnung KVNR " + MARKER, "0"});
+    }
+
+    /**
+     * AK-35 fuer die Quelle {@code kvnr-ohne-kontext} (Teil 1b): Weder {@code toString()} der Funde, der Fundliste, des
+     * Ergebnisses und der Zuordnung noch der pseudonymisierte Text noch die Rueckuebersetzung enthalten die Nummer,
+     * ihre Ziffern oder Teile davon; die Quelle selbst enthaelt keine Ziffer. Ohne Uebergabe bleibt der Text
+     * unveraendert (AK-20), der Roundtrip ist zeichengleich. Der Fall {@code mit-kontextwort-davor} hat den Fund aus
+     * Teil 1a (Quelle {@code kvnr}), dort entsteht kein zweiter Fund.
+     */
+    @Test
+    void ak35_kvnrOhneKontext_fundDerRegel1b_keinMarkerInToStringErgebnisZuordnungUndText() {
+        for (String[] fall : texteOhneKontext()) {
+            String name = fall[0];
+            String text = fall[1];
+            List<Finding> funde = TextScanner.standard().scan(text);
+            int ohneKontext = 0;
+            for (Finding f : funde) {
+                ohneKontext += "kvnr-ohne-kontext".equals(f.source()) ? 1 : 0;
+                assertFalse(f.source().chars().anyMatch(Character::isDigit), "Ziffer in der Quelle, Fall " + name);
+            }
+            assertEquals(Integer.parseInt(fall[2]), ohneKontext,
+                    "Zahl der Funde der Regel 1b, Fall " + name);
+            PseudonymizationResult ersetzt = PSEUDONYMIZER.pseudonymize(text, funde);
+            PseudonymizationResult ohneUebergabe = PSEUDONYMIZER.pseudonymize(text, List.of());
+            ReidentificationResult zurueck = REIDENTIFIER.restore(ersetzt.text(), ersetzt.mapping());
+            ReidentificationResult leer = REIDENTIFIER.restore(ersetzt.text(), ohneUebergabe.mapping());
+            List<String> ausgaben = new ArrayList<>(List.of(funde.toString(), ersetzt.toString(),
+                    ersetzt.mapping().toString(), ersetzt.text(), ohneUebergabe.toString(),
+                    ohneUebergabe.mapping().toString(), zurueck.toString(), leer.toString(),
+                    zurueck.unresolved().toString(), leer.unresolved().toString()));
+            for (Finding f : funde) {
+                ausgaben.add(f.toString());
+            }
+            assertOhneMarker(ausgaben, name);
+            assertTrue(text.equals(zurueck.text()), "Roundtrip nicht zeichengleich, Fall " + name);
+            assertTrue(text.equals(ohneUebergabe.text()), "Text ohne Uebergabe veraendert, Fall " + name);
+        }
+    }
+
+    /**
+     * AK-35 fuer Teil 1b: Wirft ein weiterer Erkenner neben dem KVNR-Erkenner eine Ausnahme mit der Nummer, kapselt der
+     * Scanner sie klartextfrei (feste Meldung, keine Ursache, keine unterdrueckten Ausnahmen); der Erkenner selbst
+     * liefert fuer einen Text ohne Kontextwort einen Fund und wirft nicht.
+     */
+    @Test
+    void ak35_kvnrOhneKontext_ausnahmeEinesErkenners_ohneMarkerInMeldungUrsacheUndUnterdrueckten() {
+        Recognizer wirft = t -> {
+            throw new IllegalArgumentException(MARKER);
+        };
+        for (String[] fall : texteOhneKontext()) {
+            assertFalse(new KvnrRecognizer().detect(fall[1]).isEmpty(), "Der KVNR-Erkenner findet die Nummer");
+            TextScanner scanner = new TextScanner(List.of(new KvnrRecognizer(), wirft));
+            IllegalStateException e = assertThrows(IllegalStateException.class, () -> scanner.scan(fall[1]));
+            assertOhneMarker(List.of(String.valueOf(e.getMessage()), e.toString()), fall[0]);
+            assertNull(e.getCause(), "Ursache");
+            assertEquals(0, e.getSuppressed().length, "Unterdrueckte Ausnahmen");
+        }
+    }
+
     // ------------------------------------------------------------------ Ausnahmen
 
     @Test

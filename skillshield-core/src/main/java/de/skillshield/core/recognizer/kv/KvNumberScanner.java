@@ -315,7 +315,10 @@ import java.util.Set;
  * Satzende-Punkt und nur eine sehr kurze URL: Schema und hoechstens zwei weitere Segmente (Host-Label oder
  * Pfadsegmente), kein Punkt hinter einem Wort mit mehr als vier Buchstaben, keine Query. Jede laengere URL, jede URL
  * mit Domain hinter einem langen Wort, mit zwei Pfadsegmenten hinter dem Host oder mit Query bleibt ohne Fund.
- * Behebung nicht Teil dieses Features (Kandidat fuer ein Folgefeature "Kontext ueber Pfade und URLs hinweg").</li>
+ * Mit Teil 1b ist die geschlossene, grossgeschriebene, gueltige Form in dieser Stellung ein Fund (0,60, Quelle
+ * {@code kvnr-ohne-kontext}); die gruppierte und die kleingeschriebene Form sowie Nummern mit falscher Pruefziffer
+ * bleiben ohne Fund. Behebung nicht Teil dieses Features (Kandidat fuer ein Folgefeature "Kontext ueber Pfade und URLs
+ * hinweg").</li>
  * <li>G-K16: Der Pseudonymizer ersetzt nur gefundene Stellen; steht derselbe Wert an einer zweiten, nicht erkannten
  * Stelle (zum Beispiel mit dem Kontextwort ohne Trenner an den Buchstaben geklebt), bleibt er dort stehen. Ein
  * Abgleich aller Vorkommen (Leak-Check) ist nicht Teil des Features.</li>
@@ -324,7 +327,10 @@ import java.util.Set;
  * Zeichen dieses Scanners gehoeren, verhindern direkt vor dem Buchstaben oder zwischen Buchstabe und Ziffern den
  * Fund in Buchstabenform; Buchstabe und Ziffern koennen dann vollstaendig stehen bleiben.</li>
  * <li>G-D2: Ein LANR- oder IK-Kontextwort vor einer KVNR-Form schuetzt nur die Ziffern (Fund LANR bzw. IK, der
- * Buchstabe bleibt stehen); mit einem KVNR-Kontextwort davor umfasst der Fund Buchstabe und Ziffern (Typ KVNR).</li>
+ * Buchstabe bleibt stehen); mit einem KVNR-Kontextwort davor umfasst der Fund Buchstabe und Ziffern (Typ KVNR). Mit
+ * Teil 1b gilt das auch fuer eine gueltige, geschlossene, grossgeschriebene Form hinter einem LANR- oder IK-Kontextwort
+ * (Kollisionsfall K-1): Der KVNR-Fund (0,60) umschliesst den LANR- oder IK-Fund, die Stufe kann sinken. Alle bekannten
+ * Grenzen von Teil 1b stehen im Javadoc von {@link KvnrOhneKontext}.</li>
  * </ul>
  * Fuer die KVNR gelten ausserdem alle Grenzen der Vorgaenger (12R, 14a, 14b, 14cR, 14d, 14e, 14f, 14g, 14h-Rest, 15R)
  * sinngemaess, zum Beispiel Kombinationszeichen am Kontextwort und Teilgruppen wie {@code K VNR}.

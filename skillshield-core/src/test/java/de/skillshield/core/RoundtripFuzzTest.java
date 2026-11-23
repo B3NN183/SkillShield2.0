@@ -18,6 +18,7 @@ import de.skillshield.core.recognizer.TextScanner;
 import de.skillshield.core.recognizer.kv.IkRecognizer;
 import de.skillshield.core.recognizer.kv.KvTestHilfen;
 import de.skillshield.core.recognizer.kv.KvnrBsnrHilfen;
+import de.skillshield.core.recognizer.kv.KvnrOhneKontextHilfen;
 import de.skillshield.core.recognizer.kv.KvnrRecognizer;
 import de.skillshield.core.recognizer.kv.KvnrSynthetischWaechter;
 import de.skillshield.core.recognizer.kv.LanrRecognizer;
@@ -70,6 +71,16 @@ import org.junit.jupiter.api.Test;
  * Eigenschaften wie 1e, dazu Platzhalter-Konsistenz, Ausgabetext ohne Rest eines Fundes, der strikte Zaehler "Block
  * ohne Scan-Abdeckung" fuer nicht markierte Bloecke und die Markierung dokumentierter Grenzen aus dem Text
  * ({@link #grenzklasseF}); der Bestandsschutz gegen die eingefrorene Kopie steht in {@code KvnrFuzzBestandTest}.
+ * Teil 1g ({@code SEED_TEXTE_KV_G}, kvnr-bsnr-erkennung T-11, eigener Generator {@link #erzeugeKvG}, eigene Records
+ * {@link BlockG}, {@link GegenprobeG}, {@link BestandG}, {@link RestG} und {@link FallG}, Hash {@link #HASH_TEIL_1G}):
+ * KVNR ohne Kontextwort (Teil 1b) mit allen zulaessigen Grenzzeichen, am Textanfang und -ende, mit LANR- oder
+ * IK-Kontextwort davor (K-1), Gegenproben aus AK-12 bis AK-14 ohne Block, Bestand-Bausteinen (Nummer in oder an
+ * E-Mail, Pfad, URL; Restfund mit genau drei Ziffern; die IP ist kein Bestand-Baustein in {@code BESTAND_G}, sie
+ * steht im Block {@code nachbar-ip}) und Mischung mit Bausteinen aus 1b bis 1f. Die Erwartung
+ * stammt aus der Konstruktion und aus der unabhaengigen Referenz der Regel 1b; nicht markierte Bloecke ohne
+ * Scan-Abdeckung zaehlen strikt 0, markierte Grenzbloecke (G-K9, Nicht-ASCII-Ziffer als Nachbar) einzeln. Der
+ * Bestandsschutz gegen die eingefrorene Kopie steht in {@code KvnrOhneKontextFuzzBestandTest}; der ganze Teil gehoert
+ * zum 1b-Inventar (Plan Regel 14).
  * Teil 2: {@value #ANZAHL_EINGABEN} Zufallseingaben an {@code restore}.
  *
  * <p>Der Lauf wird einmal ausgeführt ({@link #LAUF}); jede Eigenschaft ist ein eigener Test. Meldungen nennen nur
@@ -132,6 +143,7 @@ class RoundtripFuzzTest {
     private static Lauf LAUF_KV_D;
     private static Lauf LAUF_KV_E;
     private static Lauf LAUF_KV_F;
+    private static Lauf LAUF_KV_G;
 
     // ------------------------------------------------------------------ Erzeugung
 
@@ -2534,6 +2546,7 @@ class RoundtripFuzzTest {
         LAUF_KV_D = fuehreKvDAus();
         LAUF_KV_E = fuehreKvEAus();
         LAUF_KV_F = fuehreKvFAus();
+        LAUF_KV_G = fuehreKvGAus();
     }
 
     private static boolean paarGetrennt(String s, int pos) {
@@ -4678,6 +4691,1578 @@ class RoundtripFuzzTest {
                 "Kette von sechs Ziffern bleibt stehen");
         assertTrue(rest0F(reine, List.of(reinerFund), "KVNR [[KVNR_1]] " + ziffern.substring(0, 5), reinerFund),
                 "fuenf Ziffern sind keine Kette ab sechs");
+    }
+
+    // ------------------------------------------------------------------ Teil 1g (kvnr-bsnr-erkennung T-11)
+
+    // Teil 1g misst die KVNR ohne Kontextwort (Teil 1b) ueber die ganze Kette: Erkenner, Konfliktaufloesung,
+    // Zuschneiden am Bestand, Pseudonymisierung und Rueckuebersetzung. Aufbau wie bei Teil 1f: zuerst Seeds, Blockarten
+    // und Records, dann Generator, Pruefung und Tests. Das gesamte Teil gehoert zum 1b-Inventar (Plan Regel 14).
+
+    // Der Wert gleicht numerisch dem Seed (c) des Pruefstands (SEED_C in KvnrOhneKontextFehlalarmTest); die
+    // Generatoren sind getrennt, die Textfolgen unabhaengig. Eine Aenderung verschoebe alle Messwerte von Teil 1g.
+    /** Teil 1g: eigene Startwerte, {@value #ANZAHL_TEXTE} Texte mit KVNR ohne Kontextwort und Mischbausteinen. */
+    static final long SEED_TEXTE_KV_G = 20261128L;
+    static final long SEED_AUSWAHL_KV_G = 949494L;
+    private static final String QUELLE_1B_G = KvnrOhneKontextHilfen.QUELLE;
+    private static final double KONF_1B_G = 0.60;
+    private static final double KONF_DIREKT_G = 0.95;
+    private static final double KONF_REST_G = 0.80;
+    /** Keine feste Erwartung an Konfidenz und Quelle: mindestens 0,60 aus Teil 1a oder Teil 1b. */
+    private static final double KONF_SCHWACH_G = -1;
+    /** Grenzblock: keine Erwartung an einen Kandidaten (dokumentierte Grenze, Markierung aus dem Text). */
+    private static final double KONF_KEINE_G = -2;
+    private static final int MAX_VERSUCHE_G = 60;
+    private static final double TOLERANZ_G = 1e-9;
+    private static final int ZIFFERN_NUMMER_G = 9;
+
+    /**
+     * Blockarten von Teil 1g, je ein erwarteter Fund einer geschlossenen, grossgeschriebenen KVNR mit gueltiger
+     * Pruefziffer ohne Kontextwort davor: mit allen zulaessigen Grenzzeichen davor und dahinter (frei), am Textanfang
+     * und am Textende, Kontextwort weiter weg als drei Woerter, Kontextwort mit Leerzeile davor, Wort der Negativliste
+     * im Umfeld, LANR- oder IK-Kontextwort direkt davor (K-1), Wiederholung derselben Nummer, Dateiname, Nachbar einer
+     * IP-Adresse, und die Grenzbloecke "Nicht-ASCII-Ziffer als Nachbar" und "Kontextwort direkt am Buchstaben" sowie
+     * der lange Pfad zwischen Kontextwort und Nummer.
+     */
+    static final int BLOCK_G_FREI = 0;
+    static final int BLOCK_G_ANFANG = 1;
+    static final int BLOCK_G_ENDE = 2;
+    static final int BLOCK_G_KW_WEIT = 3;
+    static final int BLOCK_G_LEERZEILE = 4;
+    static final int BLOCK_G_NEGATIV = 5;
+    static final int BLOCK_G_K1 = 6;
+    static final int BLOCK_G_WIEDERHOLUNG = 7;
+    static final int BLOCK_G_DATEINAME = 8;
+    static final int BLOCK_G_NACHBAR_IP = 9;
+    static final int BLOCK_G_NICHT_ASCII = 10;
+    static final int BLOCK_G_AM_BUCHSTABEN = 11;
+    static final int BLOCK_G_LANGER_PFAD = 12;
+    private static final int ANZAHL_BLOCKARTEN_G = 13;
+    private static final String[] BLOCK_NAMEN_G = {"frei", "anfang", "ende", "kw-weit", "leerzeile", "negativ", "k1",
+        "wiederholung", "dateiname", "nachbar-ip", "nicht-ascii", "am-buchstaben", "langer-pfad"};
+    /** Gewichte der Blockarten bei der Wahl im Generator; Anfang und Ende ergeben sich aus der Stellung im Text. */
+    private static final int[] GEWICHT_BLOCK_G = {30, 0, 0, 8, 6, 10, 12, 8, 6, 6, 4, 3, 4};
+    /** Grenzklassen von Teil 1g (Markierung aus dem Text); {@code GRENZE_AM_BUCHSTABEN} gilt wie in Teil 1f. */
+    static final String GRENZE_NICHT_ASCII_ZIFFER = "nichtascii-ziffer";
+
+    private static final String[][] VORN_G = {{" ", "leerzeichen"}, {"\t", "tab"}, {"\n", "zeilenumbruch"},
+        {"\r\n", "crlf"}, {NB, "nbsp"}, {"(", "klammer-auf"}, {"\"", "anfuehrung"}, {":", "doppelpunkt"},
+        {"=", "gleich"}, {",", "komma"}, {";", "semikolon"}, {".", "punkt"}, {"!", "ausrufezeichen"},
+        {"?", "fragezeichen"}, {"[", "eckige-klammer"}, {"'", "apostroph"}, {"#", "raute"}, {"*", "stern"},
+        {"|", "senkrechter-strich"}, {String.valueOf((char) 0x200B), "unsichtbar"}};
+    private static final String[][] HINTEN_G = {{" ", "leerzeichen"}, {"\t", "tab"}, {"\n", "zeilenumbruch"},
+        {"\r\n", "crlf"}, {NB, "nbsp"}, {")", "klammer-zu"}, {"\"", "anfuehrung"}, {".", "punkt"}, {",", "komma"},
+        {";", "semikolon"}, {":", "doppelpunkt"}, {"!", "ausrufezeichen"}, {"?", "fragezeichen"},
+        {"]", "eckige-klammer"}, {"'", "apostroph"}, {"|", "senkrechter-strich"}, {"*", "stern"},
+        {String.valueOf((char) 0x200B), "unsichtbar"}};
+    private static final String[] PRAEFIX_G = {"", "", "Der Patient ", "Notiz ", "Datei ", "Nummer ", "ID ",
+        "Herr Beispiel, "};
+    /**
+     * Trenner zwischen den Bausteinen: nie Komma, Semikolon, "und" oder reiner Leerraum. Sonst koennte ein
+     * Kontextwort am Anfang des naechsten Bausteins zum nachgestellten Kontextwort der Nummer davor werden (Fund aus
+     * Teil 1a statt Teil 1b).
+     */
+    private static final String[] TRENNER_G = {"\n", "\r\n", ". ", "! ", " | ", "\n\n", "? "};
+    private static final String[] ENDUNGEN_G = {".pdf", ".txt", ".docx", ".csv"};
+    private static final String[] WORTGRENZE_G = {"x", "7", "_", "-", "/", BS_F, "@", "Q", "3"};
+    private static final String[] NEGATIV_WOERTER_G =
+            KvnrOhneKontextHilfen.NEGATIVKONTEXT_SCHREIBWEISE.toArray(new String[0]);
+    private static final String[] NEGATIV_TRENNER_G = {" ", ": ", ":", "=", " = ", "\t", NB, "\n", "  "};
+    private static final String[] NICHT_ASCII_ZIFFERN_G = {String.valueOf((char) 0x665),
+        String.valueOf((char) 0xFF15), String.valueOf((char) 0x968)};
+    private static final String[] GEGENPROBEN_G = {"ungueltig", "klein", "trenner", "zwei-buchstaben",
+        "acht-ziffern", "zehn-ziffern", "wortgrenze-vorn", "wortgrenze-hinten", "dezimal-hinten", "negativkontext"};
+    private static final String[] BESTAND_G = {"email-lokal", "email-anfang", "pfad-unix", "pfad-windows",
+        "url-query", "url-pfad", "rest-drei", "rest-zwei"};
+
+    /**
+     * Ein erwarteter Fund einer Nummer in einem Text von Teil 1g. {@code konfidenz} und {@code quelle} gelten fuer den
+     * Kandidaten des KVNR-Erkenners ({@code konfidenz >= 0}: genau diese; {@code KONF_SCHWACH_G}: mindestens 0,60 aus
+     * Teil 1a oder 1b; {@code KONF_KEINE_G}: keine Erwartung, Grenzblock). {@code referenz} heisst: Die unabhaengige
+     * Referenz der Regel 1b trifft genau diesen Bereich. {@code kontextPruefen}: Steht im selben Absatz davor ein
+     * KVNR-Kontextwort (Referenz auf dem Buchstabenstrom, ueberschaetzt), wird die Erwartung auf schwach gesetzt, weil
+     * dann auch ein Fund aus Teil 1a moeglich ist. {@code vorn} und {@code hinten} nennen das Grenzzeichen (zum
+     * Zaehlen). {@code grenze} ist leer oder die Grenzklasse, nach der der Block an einer dokumentierten Grenze
+     * liegt (Markierung aus dem fertigen Text); er muss dann keinen Scan-Fund haben.
+     */
+    record BlockG(int blockart, double konfidenz, String quelle, boolean referenz, boolean kontextPruefen, int start,
+            int ende, String vorn, String hinten, String grenze) {
+        BlockG schwach() {
+            return new BlockG(blockart, KONF_SCHWACH_G, quelle, referenz, kontextPruefen, start, ende, vorn, hinten,
+                    grenze);
+        }
+
+        BlockG markiert(String klasse) {
+            return new BlockG(blockart, konfidenz, quelle, referenz, kontextPruefen, start, ende, vorn, hinten,
+                    klasse);
+        }
+    }
+
+    /** Eine Gegenprobe (Bereich im Text): allein gescannt liefern weder KVNR-Erkenner noch Referenz einen Fund. */
+    record GegenprobeG(String name, int start, int ende) {
+    }
+
+    /** Eine Nummer in oder an E-Mail, Pfad oder URL: vom Bestand gedeckt, kein KVNR-Fund im Bereich. */
+    record BestandG(String name, int start, int ende) {
+    }
+
+    /** Erwarteter Restfund am Bestand; {@code konfidenz < 0}: kein Restfund (weniger als drei Ziffern). */
+    record RestG(int start, int ende, double konfidenz) {
+    }
+
+    /** Ein Text von Teil 1g mit Bloecken, Gegenproben, Bestand-Bausteinen, Mischbereichen und den Zaehlern. */
+    record FallG(String text, List<BlockG> bloecke, List<GegenprobeG> gegenproben, List<String> bausteine,
+            List<BestandG> bestand, List<RestG> reste, List<KvnrBsnrHilfen.Bereich> misch, int verworfene,
+            int aufgegebene) {
+    }
+
+    /** Der Text von Teil 1g im Aufbau; {@link #zurueck} nimmt einen verworfenen Baustein ohne Rest zurueck. */
+    private static final class AufbauG {
+        final StringBuilder sb = new StringBuilder();
+        final List<BlockG> bloecke = new ArrayList<>();
+        final List<GegenprobeG> gegenproben = new ArrayList<>();
+        final List<String> bausteine = new ArrayList<>();
+        final List<BestandG> bestand = new ArrayList<>();
+        final List<RestG> reste = new ArrayList<>();
+        final List<KvnrBsnrHilfen.Bereich> misch = new ArrayList<>();
+        int verworfene;
+        int aufgegebene;
+
+        int[] marke() {
+            return new int[] {sb.length(), bloecke.size(), gegenproben.size(), bausteine.size(), bestand.size(),
+                reste.size(), misch.size()};
+        }
+
+        void zurueck(int[] marke) {
+            sb.setLength(marke[0]);
+            bloecke.subList(marke[1], bloecke.size()).clear();
+            gegenproben.subList(marke[2], gegenproben.size()).clear();
+            bausteine.subList(marke[3], bausteine.size()).clear();
+            bestand.subList(marke[4], bestand.size()).clear();
+            reste.subList(marke[5], reste.size()).clear();
+            misch.subList(marke[6], misch.size()).clear();
+        }
+    }
+
+    /** Teil 1g: Texte mit KVNR ohne Kontextwort, Gegenproben, Bestand-Bausteinen und Mischung mit Teil 1b bis 1f. */
+    static List<FallG> erzeugeKvG(long seed) {
+        Random r = new Random(seed);
+        List<FallG> faelle = new ArrayList<>(ANZAHL_TEXTE);
+        for (int i = 0; i < ANZAHL_TEXTE; i++) {
+            faelle.add(erzeugeTextG(r));
+        }
+        return faelle;
+    }
+
+    /**
+     * Ein Text aus 3 bis 10 Bausteinen. Die Mischbausteine (Teil 1b bis 1f) ziehen aus einem eigenen {@code Random},
+     * dessen Startwert je Text eine Zufallszahl des Hauptstroms ist; ihre Bloecke werden nicht erfasst, ihr Bereich
+     * steht in {@code misch}. Ein Baustein samt Trenner wird verworfen und neu gezogen, wenn der Text danach den
+     * Waechter der Testdatenregeln verletzt oder die Referenz der Regel 1b (unabhaengige Nachbildung von Kap. 4.3)
+     * nicht genau auf den erwarteten Bloecken trifft ({@link #referenzAbweichungenG}). Nach dem Aufbau werden die
+     * Bloecke markiert, die an einer dokumentierten Grenze liegen ({@link #grenzklasseG}), und die Erwartung der
+     * Bloecke geschwaecht, vor denen im Absatz ein KVNR-Kontextwort steht; beides zieht keine Zufallszahlen.
+     */
+    static FallG erzeugeTextG(Random r) {
+        AufbauG a = new AufbauG();
+        Random mischung = new Random(r.nextLong());
+        int n = 3 + r.nextInt(8);
+        for (int i = 0; i < n; i++) {
+            boolean angenommen = false;
+            for (int versuch = 0; versuch < MAX_VERSUCHE_G && !angenommen; versuch++) {
+                int[] marke = a.marke();
+                boolean ohneTrenner = bausteinG(r, mischung, a, i == 0, i == n - 1);
+                if (!ohneTrenner) {
+                    if (r.nextInt(8) == 0) {
+                        a.sb.append(waehle(r, UNSICHTBAR_C));
+                    }
+                    a.sb.append(waehle(r, TRENNER_G));
+                }
+                angenommen = aufbauOkG(a);
+                if (!angenommen) {
+                    a.zurueck(marke);
+                    a.verworfene++;
+                }
+            }
+            a.aufgegebene += angenommen ? 0 : 1;
+        }
+        String text = a.sb.toString();
+        List<BlockG> endgueltig = new ArrayList<>(a.bloecke.size());
+        for (BlockG block : a.bloecke) {
+            BlockG b = block;
+            String klasse = grenzklasseG(text, b);
+            if (!klasse.isEmpty()) {
+                b = b.markiert(klasse);
+            } else if (b.kontextPruefen() && b.konfidenz() >= 0 && KvnrBsnrHilfen.kvnrKontextReferenz(
+                    text.substring(KvnrFensterfernPruefung.absatzAnfang(text, b.start()), b.start()))) {
+                b = b.schwach();
+            }
+            endgueltig.add(b);
+        }
+        return new FallG(text, List.copyOf(endgueltig), List.copyOf(a.gegenproben), List.copyOf(a.bausteine),
+                List.copyOf(a.bestand), List.copyOf(a.reste), List.copyOf(a.misch), a.verworfene, a.aufgegebene);
+    }
+
+    private static boolean aufbauOkG(AufbauG a) {
+        String text = a.sb.toString();
+        return KvTestHilfen.neunerfenster(text, "00")[1] == 0 && KvnrSynthetischWaechter.pruefe(text).verstoesse() == 0
+                && referenzAbweichungenG(text, a.bloecke, a.bestand, a.misch) == 0;
+    }
+
+    /**
+     * Zahl der Abweichungen zwischen der Referenz der Regel 1b ({@code KvnrOhneKontextHilfen.kvnrOhneKontextReferenz},
+     * unabhaengig vom Produkt) und der Konstruktion: (a) ein Treffer der Referenz, der weder genau auf einem Block mit
+     * Referenz-Erwartung noch in einer Nummer des Bestand-Bausteins noch in einem Mischbereich liegt; (b) ein Block mit
+     * Referenz-Erwartung, den die Referenz nicht genau trifft; (c) ein Block ohne Referenz-Erwartung, auf dem oder an
+     * dem (Ueberschneidung) die Referenz trifft. In Teil 1g steht eine gueltige, geschlossene, grossgeschriebene KVNR
+     * mit Wortgrenzen und ohne Negativkontext also nur dort, wo es die Konstruktion vorsieht.
+     */
+    static int referenzAbweichungenG(String text, List<BlockG> bloecke, List<BestandG> bestand,
+            List<KvnrBsnrHilfen.Bereich> misch) {
+        int abweichungen = 0;
+        List<KvnrBsnrHilfen.Bereich> treffer = KvnrOhneKontextHilfen.kvnrOhneKontextReferenz(text);
+        for (KvnrBsnrHilfen.Bereich t : treffer) {
+            boolean erlaubt = false;
+            for (BlockG block : bloecke) {
+                erlaubt |= block.referenz() && block.start() == t.start() && block.ende() == t.ende();
+            }
+            for (BestandG s : bestand) {
+                erlaubt |= s.start() <= t.start() && t.ende() <= s.ende();
+            }
+            for (KvnrBsnrHilfen.Bereich m : misch) {
+                erlaubt |= m.start() <= t.start() && t.ende() <= m.ende();
+            }
+            abweichungen += erlaubt ? 0 : 1;
+        }
+        for (BlockG block : bloecke) {
+            boolean genau = false;
+            boolean beruehrt = false;
+            for (KvnrBsnrHilfen.Bereich t : treffer) {
+                genau |= block.start() == t.start() && block.ende() == t.ende();
+                beruehrt |= block.start() < t.ende() && t.start() < block.ende();
+            }
+            abweichungen += block.referenz() ? (genau ? 0 : 1) : (beruehrt ? 1 : 0);
+        }
+        return abweichungen;
+    }
+
+    private static boolean nichtAsciiZiffer(int codepunkt) {
+        return codepunkt > 0x7F && Character.isDigit(codepunkt);
+    }
+
+    /**
+     * Grenzklasse eines Blocks, ermittelt aus dem fertigen Text, unabhaengig vom KVNR-Erkenner; leer, wenn der Block an
+     * keiner dokumentierten Grenze liegt. Zwei Klassen: (a) {@link #GRENZE_AM_BUCHSTABEN}: unmittelbar vor dem Block
+     * steht ein ASCII-Buchstabe, und der Buchstabenlauf davor endet auf ein KVNR-Kontextwort
+     * ({@link #endetAufKvnrKontextwortF}; G-K9, auch Teil 1b schuetzt hier nicht, weil er vor dem Buchstaben eine
+     * Wortgrenze verlangt); (b) {@link #GRENZE_NICHT_ASCII_ZIFFER}: unmittelbar vor oder hinter dem Block steht eine
+     * Ziffer ausserhalb von ASCII (Lesart "sperrend" im Javadoc von {@code KvnrOhneKontext}, Nachtrag zu T-9, A-3).
+     */
+    static String grenzklasseG(String text, BlockG block) {
+        if (block.start() > 0 && endetAufKvnrKontextwortF(text, block.start())) {
+            return GRENZE_AM_BUCHSTABEN;
+        }
+        boolean davor = block.start() > 0 && nichtAsciiZiffer(Character.codePointBefore(text, block.start()));
+        boolean dahinter = block.ende() < text.length() && nichtAsciiZiffer(text.codePointAt(block.ende()));
+        return davor || dahinter ? GRENZE_NICHT_ASCII_ZIFFER : "";
+    }
+
+    private static String[] waehleG(Random r, String[][] liste) {
+        return liste[r.nextInt(liste.length)];
+    }
+
+    private static String gueltigG(Random r) {
+        return SynthetischeKvNummern.fremdKvnr(r, true);
+    }
+
+    private static String ungueltigG(Random r) {
+        return SynthetischeKvNummern.fremdKvnr(r, false);
+    }
+
+    private static void fundG(AufbauG a, String nummer, int blockart, double konfidenz, String quelle,
+            boolean referenz, boolean kontextPruefen, String vorn, String hinten) {
+        int start = a.sb.length();
+        a.sb.append(nummer);
+        a.bloecke.add(new BlockG(blockart, konfidenz, quelle, referenz, kontextPruefen, start, a.sb.length(), vorn,
+                hinten, ""));
+    }
+
+    /** Ein Block mit dem erwarteten Fund der Regel 1b (0,60, Quelle {@code kvnr-ohne-kontext}). */
+    private static void fund1bG(AufbauG a, String nummer, int blockart, boolean kontextPruefen, String vorn,
+            String hinten) {
+        fundG(a, nummer, blockart, KONF_1B_G, QUELLE_1B_G, true, kontextPruefen, vorn, hinten);
+    }
+
+    /** Ein Block mit dem erwarteten Fund aus Teil 1a bei direktem Kontext (0,95, Quelle {@code kvnr}). */
+    private static void fund1aG(AufbauG a, String nummer, int blockart, boolean referenz, String vorn,
+            String hinten) {
+        fundG(a, nummer, blockart, KONF_DIREKT_G, KvnrRecognizer.SOURCE, referenz, false, vorn, hinten);
+    }
+
+    /** Ein Baustein; {@code true}, wenn kein Trenner folgen soll (Block am Textende). */
+    private static boolean bausteinG(Random r, Random mischung, AufbauG a, boolean erste, boolean letzte) {
+        int wahl = r.nextInt(100);
+        if (erste && wahl < 12) {
+            blockFreiG(r, a, BLOCK_G_ANFANG);
+            return false;
+        }
+        if (letzte && wahl < 12) {
+            blockFreiG(r, a, BLOCK_G_ENDE);
+            return true;
+        }
+        if (wahl < 52) {
+            int summe = 0;
+            for (int g : GEWICHT_BLOCK_G) {
+                summe += g;
+            }
+            int x = r.nextInt(summe);
+            int b = 0;
+            while (x >= GEWICHT_BLOCK_G[b]) {
+                x -= GEWICHT_BLOCK_G[b];
+                b++;
+            }
+            kvnrBlockG(r, a, b);
+        } else if (wahl < 64) {
+            gegenprobeG(r, a);
+        } else if (wahl < 74) {
+            bestandBausteinG(r, a);
+        } else {
+            mischbausteinG(mischung, a);
+        }
+        return false;
+    }
+
+    private static void kvnrBlockG(Random r, AufbauG a, int blockart) {
+        switch (blockart) {
+            case BLOCK_G_FREI:
+                blockFreiG(r, a, BLOCK_G_FREI);
+                break;
+            case BLOCK_G_KW_WEIT:
+                blockKwWeitG(r, a);
+                break;
+            case BLOCK_G_LEERZEILE:
+                blockLeerzeileG(r, a);
+                break;
+            case BLOCK_G_NEGATIV:
+                blockNegativG(r, a);
+                break;
+            case BLOCK_G_K1:
+                blockK1G(r, a);
+                break;
+            case BLOCK_G_WIEDERHOLUNG:
+                blockWiederholungG(r, a);
+                break;
+            case BLOCK_G_DATEINAME:
+                blockDateinameG(r, a);
+                break;
+            case BLOCK_G_NACHBAR_IP:
+                blockNachbarIpG(r, a);
+                break;
+            case BLOCK_G_NICHT_ASCII:
+                blockNichtAsciiG(r, a);
+                break;
+            case BLOCK_G_AM_BUCHSTABEN:
+                blockAmBuchstabenG(r, a);
+                break;
+            default:
+                blockLangerPfadG(r, a);
+                break;
+        }
+    }
+
+    /** Frei, am Textanfang oder am Textende: Praefix, Grenzzeichen davor, die Nummer, Grenzzeichen dahinter. */
+    private static void blockFreiG(Random r, AufbauG a, int blockart) {
+        String[] vorn = blockart == BLOCK_G_ANFANG ? new String[] {"", "textanfang"} : waehleG(r, VORN_G);
+        String[] hinten = blockart == BLOCK_G_ENDE ? new String[] {"", "textende"} : waehleG(r, HINTEN_G);
+        if (blockart != BLOCK_G_ANFANG) {
+            a.sb.append(waehle(r, PRAEFIX_G));
+        }
+        a.sb.append(vorn[0]);
+        fund1bG(a, gueltigG(r), blockart, true, vorn[1], hinten[1]);
+        a.sb.append(hinten[0]);
+    }
+
+    /** Kontextwort und mindestens vier Fuellwoerter vor der Nummer: der Kontext ist erloschen (AK-11). */
+    private static void blockKwWeitG(Random r, AufbauG a) {
+        KwF kw = kwF(r, true);
+        String[] hinten = waehleG(r, HINTEN_G);
+        a.sb.append(schreibungF(r, kw.text())).append(waehle(r, DIREKT_F));
+        for (int i = 4 + r.nextInt(3); i > 0; i--) {
+            a.sb.append(waehle(r, FUELLWOERTER_F)).append(' ');
+        }
+        fund1bG(a, gueltigG(r), BLOCK_G_KW_WEIT, false, "leerzeichen", hinten[1]);
+        a.sb.append(hinten[0]);
+    }
+
+    /** Kontextwort, Leerzeile, Nummer: die Leerzeile beendet den Kontext (AK-9 der Vorgaenger). */
+    private static void blockLeerzeileG(Random r, AufbauG a) {
+        KwF kw = kwF(r, true);
+        String[] hinten = waehleG(r, HINTEN_G);
+        a.sb.append(schreibungF(r, kw.text())).append(r.nextBoolean() ? ":" : "");
+        a.sb.append(waehle(r, new String[] {"\n\n", "\r\n\r\n", "\n  \n", "\r\r"}));
+        fund1bG(a, gueltigG(r), BLOCK_G_LEERZEILE, false, "zeilenumbruch", hinten[1]);
+        a.sb.append(hinten[0]);
+    }
+
+    /**
+     * Negativliste im Umfeld (AK-14): Fuellwort statt Negativkontext direkt davor (Fund 0,60) oder ein Wort der Liste
+     * und davor {@code KVNR} (Fund 0,95 aus Teil 1a); die Gegenproben mit dem Wort direkt davor stehen bei den
+     * Gegenproben.
+     */
+    private static void blockNegativG(Random r, AufbauG a) {
+        String[] hinten = waehleG(r, HINTEN_G);
+        String wort = waehle(r, NEGATIV_WOERTER_G);
+        int v = r.nextInt(3);
+        if (v == 0) {
+            a.sb.append("Rechnung fuer Patient ");
+            fund1bG(a, gueltigG(r), BLOCK_G_NEGATIV, true, "leerzeichen", hinten[1]);
+        } else if (v == 1) {
+            a.sb.append(wort).append(waehle(r, NEGATIV_TRENNER_G)).append(waehle(r, FUELLWOERTER_F)).append(' ');
+            fund1bG(a, gueltigG(r), BLOCK_G_NEGATIV, true, "leerzeichen", hinten[1]);
+        } else {
+            a.sb.append(wort).append(' ').append(waehle(r, new String[] {"KVNR", "kvnr", "Versichertennummer"}))
+                    .append(waehle(r, new String[] {" ", ": ", " = "}));
+            fund1aG(a, gueltigG(r), BLOCK_G_NEGATIV, true, "leerzeichen", hinten[1]);
+        }
+        a.sb.append(hinten[0]);
+    }
+
+    /**
+     * K-1: LANR- oder IK-Kontextwort direkt vor der KVNR-Form (oder nachgestellt in Klammern). Auf Erkennerebene ein
+     * Fund 0,60; im Scan umschliesst er den LANR- oder IK-Fund auf den Ziffern.
+     */
+    private static void blockK1G(Random r, AufbauG a) {
+        boolean lanr = r.nextBoolean();
+        String kw = waehle(r, lanr ? KW_LANR_F : KW_IK_F);
+        String[] hinten = waehleG(r, HINTEN_G);
+        if (r.nextInt(100) < 25) {
+            String[] vorn = waehleG(r, VORN_G);
+            a.sb.append(vorn[0]);
+            fund1bG(a, gueltigG(r), BLOCK_G_K1, true, vorn[1], "leerzeichen");
+            a.sb.append(" (").append(kw).append(')');
+            a.bausteine.add("k1-nachgestellt");
+        } else {
+            a.sb.append(kw).append(waehle(r, KV_ZWISCHEN));
+            fund1bG(a, gueltigG(r), BLOCK_G_K1, true, "leerzeichen", hinten[1]);
+            a.sb.append(hinten[0]);
+            a.bausteine.add("k1-davor");
+        }
+    }
+
+    /**
+     * Dieselbe Nummer zweimal (AK-17): beide ohne Kontextwort; mit Kontextwort vor der ersten (Teil 1a, dann Teil 1b);
+     * Kontextwort vor der zweiten; die zweite mit Trenner hinter dem Buchstaben (anderer Platzhalter).
+     */
+    private static void blockWiederholungG(Random r, AufbauG a) {
+        String n = gueltigG(r);
+        int v = r.nextInt(4);
+        if (v == 0) {
+            fund1bG(a, n, BLOCK_G_WIEDERHOLUNG, true, "", "leerzeichen");
+            a.sb.append(" ... ");
+            fund1bG(a, n, BLOCK_G_WIEDERHOLUNG, true, "leerzeichen", "");
+        } else if (v == 1) {
+            a.sb.append("KVNR ");
+            fund1aG(a, n, BLOCK_G_WIEDERHOLUNG, true, "leerzeichen", "leerzeichen");
+            a.sb.append(" ... ");
+            fundG(a, n, BLOCK_G_WIEDERHOLUNG, KONF_SCHWACH_G, QUELLE_1B_G, true, false, "leerzeichen", "");
+        } else if (v == 2) {
+            fund1bG(a, n, BLOCK_G_WIEDERHOLUNG, true, "", "leerzeichen");
+            a.sb.append(" ... KVNR ");
+            fund1aG(a, n, BLOCK_G_WIEDERHOLUNG, true, "leerzeichen", "");
+        } else {
+            fund1bG(a, n, BLOCK_G_WIEDERHOLUNG, true, "", "leerzeichen");
+            a.sb.append(" ... KVNR ");
+            String getrennt = n.charAt(0) + waehle(r, GRUPPENTRENNER) + n.substring(1);
+            fund1aG(a, getrennt, BLOCK_G_WIEDERHOLUNG, false, "leerzeichen", "");
+        }
+        a.bausteine.add("wiederholung-" + v);
+    }
+
+    /** Dateiname ohne Pfad (AK-15): die Nummer und eine Endung ergeben einen KVNR-Fund. */
+    private static void blockDateinameG(Random r, AufbauG a) {
+        String[] vorn = waehleG(r, VORN_G);
+        a.sb.append("Datei ").append(vorn[0]);
+        fund1bG(a, gueltigG(r), BLOCK_G_DATEINAME, true, vorn[1], "punkt-endung");
+        a.sb.append(waehle(r, ENDUNGEN_G));
+    }
+
+    /** Die Nummer neben einer IP-Adresse, durch Komma und Leerzeichen getrennt (aneinandergrenzende Funde). */
+    private static void blockNachbarIpG(Random r, AufbauG a) {
+        String[] vorn = waehleG(r, VORN_G);
+        a.sb.append(vorn[0]);
+        if (r.nextBoolean()) {
+            fund1bG(a, gueltigG(r), BLOCK_G_NACHBAR_IP, true, vorn[1], "komma");
+            a.sb.append(", ").append(ipKv(r));
+        } else {
+            a.sb.append(ipKv(r)).append(", ");
+            fund1bG(a, gueltigG(r), BLOCK_G_NACHBAR_IP, true, "leerzeichen", "");
+        }
+    }
+
+    /** Grenzblock: eine Ziffer ausserhalb von ASCII direkt vor oder hinter der Nummer (Lesart "sperrend"). */
+    private static void blockNichtAsciiG(Random r, AufbauG a) {
+        String ziffer = waehle(r, NICHT_ASCII_ZIFFERN_G);
+        boolean davor = r.nextBoolean();
+        a.sb.append(waehle(r, PRAEFIX_G)).append(davor ? ziffer : " ");
+        fundG(a, gueltigG(r), BLOCK_G_NICHT_ASCII, KONF_KEINE_G, QUELLE_1B_G, false, false,
+                davor ? "nicht-ascii-ziffer" : "leerzeichen", davor ? "leerzeichen" : "nicht-ascii-ziffer");
+        a.sb.append(davor ? " " : ziffer);
+    }
+
+    /** Grenzblock: Kontextwort ohne Trenner am Buchstaben der Nummer (G-K9); das Wort endet auf einen Buchstaben. */
+    private static void blockAmBuchstabenG(Random r, AufbauG a) {
+        KwF kw = kwF(r, false);
+        while (!Character.isLetter(kw.text().charAt(kw.text().length() - 1))) {
+            kw = kwF(r, false);
+        }
+        a.sb.append(kw.text());
+        fundG(a, gueltigG(r), BLOCK_G_AM_BUCHSTABEN, KONF_KEINE_G, QUELLE_1B_G, false, false, "", "leerzeichen");
+        a.sb.append(' ');
+    }
+
+    /** Ein langer Pfad zwischen Kontextwort und Nummer: Kontext erloschen (G-K15), Teil 1b findet die Nummer. */
+    private static void blockLangerPfadG(Random r, AufbauG a) {
+        KwF kw = kwF(r, false);
+        String[] hinten = waehleG(r, HINTEN_G);
+        a.sb.append(kw.text()).append(' ').append(waehle(r, LANGE_PFADE_F)).append(' ');
+        fund1bG(a, gueltigG(r), BLOCK_G_LANGER_PFAD, false, "leerzeichen", hinten[1]);
+        a.sb.append(hinten[0]);
+    }
+
+    /**
+     * Gegenproben nach AK-12 bis AK-14: ungueltige Pruefziffer, Kleinbuchstabe, Trenner in der Nummer, zwei Buchstaben,
+     * acht oder zehn Ziffern, verletzte Wortgrenze vorn oder hinten (jedes Zeichen aus AK-13), Dezimalpunkt oder
+     * -komma mit Ziffer dahinter und ein Wort der Negativliste direkt davor (mit allen Trennern, auch Tab,
+     * Zeilenumbruch und geschuetztem Leerzeichen). Die Gegenproben tragen keinen Block; allein liefern weder der
+     * KVNR-Erkenner noch die Referenz einen Fund (geprueft in {@code pruefeKvG}).
+     */
+    private static void gegenprobeG(Random r, AufbauG a) {
+        int v = r.nextInt(GEGENPROBEN_G.length);
+        int vor = a.sb.length();
+        String gueltig = gueltigG(r);
+        switch (v) {
+            case 0:
+                a.sb.append(waehle(r, PRAEFIX_G)).append(ungueltigG(r));
+                break;
+            case 1:
+                a.sb.append(waehle(r, PRAEFIX_G)).append(gueltig.toLowerCase(Locale.ROOT));
+                break;
+            case 2:
+                String t = waehle(r, GRUPPENTRENNER);
+                if (r.nextBoolean()) {
+                    a.sb.append(gueltig.charAt(0)).append(t).append(gueltig, 1, gueltig.length());
+                } else {
+                    int[] gruppen = GRUPPEN_F[r.nextInt(GRUPPEN_F.length)];
+                    int pos = 1;
+                    a.sb.append(gueltig.charAt(0));
+                    for (int i = 0; i < gruppen.length; i++) {
+                        a.sb.append(i > 0 ? t : "").append(gueltig, pos, pos + gruppen[i]);
+                        pos += gruppen[i];
+                    }
+                }
+                break;
+            case 3:
+                a.sb.append((char) ('A' + r.nextInt(26))).append(gueltig);
+                break;
+            case 4:
+                a.sb.append(gueltig, 0, gueltig.length() - 1);
+                break;
+            case 5:
+                a.sb.append(gueltig).append(r.nextInt(10));
+                break;
+            case 6:
+                a.sb.append(waehle(r, WORTGRENZE_G)).append(gueltig);
+                break;
+            case 7:
+                a.sb.append(gueltig).append(waehle(r, WORTGRENZE_G));
+                break;
+            case 8:
+                a.sb.append(gueltig).append(r.nextBoolean() ? '.' : ',').append(1 + r.nextInt(9));
+                break;
+            default:
+                String wort = waehle(r, NEGATIV_WOERTER_G);
+                int fall = r.nextInt(3);
+                wort = fall == 0 ? wort : fall == 1 ? wort.toLowerCase(Locale.ROOT) : wort.toUpperCase(Locale.ROOT);
+                a.sb.append(wort).append(waehle(r, NEGATIV_TRENNER_G)).append(gueltig);
+                break;
+        }
+        a.gegenproben.add(new GegenprobeG(GEGENPROBEN_G[v], vor, a.sb.length()));
+    }
+
+    /**
+     * Bestand-Bausteine (Nachtrag zu T-11, Punkt 2): Eine gueltige KVNR-Form in oder an E-Mail, Pfad oder URL: vom
+     * Bestand gedeckt, kein KVNR-Fund im Bereich (AK-15); und KVNR-Kontextwort, Buchstabe, Ziffern in zwei Gruppen,
+     * deren hintere der lokale Teil einer E-Mail verschluckt: bleiben genau drei Ziffern ausserhalb, entsteht ein
+     * Restfund (Quelle {@code kvnr-rest}, hoechstens 0,80 trotz Konfidenz 0,95 des Kandidaten, Mutanten der Schwelle
+     * und des Deckels fallen auf); bleiben zwei, gibt es keinen Restfund (G-K14).
+     */
+    private static void bestandBausteinG(Random r, AufbauG a) {
+        int v = r.nextInt(BESTAND_G.length);
+        String n = gueltigG(r);
+        a.sb.append(waehle(r, new String[] {"", "Datei ", "Wert "}));
+        if (v >= 6) {
+            int vorne = v == 6 ? 3 : 2;
+            a.sb.append("KVNR ");
+            int start = a.sb.length();
+            a.sb.append(n, 0, 1 + vorne).append(' ').append(n, 1 + vorne, n.length()).append("@example.invalid");
+            a.reste.add(new RestG(start, start + 1 + vorne, v == 6 ? KONF_REST_G : KONF_SCHWACH_G));
+        } else {
+            int start;
+            switch (v) {
+                case 0:
+                    start = a.sb.length();
+                    a.sb.append(n).append("@example.invalid");
+                    break;
+                case 1:
+                    start = a.sb.length();
+                    a.sb.append(n).append(".erika@example.invalid");
+                    break;
+                case 2:
+                    a.sb.append("/srv/x/");
+                    start = a.sb.length();
+                    a.sb.append(n).append(".pdf");
+                    break;
+                case 3:
+                    a.sb.append("C:").append(BS_F).append("Praxis").append(BS_F);
+                    start = a.sb.length();
+                    a.sb.append(n).append(BS_F).append("x.txt");
+                    break;
+                case 4:
+                    a.sb.append("http://a.invalid/?id=");
+                    start = a.sb.length();
+                    a.sb.append(n);
+                    break;
+                default:
+                    a.sb.append("http://a.invalid/x/");
+                    start = a.sb.length();
+                    a.sb.append(n);
+                    break;
+            }
+            a.bestand.add(new BestandG(BESTAND_G[v], start, start + n.length()));
+        }
+        a.bausteine.add("bestand-" + BESTAND_G[v]);
+    }
+
+    /**
+     * Mischbaustein: aus Teil 1f (ein Baustein samt Pruefung der Teil-1f-Regel, dass eine enge KVNR-Form nur in den
+     * Bloecken von 1f steht) oder aus Teil 1b bis 1e und der Umgebung, mit dem eigenen {@code Random}. Der Bereich
+     * steht in {@code misch}: Treffer der Referenz sind dort erlaubt und nicht erwartet.
+     */
+    private static void mischbausteinG(Random m, AufbauG a) {
+        int start = a.sb.length();
+        if (m.nextInt(100) < 50) {
+            AufbauF f = new AufbauF();
+            int[] marke = f.marke();
+            boolean ok = false;
+            for (int v = 0; v < MAX_VERSUCHE_F && !ok; v++) {
+                f.zurueck(marke);
+                kvBausteinF(m, new Random(m.nextLong()), f);
+                ok = aufbauOkF(f);
+            }
+            if (ok) {
+                a.sb.append(f.sb);
+            }
+            a.bausteine.add("misch-1f");
+        } else {
+            mischbausteinF(m, a.sb);
+            a.bausteine.add("misch-1b-bis-1e");
+        }
+        if (a.sb.length() > start) {
+            a.misch.add(new KvnrBsnrHilfen.Bereich(start, a.sb.length()));
+        }
+    }
+
+    // ------------------------------------------------------------------ Teil 1g: Lauf und Pruefung
+
+    private static Lauf fuehreKvGAus() {
+        Lauf lauf = new Lauf(SEED_TEXTE_KV_G);
+        TextScanner scanner = TextScanner.standard();
+        Random auswahl = new Random(SEED_AUSWAHL_KV_G);
+        List<FallG> faelle = erzeugeKvG(SEED_TEXTE_KV_G);
+        for (int it = 0; it < faelle.size(); it++) {
+            FallG fall = faelle.get(it);
+            String text = fall.text();
+            if (KvTestHilfen.neunerfenster(text, "00")[1] != 0) {
+                lauf.verletzt("waechter-gueltiges-neunerfenster-ohne-00", it);
+                continue;
+            }
+            if (KvnrSynthetischWaechter.pruefe(text).verstoesse() != 0) {
+                lauf.verletzt("waechter-kvnr-synthetisch", it);
+                continue;
+            }
+            if (text.contains("[[")) {
+                lauf.verletzt("generator-doppelklammer", it);
+                continue;
+            }
+            try {
+                pruefeKvFText(lauf, scanner, auswahl, it, text);
+                pruefeKvG(lauf, scanner, it, fall);
+            } catch (RuntimeException e) {
+                lauf.verletzt("ausnahme-im-lauf", it);
+            }
+        }
+        return lauf;
+    }
+
+    /**
+     * Die Kandidaten mit der Quelle der Regel 1b sind genau die Treffer der Referenz, die kein Kandidat aus Teil 1a
+     * ueberlappt (Kap. 4.3: ein Kandidat, der einen Fund mit Kontextwort ueberlappt, entfaellt). Der Vergleich ist die
+     * Gleichheit der Bereichsmengen in beiden Richtungen: kein Kandidat ohne Referenz, keine Referenz ohne Kandidat.
+     */
+    static boolean kandidaten1bGleichReferenzG(List<Finding> kandidaten, List<KvnrBsnrHilfen.Bereich> referenz) {
+        Set<String> erwartet = new TreeSet<>();
+        for (KvnrBsnrHilfen.Bereich b : referenz) {
+            boolean ueberlappt = false;
+            for (Finding c : kandidaten) {
+                ueberlappt |= !QUELLE_1B_G.equals(c.source()) && c.start() < b.ende() && b.start() < c.end();
+            }
+            if (!ueberlappt) {
+                erwartet.add(b.start() + ":" + b.ende());
+            }
+        }
+        Set<String> ist = new TreeSet<>();
+        for (Finding c : kandidaten) {
+            if (QUELLE_1B_G.equals(c.source())) {
+                ist.add(c.start() + ":" + c.end());
+            }
+        }
+        return erwartet.equals(ist);
+    }
+
+    private static Finding kandidatAufG(List<Finding> kandidaten, int start, int ende) {
+        for (Finding c : kandidaten) {
+            if (c.start() == start && c.end() == ende && FindingType.KVNR.equals(c.type())) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    private static boolean schwachOkG(Finding c) {
+        return c.confidence() >= KONF_1B_G - TOLERANZ_G
+                && (QUELLE_1B_G.equals(c.source()) || KvnrRecognizer.SOURCE.equals(c.source()));
+    }
+
+    /**
+     * Klassen und strikte Pruefungen je Text. Je Text einmal ({@code kvnr-*}) bzw. je Block ({@code bloecke-*},
+     * {@code vorn-*}, {@code hinten-*}): (1) Die Referenz der Regel 1b trifft genau die Bloecke mit Referenz-Erwartung
+     * und liegt sonst nur in Bestand-Bausteinen und Mischbereichen ({@code referenz-abweichung}, strikt 0); jeder
+     * Treffer der Referenz ist im Scan abgedeckt ({@code referenz-treffer-ungedeckt}, strikt 0: eine gueltige,
+     * geschlossene, grossgeschriebene Form mit Wortgrenzen und ohne Negativkontext bleibt nie im Klartext, ausser der
+     * Bestand deckt sie). (2) Jeder nicht markierte Block hat auf Erkennerebene genau einen Kandidaten auf genau
+     * seinem Bereich ({@code kandidat-fehlt}, {@code kandidat-nicht-eindeutig}) mit der erwarteten Konfidenz und
+     * Quelle ({@code kandidat-abweichend}); schwache Erwartung: mindestens 0,60 aus Teil 1a oder 1b. (3) Je Block die
+     * Zaehler: {@code block-ohne-scan-abdeckung} fuer nicht markierte Bloecke ohne Scan-Fund, der den Bereich ganz
+     * deckt (strikt 0); markierte Bloecke zaehlen getrennt, auch je Grenzklasse. (4) Gegenproben: allein gescannt
+     * liefern weder Erkenner noch Referenz einen Fund; im Text vermerkt, ob ein Scan-Fund sie beruehrt (nur Zaehler,
+     * die Gegenprobe ist Absicht). (5) Bestand-Bausteine: Die Nummer liegt in einem Fund von E-Mail, Pfad oder URL, und
+     * kein KVNR-Fund beruehrt sie; Restfunde genau wie erwartet. Danach pseudonymisiert {@code pruefeErsetzenF} alle
+     * Scan-Funde (vollstaendig ersetzt, Platzhalter konsistent, kein Rest, Roundtrip).
+     */
+    static void pruefeKvG(Lauf lauf, TextScanner scanner, int it, FallG fall) {
+        pruefeKvG(lauf, scanner, STANDARD_ERKENNER.get(ERKENNER_KVNR), it, fall);
+    }
+
+    /** Wie oben mit einem anderen KVNR-Erkenner (Selbsttests mit kuenstlichen Erkennern). */
+    static void pruefeKvG(Lauf lauf, TextScanner scanner, Recognizer kvnr, int it, FallG fall) {
+        String text = fall.text();
+        List<Finding> kandidaten = kvnr.detect(text);
+        List<Finding> scan = scanner.scan(text);
+        for (int i = 0; i < fall.verworfene(); i++) {
+            lauf.klasse("baustein-verworfen");
+        }
+        for (int i = 0; i < fall.aufgegebene(); i++) {
+            lauf.klasse("baustein-aufgegeben");
+        }
+        for (String baustein : fall.bausteine()) {
+            lauf.klasse("baustein-" + baustein);
+        }
+        if (referenzAbweichungenG(text, fall.bloecke(), fall.bestand(), fall.misch()) != 0) {
+            lauf.verletzt("referenz-abweichung", it);
+        }
+        List<KvnrBsnrHilfen.Bereich> referenz = KvnrOhneKontextHilfen.kvnrOhneKontextReferenz(text);
+        if (!kandidaten1bGleichReferenzG(kandidaten, referenz)) {
+            lauf.verletzt("kandidaten-1b-ungleich-referenz", it);
+        }
+        for (KvnrBsnrHilfen.Bereich b : referenz) {
+            lauf.klasse("referenz-treffer");
+            if (!imScanAbgedeckt(scan, b.start(), b.ende())) {
+                lauf.verletzt("referenz-treffer-ungedeckt", it);
+            }
+        }
+        for (BlockG block : fall.bloecke()) {
+            pruefeBlockG(lauf, it, block, kandidaten, scan);
+        }
+        for (GegenprobeG g : fall.gegenproben()) {
+            String probe = text.substring(g.start(), g.ende());
+            lauf.klasse("gegenprobe-" + g.name());
+            if (!kvnr.detect(probe).isEmpty()) {
+                lauf.verletzt("gegenprobe-mit-kvnr-fund", it);
+            }
+            if (!KvnrOhneKontextHilfen.kvnrOhneKontextReferenz(probe).isEmpty()) {
+                lauf.verletzt("gegenprobe-referenz-trifft", it);
+            }
+            boolean beruehrt = false;
+            for (Finding f : scan) {
+                beruehrt |= f.start() < g.ende() && g.start() < f.end();
+            }
+            lauf.klasse((beruehrt ? "gegenprobe-im-text-mit-fund-" : "gegenprobe-im-text-ohne-fund-") + g.name());
+        }
+        for (BestandG s : fall.bestand()) {
+            boolean vomBestand = false;
+            boolean kvnrFund = false;
+            for (Finding f : scan) {
+                vomBestand |= bestandstyp(f) && f.type() != FindingType.IP && f.start() <= s.start()
+                        && f.end() >= s.ende();
+                kvnrFund |= FindingType.KVNR.equals(f.type()) && f.start() < s.ende() && s.start() < f.end();
+            }
+            lauf.klasse("bestand-" + s.name() + (vomBestand && !kvnrFund ? "-ok" : "-abweichend"));
+            if (!vomBestand) {
+                lauf.verletzt("bestand-nummer-nicht-vom-bestand-gedeckt", it);
+            }
+            if (kvnrFund) {
+                lauf.verletzt("bestand-kvnr-fund-in-bestand", it);
+            }
+        }
+        for (RestG rest : fall.reste()) {
+            pruefeRestG(lauf, it, rest, scan);
+        }
+        pruefeErsetzenF(lauf, it, text, scan);
+    }
+
+    /**
+     * Restfund am Bestand (Nachtrag zu T-11, Punkt 2): Die Erwartung gilt, wenn der Fund der E-Mail genau hinter dem
+     * Leerzeichen nach den vorderen Ziffern beginnt, wie konstruiert. Beginnt er davor (ein LANR- oder IK-Kandidat aus
+     * einem Kontext weiter vorn verschmilzt mit der E-Mail und deckt die vorderen Ziffern, G-K14), ist der Fall
+     * ueberlagert. Ein ueberlagerter Fall wird gezaehlt und inhaltlich geprueft ({@link #ueberlagertGedecktG}): Alle
+     * neun Ziffern der Nummer muessen von einem einzigen Fund von E-Mail, IP, URL oder Pfad gedeckt sein (hoechstens
+     * der Buchstabe bleibt frei); fehlt der E-Mail-Fund ganz oder bleibt eine Ziffer frei, ist das ein Verstoss
+     * ({@code rest-ueberlagert-ziffern-ungedeckt}). Der deckende zusammengelegte Fund hat die Stufe "fraglich"
+     * (0,50, Nachtrag 2 zu T-11); das ist beim Anzeigen im UI zu beachten.
+     */
+    private static void pruefeRestG(Lauf lauf, int it, RestG rest, List<Finding> scan) {
+        boolean wieKonstruiert = false;
+        Finding gefunden = null;
+        boolean beruehrt = false;
+        for (Finding f : scan) {
+            wieKonstruiert |= bestandstyp(f) && f.start() == rest.ende() + 1;
+            if (FindingType.KVNR.equals(f.type()) && f.start() < rest.ende() && rest.start() < f.end()) {
+                beruehrt = true;
+                if (f.start() == rest.start() && f.end() == rest.ende()) {
+                    gefunden = f;
+                }
+            }
+        }
+        String art = rest.konfidenz() < 0 ? "unter-drei" : "drei";
+        if (!wieKonstruiert) {
+            lauf.klasse("rest-" + art + "-ueberlagert");
+            boolean gedeckt = ueberlagertGedecktG(rest, scan);
+            lauf.klasse(gedeckt ? "rest-ueberlagert-gedeckt" : "rest-ueberlagert-ungedeckt");
+            if (!gedeckt) {
+                lauf.verletzt("rest-ueberlagert-ziffern-ungedeckt", it);
+            }
+            return;
+        }
+        if (rest.konfidenz() < 0) {
+            lauf.klasse(beruehrt ? "rest-unter-drei-mit-fund" : "rest-unter-drei-ohne-fund");
+            if (beruehrt) {
+                lauf.verletzt("rest-fund-unerwartet", it);
+            }
+            return;
+        }
+        boolean passt = gefunden != null && KvnrRecognizer.SOURCE_REST.equals(gefunden.source())
+                && Math.abs(gefunden.confidence() - rest.konfidenz()) < TOLERANZ_G;
+        lauf.klasse(passt ? "rest-drei-ziffern-ok" : "rest-drei-ziffern-abweichend");
+        if (!passt) {
+            lauf.verletzt("rest-fund-abweichend", it);
+        }
+    }
+
+    /**
+     * Ueberlagerter Restfall: Ein einziger Bestandsfund (E-Mail, IP, URL, Pfad) beginnt spaetestens an der ersten
+     * Ziffer der Nummer und endet nicht vor ihrer letzten Ziffer. Die Ziffern liegen von {@code rest.start() + 1} bis
+     * zum Ende der hinteren Gruppe hinter dem Leerzeichen bei {@code rest.ende()}; nur der Buchstabe davor darf frei
+     * bleiben.
+     */
+    private static boolean ueberlagertGedecktG(RestG rest, List<Finding> scan) {
+        int vorne = rest.ende() - rest.start() - 1;
+        int ersteZiffer = rest.start() + 1;
+        int hinterLetzterZiffer = rest.ende() + 1 + (ZIFFERN_NUMMER_G - vorne);
+        for (Finding f : scan) {
+            if (bestandstyp(f) && f.start() <= ersteZiffer && f.end() >= hinterLetzterZiffer) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void pruefeBlockG(Lauf lauf, int it, BlockG block, List<Finding> kandidaten,
+            List<Finding> scan) {
+        String art = BLOCK_NAMEN_G[block.blockart()];
+        lauf.klasse("bloecke-" + art);
+        if (!block.vorn().isEmpty()) {
+            lauf.klasse("vorn-" + block.vorn());
+        }
+        if (!block.hinten().isEmpty()) {
+            lauf.klasse("hinten-" + block.hinten());
+        }
+        Finding c = kandidatAufG(kandidaten, block.start(), block.ende());
+        boolean abgedeckt = imScanAbgedeckt(scan, block.start(), block.ende());
+        if (!block.grenze().isEmpty()) {
+            lauf.klasse("block-markiert");
+            lauf.klasse("block-markiert-" + block.grenze());
+            lauf.klasse(abgedeckt ? "markiert-mit-abdeckung" : "markiert-ohne-abdeckung");
+            lauf.klasse((abgedeckt ? "markiert-mit-abdeckung-" : "markiert-ohne-abdeckung-") + block.grenze());
+            lauf.klasse(c != null ? "markiert-mit-kandidat" : "markiert-ohne-kandidat");
+            return;
+        }
+        if (block.konfidenz() == KONF_KEINE_G) {
+            lauf.verletzt("grenzblock-nicht-markiert", it);
+            return;
+        }
+        int ueberlappend = 0;
+        for (Finding k : kandidaten) {
+            ueberlappend += k.start() < block.ende() && block.start() < k.end() ? 1 : 0;
+        }
+        if (c == null) {
+            lauf.verletzt("kandidat-fehlt", it);
+        } else {
+            if (ueberlappend != 1) {
+                lauf.verletzt("kandidat-nicht-eindeutig", it);
+            }
+            boolean passt = block.konfidenz() == KONF_SCHWACH_G ? schwachOkG(c)
+                    : Math.abs(c.confidence() - block.konfidenz()) < TOLERANZ_G && block.quelle().equals(c.source());
+            if (!passt) {
+                lauf.verletzt("kandidat-abweichend", it);
+            }
+            boolean eins = QUELLE_1B_G.equals(c.source());
+            lauf.klasse(eins ? "kvnr-fund-1b" : "kvnr-fund-1a");
+            lauf.klasse((eins ? "kvnr-fund-1b-" : "kvnr-fund-1a-") + art);
+            lauf.klasse(block.konfidenz() == KONF_SCHWACH_G ? "block-erwartung-schwach" : "block-erwartung-strikt");
+        }
+        if (!abgedeckt) {
+            lauf.klasse("block-ohne-scan-abdeckung");
+            lauf.klasse("block-ohne-scan-abdeckung-" + art);
+        }
+        if (block.blockart() == BLOCK_G_K1) {
+            boolean ersetzt = false;
+            for (Finding f : scan) {
+                ersetzt |= FindingType.KVNR.equals(f.type()) && f.start() <= block.start() && f.end() >= block.ende();
+            }
+            lauf.klasse(ersetzt ? "k1-scan-kvnr" : "k1-scan-ohne-kvnr");
+        }
+    }
+
+    // ------------------------------------------------------------------ Teil 1g: Tests (kvnr-bsnr-erkennung T-11)
+
+    /** Hashwert der Teil-1g-Textfolge (kvnr-bsnr-erkennung T-11, nach dem Anlegen des Generators gemessen). */
+    static final int HASH_TEIL_1G = 0xffbba9d5;
+
+    private static List<String> texteTeil1g() {
+        List<String> texte = new ArrayList<>();
+        for (FallG f : erzeugeKvG(SEED_TEXTE_KV_G)) {
+            texte.add(f.text());
+        }
+        return texte;
+    }
+
+    @Test
+    void t11_teil1gTextfolgeIstFestgehalten() {
+        List<String> texte = texteTeil1g();
+        assertEquals(HASH_TEIL_1G, texte.hashCode(), "Hashwert der Teil-1g-Textfolge, Startwert " + SEED_TEXTE_KV_G
+                + ", gemessen 0x" + Integer.toHexString(texte.hashCode()));
+    }
+
+    @Test
+    void t11_teil1gZweiLaeufeMitDemselbenStartwertErzeugenDieselbeTextfolge() {
+        List<String> a = texteTeil1g();
+        assertEquals(ANZAHL_TEXTE, a.size());
+        assertTextfolgeGleich(a, texteTeil1g(), SEED_TEXTE_KV_G, "Teil 1g: Textfolge");
+        assertTrue(erzeugeKvG(SEED_TEXTE_KV_G).equals(erzeugeKvG(SEED_TEXTE_KV_G)),
+                "Teil 1g: Bloecke, Gegenproben, Bestand-Bausteine und Mischbereiche sind deterministisch");
+        assertNotEquals(HASH_TEIL_1F, a.hashCode(), "Teil 1g unterscheidet sich von Teil 1f");
+        assertNotEquals(HASH_TEIL_1E, a.hashCode(), "Teil 1g unterscheidet sich von Teil 1e");
+        assertNotEquals(HASH_TEIL_1D, a.hashCode(), "Teil 1g unterscheidet sich von Teil 1d");
+        assertNotEquals(HASH_TEIL_1C, a.hashCode(), "Teil 1g unterscheidet sich von Teil 1c");
+        assertNotEquals(HASH_TEIL_1B, a.hashCode(), "Teil 1g unterscheidet sich von Teil 1b");
+        assertNotEquals(HASH_TEIL_1, a.hashCode(), "Teil 1g unterscheidet sich von Teil 1");
+    }
+
+    private static void keineG(String eigenschaft) {
+        assertEquals(0, LAUF_KV_G.anzahl(eigenschaft), "Teil 1g: " + LAUF_KV_G.meldung(eigenschaft));
+    }
+
+    @Test
+    void t11_teil1g_waechterUndGeneratorSindSauber() {
+        keineG("waechter-gueltiges-neunerfenster-ohne-00");
+        keineG("waechter-kvnr-synthetisch");
+        keineG("generator-doppelklammer");
+    }
+
+    /** AK-17: Roundtrip zeichengleich ohne Meldung, auch wenn alle Funde ersetzt werden. */
+    @Test
+    void t11_teil1g_roundtripIstZeichengleichOhneMeldung() {
+        keineG("ak45-roundtrip-ungleich");
+        keineG("ak45-pseudonymisierung-wirft");
+        keineG("ak45-meldung");
+        keineG("ak17-roundtrip-alle-funde-ungleich");
+        keineG("ak17-roundtrip-meldung");
+        keineG("ausnahme-im-lauf");
+    }
+
+    @Test
+    void t11_teil1g_scanInvarianteUndListenInvariante() {
+        keineG("ak1-scan-invariante");
+        keineG("ak1-liste-invariante");
+    }
+
+    /**
+     * Schutzgarantie ueber {@code STANDARD_ERKENNER}: Jede Position, die ein Kandidat eines Erkenners abdeckt, ist von
+     * einem Scan-Fund abgedeckt, ausser in Kandidaten des nachrangigen KVNR-Erkenners, die einen Bestandsfund schneiden
+     * (zugeschnitten, mit weniger als drei Ziffern je Luecke; wie in Teil 1f). Texte mit zugeschnittenem Kandidaten:
+     * exakt 155 (die Bestand-Bausteine mit Nummer in E-Mail, URL und Pfad und die Restfunde).
+     */
+    @Test
+    void t11_teil1g_schutzgarantie_jederKandidatDerStandardErkennerIstImScanAbgedeckt() {
+        keineG("ak7a-kandidat-nicht-im-scan");
+        assertEquals(155, LAUF_KV_G.klasse_("kandidat-position-am-bestand-zugeschnitten"),
+                "Texte mit zugeschnittenem Kandidaten, Startwert " + SEED_TEXTE_KV_G);
+        keineG("ak7e-fremdtext-im-scan");
+        keineG("ak7e-bereiche-nicht-verschmolzen");
+        assertEquals(155, LAUF_KV_G.klasse_("bereiche-wegen-zuschnitt"),
+                "Texte, deren Bereiche wegen des Zuschneidens nicht verschmolzen sind, Startwert " + SEED_TEXTE_KV_G);
+    }
+
+    /**
+     * AK-17, AK-21: keine Ziffernkette und keine Form (Buchstabe und Ziffern) eines Fundes im Ausgabetext, derselbe
+     * Wert hat denselben Platzhalter (auch einmal mit und einmal ohne Kontextwort), verschiedene Werte (auch mit und
+     * ohne Trenner) haben verschiedene.
+     */
+    @Test
+    void t11_teil1g_ausgabetextOhneRestEinesFundesUndPlatzhalterSindKonsistent() {
+        keineG("ak23-fund-nicht-vollstaendig-ersetzt");
+        keineG("ak17-form-eines-fundes-im-ausgabetext");
+        keineG("ak17-platzhalter-nicht-lesbar");
+        keineG("ak17-konsistenz");
+    }
+
+    /**
+     * Die Erkennung ohne Kontextwort ueber die ganze Kette, alles strikt 0: Die Kandidaten mit der Quelle der Regel 1b
+     * sind genau die Treffer der unabhaengigen Referenz (ohne die von einem Fund aus Teil 1a ueberlappten); die
+     * Referenz trifft genau die erwarteten Bloecke; jeder nicht markierte Block hat genau einen Kandidaten auf seinem
+     * Bereich mit der erwarteten Konfidenz und Quelle; jeder Treffer der Referenz ist im Scan abgedeckt (eine gueltige,
+     * geschlossene, grossgeschriebene Form mit Wortgrenzen und ohne Negativkontext bleibt nie im Klartext, wenn nicht
+     * der Bestand sie deckt). Ein Wert ungleich 0 ist ein Befund, keine Erwartung zum Anpassen.
+     */
+    @Test
+    void t11_teil1g_referenzUndKandidaten_stimmenMitDerKonstruktionUeberein() {
+        keineG("referenz-abweichung");
+        keineG("kandidaten-1b-ungleich-referenz");
+        keineG("referenz-treffer-ungedeckt");
+        keineG("kandidat-fehlt");
+        keineG("kandidat-nicht-eindeutig");
+        keineG("kandidat-abweichend");
+        keineG("grenzblock-nicht-markiert");
+    }
+
+    /**
+     * Gegenproben (AK-12 bis AK-14), Bestand-Bausteine (AK-15, Nachtrag zu T-11 Punkt 2) und Restfunde, alles strikt 0.
+     */
+    @Test
+    void t11_teil1g_gegenprobenBestandUndRestfunde_stimmenMitDerKonstruktionUeberein() {
+        keineG("gegenprobe-mit-kvnr-fund");
+        keineG("gegenprobe-referenz-trifft");
+        keineG("bestand-nummer-nicht-vom-bestand-gedeckt");
+        keineG("bestand-kvnr-fund-in-bestand");
+        keineG("rest-fund-abweichend");
+        keineG("rest-fund-unerwartet");
+        keineG("rest-ueberlagert-ziffern-ungedeckt");
+    }
+
+    /**
+     * AK-17, AK-21: Der Zaehler "Block ohne Scan-Abdeckung" ist strikt 0 fuer jeden nicht markierten Block von Teil 1g,
+     * insgesamt und je Blockart. Ein Wert ungleich 0 ist ein Befund, keine Erwartung zum Anpassen.
+     */
+    @Test
+    void t11_teil1g_blockOhneScanAbdeckung_istStriktNull_insgesamtUndNachBlockart() {
+        assertEquals(0, LAUF_KV_G.klasse_("block-ohne-scan-abdeckung"),
+                "Bloecke ohne Scan-Abdeckung (strikt 0), Startwert " + SEED_TEXTE_KV_G);
+        for (String art : BLOCK_NAMEN_G) {
+            assertEquals(0, LAUF_KV_G.klasse_("block-ohne-scan-abdeckung-" + art), "Blockart " + art);
+        }
+    }
+
+    /**
+     * Die markierten Bloecke (dokumentierte Grenzen, Markierung aus dem fertigen Text, {@link #grenzklasseG}) sind
+     * einzeln gezaehlt, damit nichts verdeckt wird. Messwerte bei festem Seed: 233 markierte Bloecke (6,5 % aller
+     * 3 586 Bloecke). Kontextwort direkt am Buchstaben (G-K9, Nachtrag 3 zu T-7 (b); auch Teil 1b schuetzt hier nicht):
+     * 89, alle ohne Abdeckung. Nicht-ASCII-Ziffer als Nachbar (Lesart "sperrend", Nachtrag 3 zu T-9 und Nachtrag zu
+     * T-10 Punkt 4, Javadoc von {@code KvnrOhneKontext}): 144, davon 140 ohne und 4 mit Abdeckung; die vier haben ein
+     * KVNR-Kontextwort davor im Text, dann findet Teil 1a die Form. Kein markierter Block ohne Abdeckung hat einen
+     * Kandidaten. Eine Aenderung der Zahlen ist ein Befund.
+     */
+    @Test
+    void t11_teil1g_markierteBloecke_sindEinzelnGezaehlt() {
+        assertEquals(233, LAUF_KV_G.klasse_("block-markiert"), "markierte Bloecke");
+        assertEquals(229, LAUF_KV_G.klasse_("markiert-ohne-abdeckung"), "markierte Bloecke ohne Abdeckung");
+        assertEquals(4, LAUF_KV_G.klasse_("markiert-mit-abdeckung"), "markierte Bloecke mit Abdeckung");
+        assertEquals(89, LAUF_KV_G.klasse_("block-markiert-" + GRENZE_AM_BUCHSTABEN), "Kontextwort am Buchstaben");
+        assertEquals(89, LAUF_KV_G.klasse_("markiert-ohne-abdeckung-" + GRENZE_AM_BUCHSTABEN),
+                "Kontextwort am Buchstaben ohne Abdeckung");
+        assertEquals(0, LAUF_KV_G.klasse_("markiert-mit-abdeckung-" + GRENZE_AM_BUCHSTABEN),
+                "Kontextwort am Buchstaben mit Abdeckung");
+        assertEquals(144, LAUF_KV_G.klasse_("block-markiert-" + GRENZE_NICHT_ASCII_ZIFFER), "Nicht-ASCII-Ziffer");
+        assertEquals(140, LAUF_KV_G.klasse_("markiert-ohne-abdeckung-" + GRENZE_NICHT_ASCII_ZIFFER),
+                "Nicht-ASCII-Ziffer ohne Abdeckung");
+        assertEquals(4, LAUF_KV_G.klasse_("markiert-mit-abdeckung-" + GRENZE_NICHT_ASCII_ZIFFER),
+                "Nicht-ASCII-Ziffer mit Abdeckung");
+        assertEquals(4, LAUF_KV_G.klasse_("markiert-mit-kandidat"), "markierte Bloecke mit Kandidat");
+        assertEquals(229, LAUF_KV_G.klasse_("markiert-ohne-kandidat"), "markierte Bloecke ohne Kandidat");
+        assertEquals(LAUF_KV_G.klasse_("block-markiert"), LAUF_KV_G.klasse_("markiert-ohne-abdeckung")
+                + LAUF_KV_G.klasse_("markiert-mit-abdeckung"), "jeder markierte Block ist einmal eingeordnet");
+    }
+
+    /**
+     * Rest am Bestand (Nachtrag zu T-11, Punkt 2): Mit genau drei Ziffern ausserhalb der E-Mail entsteht ein Restfund
+     * mit Quelle {@code kvnr-rest} und Konfidenz 0,80, obwohl der Kandidat 0,95 hat (Mutanten der Schwelle 3 zu 4 und
+     * des Deckels 0,80 zu 0,95 fallen auf); mit zwei Ziffern keiner (G-K14). Ueberlagerte Faelle (ein LANR- oder
+     * IK-Kandidat aus einem Kontext weiter vorn verschmilzt mit der E-Mail und deckt die vorderen Ziffern): exakt
+     * 5 bzw. 11; in allen 16 sind die Ziffern der Nummer ganz von einem Bestandsfund gedeckt (nur der Buchstabe darf
+     * frei bleiben, der deckende zusammengelegte Fund hat die Stufe "fraglich", Nachtrag 2 zu T-11). Messwerte: 75 mit
+     * drei Ziffern wie konstruiert, 61 mit zwei Ziffern wie konstruiert.
+     */
+    @Test
+    void t11_teil1g_restAmBestand_dreiZiffernRestfundUndZweiZiffernKeiner_exakteZahlen() {
+        assertEquals(75, LAUF_KV_G.klasse_("rest-drei-ziffern-ok"), "Restfund mit drei Ziffern");
+        assertEquals(0, LAUF_KV_G.klasse_("rest-drei-ziffern-abweichend"), "Restfund mit drei Ziffern abweichend");
+        assertEquals(61, LAUF_KV_G.klasse_("rest-unter-drei-ohne-fund"), "kein Restfund mit zwei Ziffern");
+        assertEquals(0, LAUF_KV_G.klasse_("rest-unter-drei-mit-fund"), "Restfund mit zwei Ziffern");
+        assertEquals(5, LAUF_KV_G.klasse_("rest-drei-ueberlagert"), "ueberlagert, drei Ziffern");
+        assertEquals(11, LAUF_KV_G.klasse_("rest-unter-drei-ueberlagert"), "ueberlagert, zwei Ziffern");
+        assertEquals(16, LAUF_KV_G.klasse_("rest-ueberlagert-gedeckt"), "ueberlagert, von Bestandsfund gedeckt");
+        assertEquals(0, LAUF_KV_G.klasse_("rest-ueberlagert-ungedeckt"), "ueberlagert, Ziffern nicht gedeckt");
+    }
+
+    /**
+     * K-1 (LANR- oder IK-Kontextwort direkt vor der KVNR-Form): Auf Erkennerebene ein Fund 0,60; im Scan umschliesst er
+     * den LANR- oder IK-Fund auf den Ziffern, die Form ist ganz von einem KVNR-Fund gedeckt. Messwert: alle 370
+     * Bloecke; die Zahl der Bloecke ohne KVNR-Fund im Scan ist exakt 0 (Plan Kap. 2, Risiko R-2: die Stufe sinkt, die
+     * Position bleibt geschuetzt und wird um den Buchstaben erweitert).
+     */
+    @Test
+    void t11_teil1g_k1_dieFormIstImScanVonEinemKvnrFundGedeckt() {
+        assertEquals(0, LAUF_KV_G.klasse_("k1-scan-ohne-kvnr"), "K-1-Bloecke ohne KVNR-Fund im Scan");
+        assertEquals(LAUF_KV_G.klasse_("bloecke-k1"), LAUF_KV_G.klasse_("k1-scan-kvnr"), "K-1-Bloecke mit KVNR-Fund");
+        mindestens(LAUF_KV_G, "k1-scan-kvnr", 259);
+    }
+
+    /**
+     * Mindestzahlen der Klassen von Teil 1g (je Text hoechstens einmal gezaehlt, ausser den Bloecken, Untergrenzen bei
+     * hoechstens 70 % des Messwerts). Bloecke je Blockart (Messwert in Klammern): frei 939, Anfang 127, Ende 121,
+     * Kontextwort weit weg 267, Leerzeile 199, Negativliste im Umfeld 353, K-1 370, Wiederholung 460, Dateiname 198,
+     * Nachbar IP 184, Nicht-ASCII-Ziffer 144, Kontextwort am Buchstaben 89, langer Pfad 135. Kandidaten mit Quelle der
+     * Regel 1b je Blockart: frei 902, Anfang 127, Ende 115, weit weg 267, Leerzeile 199, Negativliste 234, K-1 359,
+     * Wiederholung 286, Dateiname 191, Nachbar IP 173, langer Pfad 135; insgesamt 2 988, dazu 365 Kandidaten aus
+     * Teil 1a in Bloecken (mit Kontextwort davor oder erwartet). Erwartung strikt 2 554, schwach 799.
+     */
+    @Test
+    void t11_teil1g_fuzzPruftNichtInsLeere_blockartenUndKandidaten() {
+        int[] minBloecke = {657, 88, 84, 186, 139, 247, 259, 322, 138, 128, 100, 62, 94};
+        for (int i = 0; i < BLOCK_NAMEN_G.length; i++) {
+            mindestens(LAUF_KV_G, "bloecke-" + BLOCK_NAMEN_G[i], minBloecke[i]);
+        }
+        String[] arten1b = {"frei", "anfang", "ende", "kw-weit", "leerzeile", "negativ", "k1", "wiederholung",
+            "dateiname", "nachbar-ip", "langer-pfad"};
+        int[] min1b = {631, 88, 80, 186, 139, 163, 251, 200, 133, 121, 94};
+        for (int i = 0; i < arten1b.length; i++) {
+            mindestens(LAUF_KV_G, "kvnr-fund-1b-" + arten1b[i], min1b[i]);
+        }
+        mindestens(LAUF_KV_G, "kvnr-fund-1b", 2091);
+        mindestens(LAUF_KV_G, "kvnr-fund-1a", 255);
+        mindestens(LAUF_KV_G, "block-erwartung-strikt", 1787);
+        mindestens(LAUF_KV_G, "block-erwartung-schwach", 559);
+        mindestens(LAUF_KV_G, "referenz-treffer", 2538);
+    }
+
+    /**
+     * Jedes zulaessige Grenzzeichen aus AK-13 kommt vor und hinter der Nummer oft genug vor: Messwerte je Zeichen
+     * mindestens 54 davor (kleinster Wert, Untergrenze 37) und 106 dahinter (Untergrenze 74); dazu Textanfang 127 und
+     * Textende 121 (Untergrenze 88 und 84), Dateiendung 198 (138).
+     */
+    @Test
+    void t11_teil1g_fuzzPruftNichtInsLeere_jedesGrenzzeichenKommtVorUndDahinter() {
+        for (String[] vorn : VORN_G) {
+            mindestens(LAUF_KV_G, "vorn-" + vorn[1], 37);
+        }
+        for (String[] hinten : HINTEN_G) {
+            mindestens(LAUF_KV_G, "hinten-" + hinten[1], 74);
+        }
+        mindestens(LAUF_KV_G, "vorn-textanfang", 88);
+        mindestens(LAUF_KV_G, "hinten-textende", 84);
+        mindestens(LAUF_KV_G, "hinten-punkt-endung", 138);
+    }
+
+    /**
+     * Mindestzahlen der Gegenproben (kleinster Wert 62, je 43; im Text ohne Scan-Fund an der Gegenprobe kleinster Wert
+     * 56, je 39), der Bestand-Bausteine (kleinster Wert 72, je 50; vom Bestand gedeckt kleinster Wert 82, je 57), der
+     * Bausteine fuer K-1 (davor 294, nachgestellt 76), der Wiederholungen (kleinster Wert 42, je 29), der Mischung
+     * (Teil 1f 944, Teil 1b bis 1e 827) und der Klassen aus den allgemeinen Pruefungen (Istwert, Mindestzahl, jeweils
+     * rund 70 Prozent): gleicher Wert gleicher Platzhalter 166 (116), mit und ohne Trenner verschiedene Platzhalter
+     * 69 (48), Scan-Fund 998 (698), zusammengelegter Fund 32 (22), KV-Fund LANR 304 (212), KV-Fund IK 354 (247),
+     * KV-Fund fraglich 338 (236), manueller Fund 913 (639), echte Teilmenge der Scan-Funde 874 (611).
+     */
+    @Test
+    void t11_teil1g_fuzzPruftNichtInsLeere_gegenprobenBausteineUndAllgemeineKlassen() {
+        for (String gegenprobe : GEGENPROBEN_G) {
+            mindestens(LAUF_KV_G, "gegenprobe-" + gegenprobe, 43);
+            mindestens(LAUF_KV_G, "gegenprobe-im-text-ohne-fund-" + gegenprobe, 39);
+        }
+        for (String baustein : BESTAND_G) {
+            mindestens(LAUF_KV_G, "baustein-bestand-" + baustein, 50);
+        }
+        for (String baustein : List.of("email-lokal", "email-anfang", "pfad-unix", "pfad-windows", "url-query",
+                "url-pfad")) {
+            mindestens(LAUF_KV_G, "bestand-" + baustein + "-ok", 57);
+        }
+        mindestens(LAUF_KV_G, "baustein-k1-davor", 205);
+        mindestens(LAUF_KV_G, "baustein-k1-nachgestellt", 53);
+        for (int i = 0; i < 4; i++) {
+            mindestens(LAUF_KV_G, "baustein-wiederholung-" + i, 29);
+        }
+        mindestens(LAUF_KV_G, "baustein-misch-1f", 660);
+        mindestens(LAUF_KV_G, "baustein-misch-1b-bis-1e", 578);
+        mindestens(LAUF_KV_G, "kvnr-gleicher-wert-gleicher-platzhalter", 116);
+        mindestens(LAUF_KV_G, "kvnr-mit-und-ohne-trenner-verschiedene-platzhalter", 48);
+        mindestens(LAUF_KV_G, "rest-drei-ziffern-ok", 52);
+        mindestens(LAUF_KV_G, "rest-unter-drei-ohne-fund", 42);
+        mindestens(LAUF_KV_G, "scan-fund", 698);
+        mindestens(LAUF_KV_G, "zusammengelegter-fund", 22);
+        mindestens(LAUF_KV_G, "kv-fund-lanr", 212);
+        mindestens(LAUF_KV_G, "kv-fund-ik", 247);
+        mindestens(LAUF_KV_G, "kv-fraglich", 236);
+        mindestens(LAUF_KV_G, "manueller-fund", 639);
+        mindestens(LAUF_KV_G, "echte-teilmenge-der-scan-funde", 611);
+    }
+
+    /**
+     * Der Generator verwirft einen Baustein samt Trenner und zieht neu, wenn der Waechter der Testdatenregeln oder die
+     * Referenz der Regel 1b gegen die Konstruktion anschlaegt. Gezaehlt wird das ohne Zufallszahlen; der Hash der
+     * Textfolge bleibt dadurch gleich. Messwert bei festem Seed: 19 verworfene Versuche (bei 3 586 Bloecken), kein
+     * Baustein, der nach allen {@value #MAX_VERSUCHE_G} Versuchen wegfaellt. Eine Aenderung der Zahl ist ein Befund
+     * (der Generator hat sich geaendert), keine Erwartung zum Anpassen.
+     */
+    @Test
+    void t11_teil1g_verworfeneBausteine_sindGezaehlt() {
+        assertEquals(19, LAUF_KV_G.klasse_("baustein-verworfen"), "verworfene Versuche, Startwert " + SEED_TEXTE_KV_G);
+        assertEquals(0, LAUF_KV_G.klasse_("baustein-aufgegeben"), "aufgegebene Bausteine, Startwert "
+                + SEED_TEXTE_KV_G);
+    }
+
+    /**
+     * Die Konstruktion haelt, was sie vermerkt: Je Block mit Referenz-Erwartung steht an der Nummer genau Buchstabe und
+     * neun Ziffern, bei der erwarteten Quelle {@code kvnr-ohne-kontext} nach der unabhaengigen Pruefziffer-Referenz
+     * ({@code KvnrBsnrHilfen.kvnrPruefziffer}) gueltig (Regel 9), nie ein Trenner; die Bloecke liegen geordnet und
+     * ueberlappungsfrei im Text; markiert sind genau die Bloecke der Arten "Nicht-ASCII-Ziffer" und "Kontextwort am
+     * Buchstaben", und ihre Zahl stimmt mit dem Lauf ueberein.
+     */
+    @Test
+    void t11_teil1g_generatorBloeckeStimmenMitDemTextUeberein() {
+        assertEquals(ANZAHL_BLOCKARTEN_G, BLOCK_NAMEN_G.length, "Namen der Blockarten");
+        assertEquals(ANZAHL_BLOCKARTEN_G, GEWICHT_BLOCK_G.length, "Gewichte der Blockarten");
+        int markiert = 0;
+        int bloecke = 0;
+        for (FallG fall : erzeugeKvG(SEED_TEXTE_KV_G)) {
+            int vorigesEnde = 0;
+            for (BlockG block : fall.bloecke()) {
+                bloecke++;
+                assertTrue(block.start() >= vorigesEnde && block.ende() <= fall.text().length(), "Lage des Blocks");
+                vorigesEnde = block.ende();
+                boolean grenzart = block.blockart() == BLOCK_G_NICHT_ASCII
+                        || block.blockart() == BLOCK_G_AM_BUCHSTABEN;
+                assertEquals(grenzart, !block.grenze().isEmpty(), "markiert sind genau die Grenzarten, Blockart "
+                        + BLOCK_NAMEN_G[block.blockart()]);
+                markiert += block.grenze().isEmpty() ? 0 : 1;
+                String nummer = fall.text().substring(block.start(), block.ende());
+                if (block.referenz()) {
+                    assertEquals(10, nummer.length(), "zehn Zeichen");
+                    assertTrue(nummer.charAt(0) >= 'A' && nummer.charAt(0) <= 'Z', "Grossbuchstabe vorn");
+                    assertTrue(nummer.substring(1).chars().allMatch(c -> c >= '0' && c <= '9'), "neun Ziffern");
+                    int soll = KvnrBsnrHilfen.kvnrPruefziffer(nummer.charAt(0), nummer.substring(1, 9));
+                    assertTrue(soll == nummer.charAt(9) - '0', "gueltige Pruefziffer, Blockart "
+                            + BLOCK_NAMEN_G[block.blockart()]);
+                }
+                assertTrue(block.konfidenz() <= KONF_DIREKT_G, "Konfidenz der Erwartung");
+            }
+        }
+        assertEquals(LAUF_KV_G.klasse_("block-markiert"), markiert, "markierte Bloecke: Generator gegen Lauf");
+        assertTrue(markiert * 10 < bloecke, "Markierung bleibt die Ausnahme: " + markiert + " von " + bloecke);
+    }
+
+    /** Der Scan ist deterministisch: zwei Laeufe liefern auf jedem Text von Teil 1g dieselbe Fundliste. */
+    @Test
+    void t11_teil1g_scanIstDeterministisch() {
+        TextScanner scanner = TextScanner.standard();
+        int abweichend = 0;
+        for (FallG fall : erzeugeKvG(SEED_TEXTE_KV_G)) {
+            abweichend += scanner.scan(fall.text()).equals(scanner.scan(fall.text())) ? 0 : 1;
+        }
+        assertEquals(0, abweichend, "Teil 1g: Texte mit abweichender Fundliste im zweiten Lauf");
+    }
+
+    // ------------------------------------------------------------------ Teil 1g: Selbsttests
+
+    private static final String KONTEXT_G = "Notiz ";
+    private static final int SELBSTTEST_TEXTE_G = 300;
+
+    /** Ein Block mit der strikten Erwartung der Regel 1b ueber {@code von} bis {@code bis}, ohne Markierung. */
+    private static BlockG blockG(int von, int bis) {
+        return new BlockG(BLOCK_G_FREI, KONF_1B_G, QUELLE_1B_G, true, false, von, bis, "", "", "");
+    }
+
+    private static FallG fallG(String text, List<BlockG> bloecke, List<GegenprobeG> gegenproben,
+            List<BestandG> bestand, List<RestG> reste, List<KvnrBsnrHilfen.Bereich> misch) {
+        return new FallG(text, bloecke, gegenproben, List.of(), bestand, reste, misch, 0, 0);
+    }
+
+    private static Lauf pruefeG(FallG fall) {
+        Lauf lauf = new Lauf(SEED_TEXTE_KV_G);
+        pruefeKvG(lauf, TextScanner.standard(), 0, fall);
+        return lauf;
+    }
+
+    /**
+     * Selbsttest der Zaehler und der Kandidatenpruefung: Ein abgedeckter Block mit der erwarteten Konfidenz und Quelle
+     * besteht; ein Block, dessen Erwartung nicht zum Kandidaten passt, ein Block ohne Kandidat und ein Block ohne
+     * Scan-Abdeckung werden je gemeldet; ein markierter Block ohne Abdeckung zaehlt getrennt.
+     */
+    @Test
+    void t11_teil1g_selbsttest_zaehlerUndKandidatenpruefung() {
+        String nummer = SynthetischeKvNummern.KVNR_GUELTIG;
+        String text = KONTEXT_G + nummer + " Ende";
+        int start = KONTEXT_G.length();
+        int ende = start + nummer.length();
+        Lauf gut = pruefeG(fallG(text, List.of(blockG(start, ende)), List.of(), List.of(), List.of(), List.of()));
+        assertTrue(gut.verletzungen.isEmpty(), "abgedeckter Block mit erwartetem Kandidaten: " + gut.meldung("x"));
+        assertEquals(1, gut.klasse_("kvnr-fund-1b"), "Kandidat der Regel 1b");
+        assertEquals(1, gut.klasse_("kvnr-fund-1b-frei"), "nach Blockart");
+        assertEquals(1, gut.klasse_("block-erwartung-strikt"), "strikte Erwartung");
+        assertEquals(0, gut.klasse_("block-ohne-scan-abdeckung"), "abgedeckter Block");
+        BlockG falsch = new BlockG(BLOCK_G_FREI, KONF_DIREKT_G, KvnrRecognizer.SOURCE, true, false, start, ende, "",
+                "", "");
+        assertEquals(1, pruefeG(fallG(text, List.of(falsch), List.of(), List.of(), List.of(), List.of()))
+                .anzahl("kandidat-abweichend"), "falsche Konfidenz und Quelle der Erwartung");
+        BlockG schwach = blockG(start, ende).schwach();
+        assertEquals(0, pruefeG(fallG(text, List.of(schwach), List.of(), List.of(), List.of(), List.of()))
+                .verletzungen.size(), "schwache Erwartung: Teil 1b genuegt");
+        BlockG leer = blockG(0, KONTEXT_G.length() - 1);
+        Lauf ohne = pruefeG(fallG(text, List.of(leer), List.of(), List.of(), List.of(), List.of()));
+        assertEquals(1, ohne.anzahl("kandidat-fehlt"), "Block ohne Kandidat");
+        assertEquals(1, ohne.klasse_("block-ohne-scan-abdeckung"), "nicht markierter Block ohne Abdeckung");
+        assertEquals(1, ohne.klasse_("block-ohne-scan-abdeckung-frei"), "nach Blockart");
+        BlockG grenze = new BlockG(BLOCK_G_NICHT_ASCII, KONF_KEINE_G, QUELLE_1B_G, false, false, 0,
+                KONTEXT_G.length() - 1, "", "", GRENZE_NICHT_ASCII_ZIFFER);
+        Lauf markiert = pruefeG(fallG(text, List.of(grenze), List.of(), List.of(), List.of(), List.of()));
+        assertEquals(1, markiert.klasse_("markiert-ohne-abdeckung"), "markierter Block ohne Abdeckung");
+        assertEquals(1, markiert.klasse_("markiert-ohne-abdeckung-" + GRENZE_NICHT_ASCII_ZIFFER), "nach Grenzklasse");
+        assertEquals(0, markiert.klasse_("block-ohne-scan-abdeckung"), "markierter Block zaehlt nicht dort");
+        BlockG ungrenze = new BlockG(BLOCK_G_NICHT_ASCII, KONF_KEINE_G, QUELLE_1B_G, false, false, 0,
+                KONTEXT_G.length() - 1, "", "", "");
+        assertEquals(1, pruefeG(fallG(text, List.of(ungrenze), List.of(), List.of(), List.of(), List.of()))
+                .anzahl("grenzblock-nicht-markiert"), "Grenzblock ohne Markierung wird gemeldet");
+    }
+
+    /**
+     * Selbsttest der Referenzpruefung: Eine gueltige, geschlossene Form ohne Block, ohne Bestand-Baustein und ohne
+     * Mischbereich ist eine Abweichung; mit Block, mit Bestand-Baustein oder in einem Mischbereich nicht; ein Block mit
+     * Referenz-Erwartung ohne Treffer und ein Block ohne Erwartung mit Treffer sind Abweichungen.
+     */
+    @Test
+    void t11_teil1g_selbsttest_referenzpruefungMeldetAbweichungen() {
+        String nummer = SynthetischeKvNummern.KVNR_GUELTIG;
+        String text = KONTEXT_G + nummer + " Ende";
+        int start = KONTEXT_G.length();
+        int ende = start + nummer.length();
+        BlockG block = blockG(start, ende);
+        assertEquals(1, referenzAbweichungenG(text, List.of(), List.of(), List.of()), "Treffer ohne Block");
+        assertEquals(0, referenzAbweichungenG(text, List.of(block), List.of(), List.of()), "Treffer im Block");
+        assertEquals(0, referenzAbweichungenG(text, List.of(), List.of(new BestandG("x", start, ende)), List.of()),
+                "Treffer im Bestand-Baustein");
+        assertEquals(0, referenzAbweichungenG(text, List.of(), List.of(),
+                List.of(new KvnrBsnrHilfen.Bereich(0, text.length()))), "Treffer im Mischbereich");
+        assertEquals(1, referenzAbweichungenG(text, List.of(blockG(0, KONTEXT_G.length() - 1)), List.of(),
+                List.of(new KvnrBsnrHilfen.Bereich(0, text.length()))), "Block mit Erwartung ohne Treffer");
+        BlockG ohneErwartung = new BlockG(BLOCK_G_NICHT_ASCII, KONF_KEINE_G, QUELLE_1B_G, false, false, start, ende,
+                "", "", "");
+        assertEquals(1, referenzAbweichungenG(text, List.of(ohneErwartung), List.of(),
+                List.of(new KvnrBsnrHilfen.Bereich(0, text.length()))), "Block ohne Erwartung mit Treffer");
+        String klein = KONTEXT_G + nummer.toLowerCase(Locale.ROOT) + " Ende";
+        assertEquals(0, referenzAbweichungenG(klein, List.of(), List.of(), List.of()), "Kleinbuchstabe: kein Treffer");
+    }
+
+    /** Selbsttest: Gleichheit der Kandidaten der Regel 1b mit der Referenz, in beiden Richtungen. */
+    @Test
+    void t11_teil1g_selbsttest_kandidaten1bGleichReferenz() {
+        String nummer = SynthetischeKvNummern.KVNR_GUELTIG;
+        String text = KONTEXT_G + nummer + " Ende";
+        int start = KONTEXT_G.length();
+        int ende = start + nummer.length();
+        List<KvnrBsnrHilfen.Bereich> referenz = KvnrOhneKontextHilfen.kvnrOhneKontextReferenz(text);
+        Finding eins = new Finding(FindingType.KVNR, nummer, start, ende, KONF_1B_G, QUELLE_1B_G);
+        assertTrue(kandidaten1bGleichReferenzG(List.of(eins), referenz), "gleich");
+        assertFalse(kandidaten1bGleichReferenzG(List.of(), referenz), "Referenz ohne Kandidat");
+        Finding extra = new Finding(FindingType.KVNR, text.substring(0, 4), 0, 4, KONF_1B_G, QUELLE_1B_G);
+        assertFalse(kandidaten1bGleichReferenzG(List.of(eins, extra), referenz), "Kandidat ohne Referenz");
+        Finding mitKontext = new Finding(FindingType.KVNR, nummer, start, ende, KONF_DIREKT_G,
+                KvnrRecognizer.SOURCE);
+        assertTrue(kandidaten1bGleichReferenzG(List.of(mitKontext), referenz),
+                "ein Fund aus Teil 1a verdraengt den Treffer der Referenz");
+        assertFalse(kandidaten1bGleichReferenzG(List.of(mitKontext, eins), referenz),
+                "zweiter Kandidat neben dem Fund aus Teil 1a");
+    }
+
+    /**
+     * Selbsttest der Markierung aus dem Text: Ein Kontextwort unmittelbar vor dem Block (am Ende eines Buchstabenlaufs)
+     * und eine Ziffer ausserhalb von ASCII direkt davor oder dahinter markieren; ein Trenner, ein Buchstabe ohne
+     * Kontextwort, eine ASCII-Ziffer, ein Buchstabe ausserhalb von ASCII und Leerzeichen markieren nicht.
+     */
+    @Test
+    void t11_teil1g_selbsttest_markierungErkenntDieGrenzklassenUndGrenztAb() {
+        String nummer = SynthetischeKvNummern.KVNR_GUELTIG;
+        String arabisch = String.valueOf((char) 0x665);
+        String vollbreit = String.valueOf((char) 0xFF15);
+        assertEquals(GRENZE_AM_BUCHSTABEN, markiereG("KVNR" + nummer, 4), "Kontextwort am Buchstaben");
+        assertEquals(GRENZE_AM_BUCHSTABEN, markiereG("xKVNR" + nummer, 5), "Kontextwort am Ende eines Buchstabenlaufs");
+        assertEquals("", markiereG("KVNR " + nummer, 5), "Trenner davor");
+        assertEquals("", markiereG("Hallo" + nummer, 5), "Buchstabe, aber kein Kontextwort");
+        assertEquals(GRENZE_NICHT_ASCII_ZIFFER, markiereG("Notiz " + arabisch + nummer, 7), "arabische Ziffer davor");
+        assertEquals(GRENZE_NICHT_ASCII_ZIFFER, markiereG("Notiz " + vollbreit + nummer, 7), "Vollbreite davor");
+        assertEquals(GRENZE_NICHT_ASCII_ZIFFER, markiereG("Notiz " + nummer + arabisch, 6),
+                "arabische Ziffer dahinter");
+        assertEquals("", markiereG("Notiz 7" + nummer, 7), "ASCII-Ziffer davor");
+        assertEquals("", markiereG("Notiz " + (char) 0xE4 + nummer, 7), "Nicht-ASCII-Buchstabe davor");
+        assertEquals("", markiereG("Notiz " + nummer + " Ende", 6), "Leerzeichen");
+        assertTrue(nichtAsciiZiffer(0x665) && nichtAsciiZiffer(0xFF15) && !nichtAsciiZiffer('5') && !nichtAsciiZiffer(
+                0xE4), "Nicht-ASCII-Ziffer");
+    }
+
+    /** Die Grenzklasse eines Blocks der Laenge zehn ab {@code start}. */
+    private static String markiereG(String text, int start) {
+        return grenzklasseG(text, blockG(start, start + 10));
+    }
+
+    /**
+     * Selbsttest der Pruefung von Gegenprobe, Bestand-Baustein und Restfund: Eine Gegenprobe, die allein einen Fund
+     * oder einen Treffer der Referenz liefert, wird gemeldet, eine kleingeschriebene nicht; ein Bestand-Baustein,
+     * dessen Nummer nicht im Bestand liegt, wird gemeldet; ein Restfund mit falscher Konfidenz oder Quelle, ein
+     * fehlender Restfund (Mutant der Schwelle 3 zu 4) und ein Restfund mit zwei Ziffern (Mutant der Schwelle 3 zu 2)
+     * werden gemeldet.
+     */
+    @Test
+    void t11_teil1g_selbsttest_gegenprobeBestandUndRestfund() {
+        String nummer = SynthetischeKvNummern.KVNR_GUELTIG;
+        String klein = nummer.toLowerCase(Locale.ROOT);
+        Lauf mitFund = pruefeG(fallG(nummer, List.of(), List.of(new GegenprobeG("x", 0, nummer.length())), List.of(),
+                List.of(), List.of(new KvnrBsnrHilfen.Bereich(0, nummer.length()))));
+        assertEquals(1, mitFund.anzahl("gegenprobe-mit-kvnr-fund"), "Gegenprobe mit Fund wird gemeldet");
+        assertEquals(1, mitFund.anzahl("gegenprobe-referenz-trifft"), "Gegenprobe mit Treffer wird gemeldet");
+        Lauf ohneFund = pruefeG(fallG(klein, List.of(), List.of(new GegenprobeG("klein", 0, klein.length())),
+                List.of(), List.of(), List.of()));
+        assertTrue(ohneFund.verletzungen.isEmpty(), "kleingeschriebene Gegenprobe besteht");
+        assertEquals(1, ohneFund.klasse_("gegenprobe-im-text-ohne-fund-klein"), "im Text ohne Fund");
+        String email = nummer + "@example.invalid";
+        Lauf imBestand = pruefeG(fallG(email, List.of(), List.of(), List.of(new BestandG("email-lokal", 0,
+                nummer.length())), List.of(), List.of()));
+        assertTrue(imBestand.verletzungen.isEmpty(), "Nummer in der E-Mail besteht: " + imBestand.meldung("x"));
+        assertEquals(1, imBestand.klasse_("bestand-email-lokal-ok"), "vom Bestand gedeckt");
+        Lauf nichtImBestand = pruefeG(fallG(KONTEXT_G + nummer, List.of(), List.of(), List.of(new BestandG("x",
+                KONTEXT_G.length(), KONTEXT_G.length() + nummer.length())), List.of(),
+                List.of(new KvnrBsnrHilfen.Bereich(0, KONTEXT_G.length() + nummer.length()))));
+        assertEquals(1, nichtImBestand.anzahl("bestand-nummer-nicht-vom-bestand-gedeckt"), "kein Bestand");
+        assertEquals(1, nichtImBestand.anzahl("bestand-kvnr-fund-in-bestand"), "KVNR-Fund in der Nummer");
+        String drei = "KVNR " + nummer.substring(0, 4) + " " + nummer.substring(4) + "@example.invalid";
+        int s = "KVNR ".length();
+        assertTrue(pruefeG(fallG(drei, List.of(), List.of(), List.of(), List.of(new RestG(s, s + 4, KONF_REST_G)),
+                List.of())).verletzungen.isEmpty(), "Restfund mit drei Ziffern, 0,80, Quelle kvnr-rest");
+        assertEquals(1, pruefeG(fallG(drei, List.of(), List.of(), List.of(), List.of(new RestG(s, s + 4,
+                KONF_DIREKT_G)), List.of())).anzahl("rest-fund-abweichend"), "falsche Konfidenz (Deckel)");
+        assertEquals(1, pruefeG(fallG(drei, List.of(), List.of(), List.of(), List.of(new RestG(s, s + 3, KONF_REST_G)),
+                List.of())).klasse_("rest-drei-ueberlagert"), "Restfund nicht wie konstruiert");
+        String zwei = "KVNR " + nummer.substring(0, 3) + " " + nummer.substring(3) + "@example.invalid";
+        Lauf ohneRest = pruefeG(fallG(zwei, List.of(), List.of(), List.of(), List.of(new RestG(s, s + 3, -1)),
+                List.of()));
+        assertTrue(ohneRest.verletzungen.isEmpty(), "kein Restfund mit zwei Ziffern");
+        assertEquals(1, ohneRest.klasse_("rest-unter-drei-ohne-fund"), "gezaehlt");
+        Finding quelleFalsch = new Finding(FindingType.KVNR, drei.substring(s, s + 4), s, s + 4, KONF_REST_G,
+                KvnrRecognizer.SOURCE);
+        Lauf mutant = new Lauf(SEED_TEXTE_KV_G);
+        pruefeRestG(mutant, 0, new RestG(s, s + 4, KONF_REST_G), List.of(new Finding(FindingType.EMAIL,
+                drei.substring(s + 5), s + 5, drei.length(), 0.9, "email"), quelleFalsch));
+        assertEquals(1, mutant.anzahl("rest-fund-abweichend"), "falsche Quelle");
+        Lauf schwelle = new Lauf(SEED_TEXTE_KV_G);
+        pruefeRestG(schwelle, 0, new RestG(s, s + 4, KONF_REST_G), List.of(new Finding(FindingType.EMAIL,
+                drei.substring(s + 5), s + 5, drei.length(), 0.9, "email")));
+        assertEquals(1, schwelle.anzahl("rest-fund-abweichend"), "fehlender Restfund (Schwelle 4)");
+        Lauf zuViel = new Lauf(SEED_TEXTE_KV_G);
+        pruefeRestG(zuViel, 0, new RestG(s, s + 3, -1), List.of(new Finding(FindingType.EMAIL, zwei.substring(s + 4),
+                s + 4, zwei.length(), 0.9, "email"), new Finding(FindingType.KVNR, zwei.substring(s, s + 3), s, s + 3,
+                KONF_REST_G, KvnrRecognizer.SOURCE_REST)));
+        assertEquals(1, zuViel.anzahl("rest-fund-unerwartet"), "Restfund mit zwei Ziffern (Schwelle 2)");
+        // Ueberlagert: gedeckt nur, wenn ein Bestandsfund alle Ziffern deckt (der Buchstabe darf frei bleiben)
+        Lauf gedeckt = new Lauf(SEED_TEXTE_KV_G);
+        pruefeRestG(gedeckt, 0, new RestG(s, s + 4, KONF_REST_G), List.of(new Finding(FindingType.EMAIL,
+                drei.substring(s + 1), s + 1, drei.length(), 0.5, Finding.SOURCE_MERGED)));
+        assertEquals(0, gedeckt.anzahl("rest-ueberlagert-ziffern-ungedeckt"), "Ziffern gedeckt, Buchstabe frei");
+        assertEquals(1, gedeckt.klasse_("rest-ueberlagert-gedeckt"), "als gedeckt gezaehlt");
+        Lauf ohneEmail = new Lauf(SEED_TEXTE_KV_G);
+        pruefeRestG(ohneEmail, 0, new RestG(s, s + 4, KONF_REST_G), List.of());
+        assertEquals(1, ohneEmail.anzahl("rest-ueberlagert-ziffern-ungedeckt"), "E-Mail-Fund fehlt ganz");
+        Lauf nurKvnr = new Lauf(SEED_TEXTE_KV_G);
+        pruefeRestG(nurKvnr, 0, new RestG(s, s + 4, KONF_REST_G), List.of(new Finding(FindingType.KVNR,
+                drei.substring(s, s + 10), s, s + 10, KONF_REST_G, KvnrRecognizer.SOURCE)));
+        assertEquals(1, nurKvnr.anzahl("rest-ueberlagert-ziffern-ungedeckt"), "kein Bestandsfund, nur KVNR-Fund");
+        Lauf eineZiffer = new Lauf(SEED_TEXTE_KV_G);
+        pruefeRestG(eineZiffer, 0, new RestG(s, s + 4, KONF_REST_G), List.of(new Finding(FindingType.EMAIL,
+                drei.substring(s + 2), s + 2, drei.length(), 0.5, Finding.SOURCE_MERGED)));
+        assertEquals(1, eineZiffer.anzahl("rest-ueberlagert-ziffern-ungedeckt"), "eine Ziffer vorn frei");
+    }
+
+    private static int mutantenG(Recognizer mutant, String eigenschaft) {
+        Lauf lauf = new Lauf(SEED_TEXTE_KV_G);
+        TextScanner scanner = TextScanner.standard();
+        List<FallG> faelle = erzeugeKvG(SEED_TEXTE_KV_G);
+        for (int it = 0; it < SELBSTTEST_TEXTE_G; it++) {
+            pruefeKvG(lauf, scanner, mutant, it, faelle.get(it));
+        }
+        return lauf.anzahl(eigenschaft);
+    }
+
+    /**
+     * Selbsttest des Fuzz-Laufs gegen Mutanten des Erkenners (kuenstliche Erkenner der Referenz, je eine Eigenschaft
+     * kaputt, auf den ersten {@value #SELBSTTEST_TEXTE_G} Texten): Ohne Wortgrenzen, ohne Pruefziffer, ohne
+     * Negativkontext und mit Kleinbuchstaben schlagen die Gegenproben (Erkenner allein) und der Vergleich der
+     * Kandidaten mit der Referenz an; die Referenz selbst als Erkenner besteht beides. Messwerte (Gegenproben mit
+     * Fund, Texte mit abweichendem Vergleich), Untergrenzen bei 70 %: ohne Wortgrenzen 117 und 184, ohne Pruefziffer
+     * 24 und 30, ohne Negativkontext 18 und 18, mit Kleinbuchstaben 17 und 23.
+     */
+    @Test
+    void t11_teil1g_selbsttest_mutantenDesErkennersWerdenGemeldet() {
+        KvnrOhneKontextHilfen.Optionen referenz = KvnrOhneKontextHilfen.Optionen.REFERENZ;
+        List<Recognizer> mutanten = List.of(KvnrOhneKontextHilfen.kuenstlicherErkenner(referenz.ohneWortgrenzen()),
+                KvnrOhneKontextHilfen.kuenstlicherErkenner(referenz.ohnePruefziffer()),
+                KvnrOhneKontextHilfen.kuenstlicherErkenner(referenz.ohneNegativkontext()),
+                KvnrOhneKontextHilfen.kuenstlicherErkenner(referenz.mitKleinbuchstaben()));
+        String[] namen = {"ohne Wortgrenzen", "ohne Pruefziffer", "ohne Negativkontext", "mit Kleinbuchstaben"};
+        int[] minGegenproben = {81, 16, 12, 11};
+        int[] minVergleich = {128, 21, 12, 16};
+        for (int i = 0; i < mutanten.size(); i++) {
+            int gegenproben = mutantenG(mutanten.get(i), "gegenprobe-mit-kvnr-fund");
+            int vergleich = mutantenG(mutanten.get(i), "kandidaten-1b-ungleich-referenz");
+            assertTrue(gegenproben >= minGegenproben[i], namen[i] + ": Gegenproben mit Fund " + gegenproben);
+            assertTrue(vergleich >= minVergleich[i], namen[i] + ": Texte mit abweichendem Vergleich " + vergleich);
+        }
+        Recognizer exakt = KvnrOhneKontextHilfen.kuenstlicherErkenner(referenz);
+        assertEquals(0, mutantenG(exakt, "gegenprobe-mit-kvnr-fund"), "die Referenz als Erkenner: Gegenproben");
+        assertEquals(0, mutantenG(exakt, "kandidaten-1b-ungleich-referenz"), "die Referenz als Erkenner: Vergleich");
     }
 
     @Test

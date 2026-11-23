@@ -1,6 +1,8 @@
 package de.skillshield.core.recognizer.kv;
 
+import static de.skillshield.core.SynthetischeKvNummern.IK_FORM_DOKU_IP;
 import static de.skillshield.core.SynthetischeKvNummern.KVNR_GUELTIG;
+import static de.skillshield.core.SynthetischeKvNummern.KVNR_NULL;
 import static de.skillshield.core.SynthetischeKvNummern.KVNR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN;
 import static de.skillshield.core.recognizer.kv.KvTestHilfen.AKUT;
 import static de.skillshield.core.recognizer.kv.KvTestHilfen.HALBGEVIERT;
@@ -14,13 +16,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import de.skillshield.core.model.ConfidenceLevel;
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.model.FindingType;
 import de.skillshield.core.pseudonymize.PseudonymizationResult;
 import de.skillshield.core.pseudonymize.Pseudonymizer;
 import de.skillshield.core.recognizer.TextScanner;
 import de.skillshield.core.reidentify.Reidentifier;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -31,17 +36,22 @@ import org.junit.jupiter.api.Test;
  * bleibt dann im Klartext (die Tests auf Scannerebene pruefen das am pseudonymisierten Text).
  *
  * <p>Regel 12 des Plans: Eine Zeile mit der Gesamterwartung "kein Fund" enthaelt nie die gueltige, geschlossene,
- * grossgeschriebene Nummer (die Erkennung ohne Kontextwort fuer Teil 1b wuerde sie spaeter mit 0,60 finden). Dort
- * stehen die Nummer mit falscher Pruefziffer, die gruppierte oder die kleingeschriebene Form. Zu jeder Grenze gehoert
- * eine Positiv-Gegenprobe mit derselben Nummer in der naechstliegenden erkannten Schreibweise, damit "kein Fund" nicht
- * an der Nummer liegt.
+ * grossgeschriebene Nummer (die Erkennung ohne Kontextwort, Teil 1b seit T-10, findet sie mit 0,60). Dort stehen die
+ * Nummer mit falscher Pruefziffer, die gruppierte oder die kleingeschriebene Form. In T-11 sind alle "kein Fund"-Zeilen
+ * der Tests G-K1 bis G-K17 und G-D2 darauf geprueft: keine davon enthaelt die gueltige, geschlossene, grossgeschriebene
+ * Form mit Wortgrenzen (Ausnahmen sind nur die Tests {@code bekannteGrenzeOhneKontext...} unten, die genau diese Form
+ * mit Wortgrenze, Negativkontext oder Nicht-ASCII-Ziffer pruefen). Zu jeder Grenze gehoert eine Positiv-Gegenprobe mit
+ * derselben Nummer in der naechstliegenden erkannten Schreibweise, damit "kein Fund" nicht an der Nummer liegt.
  *
  * <p><b>Tabelle Grenze zu Test</b> (Kennungen wie in Plan Kap. 11 und im Javadoc von {@code KvNumberScanner}); ohne
  * Klassenangabe steht der Test in dieser Klasse:
  * <ul>
- * <li>G-K1: {@code bekannteGrenzeGK1_kvnrOhneKontextwort_keinFund_gegenprobeMitKontextwort}</li>
- * <li>G-K2: nur mit Teil 1b (Fehlalarm der Erkennung ohne Kontextwort); in Teil 1a nicht pruefbar, belegt durch den
- * Fehlalarm-Pruefstand von Teil 1b</li>
+ * <li>G-K1: {@code bekannteGrenzeGK1_kvnrOhneKontextwort_keinFund_gegenprobeMitKontextwort} (Schreibweisen ausser der
+ * geschlossenen, gueltigen, grossgeschriebenen Form) und, mit Teil 1b,
+ * {@code bekannteGrenzeOhneKontext_kleinTrenner...} (dieselben Schreibweisen auch im Satz und allein, Gegenprobe: die
+ * geschlossene Form ist ein Fund 0,60)</li>
+ * <li>G-K2 (nur mit Teil 1b): {@code bekannteGrenzeOhneKontext_g_k2_fremdnummerMitPassenderPruefziffer_...} (der
+ * bewusst eingegangene Fehlalarm), die Rate misst der Fehlalarm-Pruefstand von Teil 1b</li>
  * <li>G-K3: {@code bekannteGrenzeGK3_zweiBuchstabenNichtAsciiUndWoerterAusserhalbD2_keinFund}</li>
  * <li>G-K4: {@code bekannteGrenzeGK4_ziffernDirektAmWort_keinFund_gegenprobeMitLeerzeichen}; zwei Buchstaben an
  * gruppierten Ziffern: {@code KvnrKontextTest.bekannteGrenzeGK4_zweiBuchstabenVorGruppiertenZiffern_...}</li>
@@ -50,7 +60,8 @@ import org.junit.jupiter.api.Test;
  * <li>G-K7: {@code bekannteGrenzeGK7_kvNrVorReinerZiffernfolge_keinFund_gegenprobeVersichertennummer} und die Folge
  * {@code bekannteGrenzeGK7_folge_kvNrZiffernNachgestelltesKontextwort_keinFund}</li>
  * <li>G-K8: {@code bekannteGrenzeGK8_unsichtbaresZeichenZwischenBuchstabeUndZiffernOderInDerNummer}</li>
- * <li>G-K9: {@code bekannteGrenzeGK9_kontextwortDirektAmBuchstaben_keinFund_gegenprobeMitTrenner}</li>
+ * <li>G-K9: {@code bekannteGrenzeGK9_kontextwortDirektAmBuchstaben_keinFund_gegenprobeMitTrenner} und mit Teil 1b
+ * {@code bekannteGrenzeOhneKontext_kontextwortDirektAmBuchstaben_keinFundAuchMitTeil1b_gegenprobeMitTrenner}</li>
  * <li>G-K10: {@code bekannteGrenzeGK10_trennerAusserhalbD1_hoechstensFundUeberDieZiffern}</li>
  * <li>G-K11: {@code bekannteGrenzeGK11_nachgestelltesKontextwortInDerNaechstenZeile_keinFund}</li>
  * <li>G-K12: {@code KvnrKontextTest.bekannteGrenze_kompositum_restgrenzen_keinFund_gegenprobeMitNormalemStrichFund}
@@ -59,12 +70,24 @@ import org.junit.jupiter.api.Test;
  * <li>G-K14: {@code TextScannerKvnrTest.bekannteGrenze_nummerUeberschneidetEinenAnderenFund_...} und
  * {@code bekannteGrenzeGK14_hintererTeilGruppierterNummerVomLokalenTeilEinerEmailGeschluckt}</li>
  * <li>G-K15: {@code bekannteGrenzeGK15_pfadOderUrlZwischenKontextwortUndNummer_keinFund} und
- * {@code bekannteGrenzeGK15_ursachen_segmentzaehlungUndSatzendeAmDateiendungspunkt}</li>
+ * {@code bekannteGrenzeGK15_ursachen_segmentzaehlungUndSatzendeAmDateiendungspunkt}; mit Teil 1b
+ * {@code bekannteGrenzeOhneKontext_g_k15_pfadOderUrlZwischenKontextwortUndNummer_...} (nur die geschlossene, gueltige,
+ * grossgeschriebene Form wird gefunden)</li>
  * <li>G-K16: {@code bekannteGrenzeGK16_derselbeWertAnZweiterNichtErkannterStelle_bleibtStehen}</li>
  * <li>G-K17: {@code bekannteGrenzeGK17_exotischeUnsichtbareZeichenVorDemBuchstaben_keinFund} und die allgemeine
  * Fassung {@code bekannteGrenzeGK17_allgemein_kombinationszeichenUndFuellzeichenVorOderHinterDemBuchstaben_keinFund}
  * </li>
- * <li>G-D2: {@code bekannteGrenzeGD2_lanrOderIkKontextwortVorKvnrForm_nurDieZiffernGeschuetzt}</li>
+ * <li>G-K18 (Nachtrag 2 zu T-11): {@code bekannteGrenzeGK18_dateinameOhnePfad_...},
+ * {@code bekannteGrenzeGK18_urlOhneSchemaMitNummerAlsPfadsegment_...} und
+ * {@code bekannteGrenzeGK18_nummerPerSchraegstrichAnEinerIp_...} (gueltige, geschlossene Form ohne Kontextwort mit
+ * Sperrzeichen an der Nummer und ohne umschliessenden Fund: kein KVNR-Fund, kein Fund deckt die Nummer; Gegenproben
+ * mit Leerzeichen, mit Kontextwort, mit Schema und im Pfad)</li>
+ * <li>G-D2: {@code bekannteGrenzeGD2_lanrOderIkKontextwortVorKvnrForm_nurDieZiffernGeschuetzt} (falsche Pruefziffer)
+ * und mit Teil 1b {@code bekannteGrenzeOhneKontext_k1_lanrOderIkKontextwortVorGueltigerForm_...} (gueltige Form:
+ * KVNR-Fund ueber Buchstabe und Ziffern)</li>
+ * <li>Grenzen von Teil 1b (AK-12 bis AK-14, Lesart zur Nicht-ASCII-Ziffer):
+ * {@code bekannteGrenzeOhneKontext_wortgrenzen_...}, {@code ..._negativkontext_...},
+ * {@code ..._nichtAsciiZifferAlsNachbar_...}</li>
  * <li>Grenzen der Vorgaenger: {@code bekannteGrenzeVorgaenger_kombinationszeichenTeilgruppenUndUndVorKontextwort}
  * </li>
  * <li>G-B1 bis G-B3 und G-D1: Teil 2 (BSNR), nicht Teil dieses Tasks</li>
@@ -148,8 +171,9 @@ class KvnrGrenzenTest {
     /**
      * G-K1: Ohne Kontextwort ist keine Nummer ein Fund: nicht mit falscher Pruefziffer, nicht klein geschrieben, nicht
      * gruppiert, nicht mit unsichtbarem Zeichen in der Nummer, auch nicht mit einem Wort wie {@code Rechnungsnummer}
-     * davor. Die gueltige, geschlossene, grossgeschriebene Form steht hier wegen Regel 12 nicht. Gegenprobe: dieselbe
-     * Nummer mit {@code KVNR} davor.
+     * davor. Die gueltige, geschlossene, grossgeschriebene Form steht hier nicht: Sie ist seit Teil 1b (T-10) auch ohne
+     * Kontextwort ein Fund (0,60, Quelle {@code kvnr-ohne-kontext}); G-K1 gilt damit nur noch fuer die uebrigen
+     * Schreibweisen (Tests {@code bekannteGrenzeOhneKontext...}). Gegenprobe: dieselbe Nummer mit {@code KVNR} davor.
      */
     @Test
     void bekannteGrenzeGK1_kvnrOhneKontextwort_keinFund_gegenprobeMitKontextwort() {
@@ -168,6 +192,9 @@ class KvnrGrenzenTest {
         assertFund("KVNR ", G.toLowerCase(), "", SICHER);
         assertFund("KVNR ", gruppierteForm(), "", SICHER);
         assertFund("Versichertennummer: ", G, " kam gestern", SICHER);
+        // Seit Teil 1b: die geschlossene, gueltige, grossgeschriebene Form gehoert nicht mehr zur Grenze
+        assertEquals(1, erkenne("Der Patient " + G + " kam gestern").size(),
+                "1b: geschlossene gueltige Form ist ein Fund");
     }
 
     // ------------------------------------------------------------------ G-K3
@@ -463,11 +490,15 @@ class KvnrGrenzenTest {
      * G-K15 (Nachtrag 2 zu T-7 Punkt 1, Nachtrag 3 zu T-7 (a)): Steht zwischen Kontextwort und Nummer ein Pfad oder
      * eine URL, entsteht kein KVNR-Fund, in jeder Schreibweise der Nummer (geschlossen mit falscher Pruefziffer wegen
      * Regel 12, gruppiert, klein); auch kurze Pfade (vier Segmente), ein Pfad mit zwei Segmenten und Dateiendung und
-     * eine URL mit Schema gehoeren dazu. Keine andere Erkennung faengt die Nummer in dieser Stellung auf: Im Scan
-     * bleibt sie im Klartext. Ohne Teil 1b bleibt jede Form ohne Fund; mit Teil 1b bleiben die gruppierte und die
-     * kleingeschriebene Form sowie Nummern mit falscher Pruefziffer ohne Fund. Gegenprobe: ein Pfad mit hoechstens
-     * drei Segmenten ohne Endungspunkt laesst den Kontext bestehen (Fund mit 0,50 bzw. 0,80, weil das Kontextwort
-     * weiter entfernt ist).
+     * eine URL mit Schema und mehr als zwei weiteren Segmenten gehoeren dazu (Fassung der Richtigstellung: Abgedeckt
+     * bleibt eine URL aus Schema und hoechstens zwei weiteren Segmenten, Host-Labels und Pfadsegmente zaehlen einzeln,
+     * ohne Punkt hinter einem Wort mit mehr als vier Buchstaben und ohne Query; jede URL mit einem laengeren Host-Label
+     * vor einem Punkt, mit insgesamt mehr als drei Segmenten oder mit Query bleibt ohne Fund, siehe den zweiten Test).
+     * Keine andere Erkennung faengt die Nummer in dieser Stellung auf: Im Scan bleibt sie im Klartext. Ohne Teil 1b
+     * bleibt jede Form ohne Fund; mit Teil 1b bleiben die gruppierte und die kleingeschriebene Form sowie Nummern mit
+     * falscher Pruefziffer ohne Fund, die geschlossene, gueltige, grossgeschriebene Form ist dagegen ein Fund 0,60
+     * (Test {@code bekannteGrenzeOhneKontext_g_k15_...}). Gegenprobe: ein Pfad mit hoechstens drei Segmenten ohne
+     * Endungspunkt laesst den Kontext bestehen (Fund mit 0,50 bzw. 0,80, weil das Kontextwort weiter entfernt ist).
      */
     @Test
     void bekannteGrenzeGK15_pfadOderUrlZwischenKontextwortUndNummer_keinFund() {
@@ -639,6 +670,232 @@ class KvnrGrenzenTest {
         }
     }
 
+    // ------------------------------------------------------------------ Grenzen von Teil 1b (KVNR ohne Kontextwort)
+
+    private static final String QUELLE_1B = KvnrOhneKontextHilfen.QUELLE;
+    private static final double KONFIDENZ_1B = 0.60;
+    private static final int LAENGE_1B = 10;
+
+    /** Auf Erkennerebene: Waechter, dann alle Funde des KVNR-Erkenners (Teil 1a und Teil 1b) mit Invarianten. */
+    private static List<Finding> erkenne(String text) {
+        KvnrSynthetischWaechter.assertKvnrSynthetisch(text);
+        List<Finding> funde = new KvnrRecognizer().detect(text);
+        int vorigesEnde = 0;
+        for (Finding f : funde) {
+            assertTrue(text.substring(f.start(), f.end()).equals(f.originalValue()), "Teilstring-Invariante");
+            assertEquals(FindingType.KVNR, f.type(), "Typ");
+            assertTrue(f.start() >= vorigesEnde, "Funde ueberlappen oder sind nicht sortiert");
+            vorigesEnde = f.end();
+        }
+        return funde;
+    }
+
+    /** Kein KVNR-Fund, weder vom Erkenner noch von {@code TextScanner.standard()} (andere Typen sind erlaubt). */
+    private static void assertKeinKvnrFund(String text, String name) {
+        assertTrue(erkenne(text).isEmpty(), name + ": Erkenner liefert einen Fund");
+        for (Finding f : TextScanner.standard().scan(text)) {
+            assertFalse(f.type() == FindingType.KVNR, name + ": standard() liefert einen KVNR-Fund");
+        }
+    }
+
+    /** Genau ein Fund der Regel 1b ueber {@code nummer} ab {@code start}: zehn Zeichen, 0,60, Quelle 1b. */
+    private static void assertFund1b(String text, int start, String nummer, String name) {
+        List<Finding> funde = erkenne(text);
+        assertEquals(1, funde.size(), name + ": Anzahl Funde");
+        Finding f = funde.get(0);
+        assertEquals(start, f.start(), name + ": Start");
+        assertEquals(start + LAENGE_1B, f.end(), name + ": Ende");
+        assertTrue(nummer.equals(f.originalValue()), name + ": Originalwert");
+        assertEquals(KONFIDENZ_1B, f.confidence(), 1e-9, name + ": Konfidenz");
+        assertTrue(QUELLE_1B.equals(f.source()), name + ": Quelle");
+    }
+
+    /**
+     * Teil 1b, E-3 (AK-12): Eine KVNR ohne Kontextwort ist nur als geschlossene, grossgeschriebene Form mit gueltiger
+     * Pruefziffer ein Fund. Kein Fund bleiben Kleinschreibung, jeder Trenner hinter dem Buchstaben, Gruppen, zwei
+     * Buchstaben und eine falsche Pruefziffer; diese Formen bleiben im Klartext stehen. Gegenprobe: dieselbe Nummer
+     * geschlossen, gross und gueltig ist ein Fund (Quelle {@code kvnr-ohne-kontext}, 0,60).
+     */
+    @Test
+    void bekannteGrenzeOhneKontext_kleinTrennerGruppiertZweiBuchstabenUngueltig_keinFund_gegenprobeGeschlosseneForm() {
+        List<String> nummern = new ArrayList<>(List.of(G.toLowerCase(Locale.ROOT), gruppierteForm(), U, "A" + G));
+        for (String trenner : TRENNER) {
+            nummern.add(BUCHSTABE_G + trenner + ZIFFERN_G);
+        }
+        for (String nummer : nummern) {
+            assertKeinKvnrFund("Der Patient " + nummer + " kam", "Satz");
+            assertKeinKvnrFund(nummer, "allein");
+            List<Finding> scan = scanStandard("Der Patient " + nummer + " kam");
+            assertTrue(ersetzeAlleMitRoundtrip("Der Patient " + nummer + " kam", scan).text().contains(nummer),
+                    "die Nummer bleibt im pseudonymisierten Text stehen");
+        }
+        assertFund1b("Der Patient " + G + " kam", 12, G, "geschlossen, gross, gueltig");
+        assertFund1b(G, 0, G, "allein");
+    }
+
+    /**
+     * Teil 1b, AK-13: Direkt vor oder hinter den zehn Zeichen sperren ein Buchstabe, eine Ziffer, {@code _},
+     * {@code -}, {@code /}, {@code \}, {@code @}, jeder Nicht-ASCII-Buchstabe, jedes Kombinationszeichen und ein Punkt
+     * oder Komma mit Ziffer dahinter: kein Fund. Gegenprobe: Leerzeichen, Satzzeichen und Klammern lassen den Fund zu.
+     */
+    @Test
+    void bekannteGrenzeOhneKontext_wortgrenzen_sperrzeichenVerhindernDenFund_gegenprobeMitSatzzeichen() {
+        List<String> sperr = List.of("x", "7", "_", "-", "/", BS, "@", String.valueOf((char) 0xE4),
+                String.valueOf((char) 0xC4), String.valueOf((char) 0x3A9), String.valueOf(AKUT));
+        for (String s : sperr) {
+            assertKeinKvnrFund("Wert " + s + G + " Ende", "davor");
+            assertKeinKvnrFund("Wert " + G + s + " Ende", "dahinter");
+        }
+        assertKeinKvnrFund("Wert " + G + ".5 Ende", "Dezimalpunkt");
+        assertKeinKvnrFund("Wert " + G + ",5 Ende", "Dezimalkomma");
+        // Gegenprobe: Satzzeichen ohne Ziffer dahinter und Klammern, Anfuehrungszeichen, Doppelpunkt davor
+        for (String nach : List.of(".", ",", ";", ")", ". Neu", ", und")) {
+            assertFund1b("Wert (" + G + nach + " Ende", 6, G, "Satzzeichen dahinter");
+        }
+        for (String davor : List.of("(", "\"", ":", "\t", "\n", " ")) {
+            assertFund1b("Wert" + davor + G + " Ende", 4 + davor.length(), G, "Grenzzeichen davor");
+        }
+        assertFund1b(G, 0, G, "Textanfang und Textende");
+    }
+
+    /**
+     * Teil 1b, AK-14 (D-4): Steht unmittelbar vor der Nummer ein Wort der Negativliste (mit Leerzeichen, Tab,
+     * Zeilenumbruch, geschuetztem Leerzeichen, {@code :} oder {@code =} dazwischen, gleich in welcher Schreibweise),
+     * gibt es keinen Fund. Gegenprobe: ein Fuellwort dazwischen oder ein anderes Wort davor ergibt den Fund 0,60; mit
+     * dem Kontextwort {@code KVNR} direkt davor den Fund 0,95 aus Teil 1a.
+     */
+    @Test
+    void bekannteGrenzeOhneKontext_negativkontext_wortDerListeDirektDavor_keinFund_gegenprobeFuellwort() {
+        List<String> trenner = List.of(" ", ": ", ":", "=", " = ", "\t", "\n", String.valueOf((char) 0xA0), "  ");
+        for (String wort : KvnrOhneKontextHilfen.NEGATIVKONTEXT_SCHREIBWEISE) {
+            for (String t : trenner) {
+                assertKeinKvnrFund(wort + t + G, "Wort " + wort.length());
+            }
+            assertKeinKvnrFund(wort.toLowerCase(Locale.ROOT) + " " + G, "klein");
+            assertKeinKvnrFund(wort.toUpperCase(Locale.ROOT) + ": " + G, "gross");
+            assertKeinKvnrFund("Notiz " + wort + " " + G, "im Satz");
+        }
+        assertFund1b("Rechnungsnummer Muster " + G, "Rechnungsnummer Muster ".length(), G, "Fuellwort dazwischen");
+        assertFund1b("Rechnung fuer Patient " + G, "Rechnung fuer Patient ".length(), G, "anderes Wort davor");
+        List<Finding> mitKontext = erkenne("Rechnung KVNR " + G);
+        assertEquals(1, mitKontext.size(), "Kontextwort direkt davor: ein Fund");
+        assertEquals(SICHER, mitKontext.get(0).confidence(), 1e-9, "Fund aus Teil 1a: 0,95");
+        assertTrue(KvnrRecognizer.SOURCE.equals(mitKontext.get(0).source()), "Quelle des Fundes aus Teil 1a");
+    }
+
+    /**
+     * Teil 1b, Lesart zur Nicht-ASCII-Ziffer (Nachtrag zu T-10 Punkt 4, Javadoc von {@code KvnrOhneKontext}): Eine
+     * Ziffer ausserhalb von ASCII (arabisch-indisch, Vollbreite, Devanagari) direkt vor oder hinter der Form sperrt wie
+     * ein Buchstabe; die Gegenrichtung, eine echte KVNR direkt an einer solchen Ziffer, bleibt ohne Fund und im
+     * Klartext. Gegenprobe: dieselbe Nummer mit Leerzeichen statt der Ziffer ist ein Fund.
+     */
+    @Test
+    void bekannteGrenzeOhneKontext_nichtAsciiZifferAlsNachbar_sperrt_keinFund_gegenprobeMitLeerzeichen() {
+        for (int codepunkt : new int[] {ARABISCH_NULL + 5, VOLLBREIT_NULL + 5, 0x966 + 2}) {
+            String ziffer = new String(Character.toChars(codepunkt));
+            assertKeinKvnrFund("Wert " + ziffer + G + " Ende", "davor");
+            assertKeinKvnrFund("Wert " + G + ziffer + " Ende", "dahinter");
+            String text = "Wert " + ziffer + G + " Ende";
+            assertTrue(ersetzeAlleMitRoundtrip(text, scanStandard(text)).text().contains(G),
+                    "die Nummer bleibt im pseudonymisierten Text stehen");
+        }
+        assertFund1b("Wert " + G + " Ende", 5, G, "Gegenprobe mit Leerzeichen");
+    }
+
+    /**
+     * Teil 1b, G-K9: Auch eine Erkennung ohne Kontextwort schuetzt nicht, wenn das Kontextwort ohne Trenner direkt am
+     * Buchstaben der gueltigen, geschlossenen Form haengt: Der Buchstabe hat keine Wortgrenze davor, es gibt keinen
+     * Fund (weder aus Teil 1a noch aus Teil 1b), die Nummer bleibt im Klartext. Restrisiko, vom Nutzer zur Kenntnis
+     * genommen (Nachtrag zu T-7). Gegenprobe: mit Trenner dahinter der Fund 0,95 aus Teil 1a.
+     */
+    @Test
+    void bekannteGrenzeOhneKontext_kontextwortDirektAmBuchstaben_keinFundAuchMitTeil1b_gegenprobeMitTrenner() {
+        for (String kw : List.of("KVNR", "kvnr", "Versichertennummer", "eGK-Nummer", "Krankenversichertennummer",
+                "Patienten-KVNR")) {
+            assertKeinKvnrFund(kw + G, "Kontextwort " + kw.length());
+            String text = kw + G;
+            assertTrue(ersetzeAlleMitRoundtrip(text, scanStandard(text)).text().contains(G),
+                    "die Nummer bleibt im pseudonymisierten Text stehen");
+        }
+        List<Finding> mitTrenner = erkenne("KVNR " + G);
+        assertEquals(1, mitTrenner.size(), "Gegenprobe: ein Fund");
+        assertEquals(SICHER, mitTrenner.get(0).confidence(), 1e-9, "Gegenprobe: 0,95");
+    }
+
+    /**
+     * Teil 1b schliesst G-K15 teilweise: Steht zwischen Kontextwort und Nummer ein Pfad oder eine URL, die den Kontext
+     * beenden, ist die geschlossene, grossgeschriebene, gueltige Form ein Fund 0,60 aus Teil 1b (in der Stellung hinter
+     * dem Pfad). Die gruppierte und die kleingeschriebene Form sowie Nummern mit falscher Pruefziffer bleiben dort
+     * weiter ohne Fund (die Tests von G-K15). Gegenprobe: dieselben Formen ohne Pfad davor mit Kontextwort.
+     */
+    @Test
+    void bekannteGrenzeOhneKontext_g_k15_pfadOderUrlZwischenKontextwortUndNummer_nurGeschlosseneGueltigeFormGefunden() {
+        for (String praefix : erloschenePfadePraefixe()) {
+            assertFund1b(praefix + G, praefix.length(), G, "geschlossene gueltige Form");
+            String text = praefix + G + " Ende";
+            List<Finding> scan = scanStandard(text);
+            assertTrue(QUELLE_1B.equals(scan.stream().filter(f -> f.type() == FindingType.KVNR).findFirst()
+                    .orElseThrow().source()), "Quelle des Fundes im Scan");
+            assertFalse(ersetzeAlleMitRoundtrip(text, scan).text().contains(G), "Nummer ersetzt");
+            assertKeinKvnrFund(praefix + gruppierteForm(), "gruppiert");
+            assertKeinKvnrFund(praefix + G.toLowerCase(Locale.ROOT), "klein");
+            assertKeinKvnrFund(praefix + U, "ungueltig");
+        }
+        assertEquals(WEITER, erkenne("KVNR /a/b/c " + G).get(0).confidence(), 1e-9,
+                "Gegenprobe: Pfad mit drei Segmenten");
+    }
+
+    /**
+     * Teil 1b, Kollisionsfall K-1 (G-D2, Plan Kap. 2, Risiko R-2): Ein LANR- oder IK-Kontextwort direkt vor einer
+     * gueltigen, geschlossenen, grossgeschriebenen KVNR-Form ergibt jetzt einen KVNR-Fund (0,60) ueber Buchstabe und
+     * Ziffern statt des LANR- oder IK-Fundes nur ueber die Ziffern: Die Position bleibt geschuetzt und wird um den
+     * Buchstaben erweitert, die Stufe kann sinken (hier von sicher auf fraglich). Gegenprobe: mit falscher Pruefziffer
+     * (G-D2) bleibt es beim Fund der Kontextwort-Art ueber die Ziffern.
+     */
+    @Test
+    void bekannteGrenzeOhneKontext_k1_lanrOderIkKontextwortVorGueltigerForm_kvnrFundUmschliesstDenAltenFund() {
+        String nummer = KVNR_NULL;
+        for (String kw : List.of("LANR ", "IK ")) {
+            String text = kw + nummer;
+            List<Finding> alt = KvnrBsnrHilfen.ALT_TRENNER.scan(text);
+            assertEquals(1, alt.size(), "alter Stand: ein Fund");
+            assertTrue(KvnrBsnrHilfen.istKv(alt.get(0)), "alter Stand: LANR oder IK");
+            assertEquals(kw.length() + 1, alt.get(0).start(), "alter Stand: nur die Ziffern");
+            List<Finding> neu = scanStandard(text);
+            assertEquals(1, neu.size(), "neuer Stand: ein Fund");
+            assertEquals(FindingType.KVNR, neu.get(0).type(), "neuer Stand: Typ KVNR");
+            assertEquals(kw.length(), neu.get(0).start(), "neuer Stand: der Fund beginnt beim Buchstaben");
+            assertEquals(text.length(), neu.get(0).end(), "neuer Stand: Ende wie der alte Fund");
+            assertEquals(KONFIDENZ_1B, neu.get(0).confidence(), 1e-9, "neuer Stand: 0,60");
+            assertTrue(neu.get(0).confidence() <= alt.get(0).confidence(), "Stufe sinkt oder bleibt gleich");
+            assertFalse(ersetzeAlleMitRoundtrip(text, neu).text().contains(BUCHSTABE_NULL), "Buchstabe ersetzt");
+        }
+        List<Finding> ungueltig = scanStandard("LANR " + U);
+        assertEquals(1, ungueltig.size(), "Gegenprobe: ein Fund");
+        assertEquals(FindingType.LANR, ungueltig.get(0).type(), "Gegenprobe: Typ LANR, nur die Ziffern");
+    }
+
+    private static final String BUCHSTABE_NULL = KVNR_NULL.substring(0, 1);
+
+    /**
+     * Teil 1b, G-K2 (bewusst eingegangener Fehlalarm, E-3): Eine Fremdnummer aus Buchstabe und neun Ziffern mit
+     * zufaellig passender Pruefziffer ist ein Fund der Stufe fraglich, wenn kein Wort der Negativliste direkt davor
+     * steht (etwa jede zehnte solche Nummer); fraglich heisst: ersetzt wird nur bei Uebergabe durch den Menschen
+     * (AK-20). Der Fehlalarm-Pruefstand misst die Rate. Gegenprobe: dieselbe Nummer hinter einem Wort der Negativliste.
+     */
+    @Test
+    void bekannteGrenzeOhneKontext_g_k2_fremdnummerMitPassenderPruefziffer_fundFraglich_gegenprobeNegativwort() {
+        for (String wort : List.of("Beleg", "Lieferschein", "Vorgang", "Referenz", "Rechnung")) {
+            List<Finding> funde = erkenne(wort + " " + G);
+            assertEquals(1, funde.size(), "ein Fund hinter einem Wort ausserhalb der Liste");
+            assertEquals(ConfidenceLevel.FRAGLICH, funde.get(0).level(), "Stufe fraglich");
+            assertTrue(QUELLE_1B.equals(funde.get(0).source()), "Quelle");
+        }
+        PseudonymizationResult ohneUebergabe = PSEUDONYMIZER.pseudonymize("Beleg " + G, List.of());
+        assertTrue(("Beleg " + G).equals(ohneUebergabe.text()), "ohne Uebergabe bleibt der Text unveraendert");
+        assertKeinKvnrFund("Rechnungsnummer " + G, "Gegenprobe Negativwort");
+    }
+
     // ------------------------------------------------------------------ Vorgaenger
 
     /**
@@ -656,5 +913,107 @@ class KvnrGrenzenTest {
         assertFund("KVNR ", U, "", PZ);
         assertFund("KV NR ", U, "", PZ);
         assertFund("", U, ", KVNR", PZ);
+    }
+
+    // ------------------------------------------------------------------ G-K18
+
+    /** Ob ein Fund irgendeiner Art die zehn Zeichen ab {@code start} ganz oder teilweise ueberdeckt. */
+    private static boolean nummerAbgedeckt(List<Finding> funde, int start) {
+        for (Finding f : funde) {
+            if (f.start() < start + LAENGE_1B && f.end() > start) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * G-K18: Kein KVNR-Fund (Erkenner und {@code standard()}), kein Fund irgendeiner Art deckt die Nummer, und die
+     * Nummer steht nach dem Ersetzen aller Funde (Roundtrip zeichengleich) im Klartext im Text.
+     */
+    private static void assertNummerOhneJedeAbdeckung(String text, String name) {
+        assertKeinKvnrFund(text, name);
+        int start = text.indexOf(G);
+        assertTrue(start >= 0, name + ": Nummer fehlt im Text");
+        List<Finding> scan = scanStandard(text);
+        assertFalse(nummerAbgedeckt(scan, start), name + ": ein Fund deckt die Nummer (Grenze geschlossen?)");
+        assertTrue(ersetzeAlleMitRoundtrip(text, scan).text().contains(G), name + ": Nummer nicht im Klartext");
+    }
+
+    /** Gegenprobe zu G-K18: ein Fund im Scan deckt die Nummer ({@code type}: erwarteter Typ des deckenden Fundes). */
+    private static void assertNummerGedecktVonFund(String text, FindingType type, String name) {
+        List<Finding> scan = scanStandard(text);
+        assertTrue(nummerAbgedeckt(scan, text.indexOf(G)), name + ": keine Abdeckung");
+        assertTrue(scan.stream().anyMatch(f -> f.type() == type), name + ": erwarteter Fundtyp fehlt");
+    }
+
+    /**
+     * G-K18 (Nachtrag 2 zu T-11, security T-11): Ein Dateiname ohne Pfad mit {@code _} oder {@code -} direkt vor oder
+     * hinter der gueltigen, geschlossenen Nummer ohne Kontextwort ist kein Fund: AK-13 verlangt die Wortgrenze, und
+     * ein Pfad oder eine URL mit Schema, die die Nummer umschliesst, gibt es nicht. Die Nummer bleibt im Klartext, und
+     * kein anderer Erkenner deckt sie. Gegenproben: dieselbe Nummer mit Leerzeichen statt des Sperrzeichens ist ein
+     * Fund 1b (0,60); mit {@code KVNR} davor ist es ein Fund aus Teil 1a auf der Nummer (0,80 bei Sperrzeichen vorn,
+     * 0,95 bei Sperrzeichen hinten), also keine Luecke mehr.
+     */
+    @Test
+    void bekannteGrenzeGK18_dateinameOhnePfad_keinFund_gegenprobeLeerzeichenUndKontextwort() {
+        for (String sperr : List.of("_", "-")) {
+            assertNummerOhneJedeAbdeckung("Datei bericht" + sperr + G + ".pdf Ende", "vorn " + sperr);
+            assertNummerOhneJedeAbdeckung("Datei " + G + sperr + "bericht.pdf Ende", "hinten " + sperr);
+            assertNummerOhneJedeAbdeckung("Datei " + sperr + G + " Ende", "nur Sperrzeichen vorn " + sperr);
+            assertNummerOhneJedeAbdeckung("Datei " + G + sperr + " Ende", "nur Sperrzeichen hinten " + sperr);
+            assertFund1b("Datei bericht " + G + ".pdf Ende", "Datei bericht ".length(), G, "Leerzeichen " + sperr);
+            assertFund1b("Datei " + G + " bericht.pdf Ende", "Datei ".length(), G, "Leerzeichen hinten " + sperr);
+            List<Finding> vorn = erkenne("KVNR bericht" + sperr + G + ".pdf Ende");
+            assertEquals(1, vorn.size(), "Kontextwort davor, Nummer vorn: ein Fund");
+            assertEquals(WEITER, vorn.get(0).confidence(), 1e-9, "Kontextwort davor, vorn: 0,80");
+            assertTrue(G.equals(vorn.get(0).originalValue()), "Kontextwort davor, vorn: Fund ist die Nummer");
+            List<Finding> hinten = erkenne("KVNR " + G + sperr + "bericht.pdf Ende");
+            assertEquals(1, hinten.size(), "Kontextwort davor, Nummer hinten: ein Fund");
+            assertEquals(SICHER, hinten.get(0).confidence(), 1e-9, "Kontextwort davor, hinten: 0,95");
+            assertTrue(G.equals(hinten.get(0).originalValue()), "Kontextwort davor, hinten: Fund ist die Nummer");
+        }
+    }
+
+    /**
+     * G-K18: Eine URL ohne Schema mit der Nummer als Pfadsegment ist kein Fund, und kein Fund deckt die Nummer (der
+     * URL-Erkenner verlangt ein Schema); auch ein Kontextwort davor hilft nicht (G-K15: die URL beendet den Kontext,
+     * und die Nummer hat vorn und hinten {@code /}). Gegenproben: dieselbe URL mit Schema ist ein URL-Fund, der die
+     * Nummer deckt, ebenso ein Pfad, der sie enthaelt (Unix-Pfad, Laufwerkspfad).
+     */
+    @Test
+    void bekannteGrenzeGK18_urlOhneSchemaMitNummerAlsPfadsegment_keinFund_gegenprobeMitSchemaUndPfad() {
+        String host = "portal.example.org/akte/";
+        assertNummerOhneJedeAbdeckung("Siehe " + host + G + " Ende", "Segment am Ende");
+        assertNummerOhneJedeAbdeckung("Siehe " + host + G + "/x Ende", "Segment in der Mitte");
+        assertNummerOhneJedeAbdeckung("KVNR " + host + G + " Ende", "mit Kontextwort davor");
+        assertNummerGedecktVonFund("Siehe https://" + host + G + " Ende", FindingType.URL, "URL mit Schema");
+        assertNummerGedecktVonFund("Siehe /home/x/" + G + "_a.pdf Ende", FindingType.PFAD, "Unix-Pfad");
+        assertNummerGedecktVonFund("Siehe C:" + BS + "x" + BS + G + " Ende", FindingType.PFAD, "Laufwerkspfad");
+    }
+
+    /**
+     * G-K18: Eine Nummer, die per {@code /} direkt an einer IP-Adresse haengt (beide Reihenfolgen), ist kein KVNR-Fund,
+     * und kein Fund deckt sie: Der IP-Fund umfasst nur die Adresse, die Nummer hat {@code /} als Sperrzeichen.
+     * Gegenproben: mit Leerzeichen statt {@code /} ein Fund 1b (0,60) neben dem IP-Fund; mit {@code KVNR} davor ist
+     * die Nummer ein Fund aus Teil 1a (0,80 hinter der IP, 0,95 vor ihr); Teil 1a legt dabei zusaetzlich einen Fund
+     * der Stufe 0,40 (Form abweichend) ueber die Adresse, den {@code standard()} durch den IP-Fund ersetzt.
+     */
+    @Test
+    void bekannteGrenzeGK18_nummerPerSchraegstrichAnEinerIp_keinFund_gegenprobeLeerzeichenUndKontextwort() {
+        for (String text : List.of("Siehe " + IK_FORM_DOKU_IP + "/" + G + " Ende",
+                "Siehe " + G + "/" + IK_FORM_DOKU_IP + " Ende")) {
+            assertNummerOhneJedeAbdeckung(text, "Schraegstrich an der IP");
+            assertTrue(scanStandard(text).stream().anyMatch(f -> f.type() == FindingType.IP), "IP-Fund fehlt");
+        }
+        assertFund1b("Siehe " + IK_FORM_DOKU_IP + " " + G + " Ende", ("Siehe " + IK_FORM_DOKU_IP + " ").length(), G,
+                "Leerzeichen hinter der IP");
+        assertFund1b("Siehe " + G + " " + IK_FORM_DOKU_IP + " Ende", "Siehe ".length(), G, "Leerzeichen vor der IP");
+        List<Finding> hinterIp = erkenne("KVNR " + IK_FORM_DOKU_IP + "/" + G + " Ende");
+        assertTrue(hinterIp.stream().anyMatch(f -> G.equals(f.originalValue()) && f.confidence() == WEITER),
+                "Kontextwort davor, Nummer hinter der IP: Fund 0,80 auf der Nummer");
+        List<Finding> vorIp = erkenne("KVNR " + G + "/" + IK_FORM_DOKU_IP + " Ende");
+        assertTrue(vorIp.stream().anyMatch(f -> G.equals(f.originalValue()) && f.confidence() == SICHER),
+                "Kontextwort davor, Nummer vor der IP: Fund 0,95 auf der Nummer");
     }
 }

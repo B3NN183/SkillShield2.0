@@ -1386,3 +1386,22 @@ Tests in `KvnrGrenzenTest`, sofern nicht anders genannt. Diese Liste ergänzt un
      Prüfziffer, Nicht-ASCII-Ziffer als Nachbar).
   4. Eingefroren bleiben außerdem der Prüfstand T-9 (Tag `kb-t9-pruefstand`) und alle bestehenden
      Seeds/Hashes/Siegel/Mindestzahlen. Wird ein bestehender Test rot: nicht anpassen, anhalten, melden.
+- **Nachtrag 2 zu T-11 / Kap. 11 – neue bekannte Grenze G-K18 (security T-11, niedrig; Entscheidung der
+  Hauptsitzung):** Eine vollständige, geschlossene, gültige KVNR **ohne Kontextwort** bleibt ganz im Klartext,
+  wenn eines der Sperrzeichen aus AK-13 (`_`, `-`, `/`, `\`, `@`) direkt an ihr steht und kein Bestandsfund
+  (E-Mail, URL mit Schema, Pfad, IP) sie umschließt. Alltägliche Schreibweisen: Dateiname ohne Pfad mit
+  Unterstrich oder Bindestrich an der Nummer (vorn oder hinten), URL **ohne Schema** mit der Nummer als
+  Pfadsegment, Nummer per Schrägstrich direkt an einer IP. Die Regel ist von der Anforderung so verlangt (AK-13)
+  und vom eingefrorenen Prüfstand bewacht; sie wird in diesem Feature **nicht** geändert. T-11 dokumentiert sie
+  im Javadoc (der Satz „gehört dem umschließenden Fund" wird berichtigt: gilt nur, wenn es einen solchen Fund
+  gibt) und mit benannten `bekannteGrenze…`-Tests samt Gegenprobe (mit Kontextwort davor bzw. mit Leerzeichen →
+  Fund). Für den Abschlussbericht: Restrisiko G-K18 neben G-K9 und G-K15 ausweisen und ein Folgefeature
+  vorschlagen („`_`/`-` als zulässige Grenze bei gültiger Prüfziffer; Dateinamen ohne Pfad; URL ohne Schema" –
+  mit eigener Fehlalarm-Messung). Außerdem zu berichten: In den „überlagerten" Bestand-Fällen (G-K14) deckt ein
+  zusammengelegter Fund der Stufe „fraglich" (0,50) die Ziffern – Hinweis für das UI-Feature wie bei K-1.
+- **Vorgemerkt aus security T-11 Durchlauf 2 (niedrig, nur Javadoc; im nächsten Task mit Änderung an den
+  kv-Produktdateien mitzunehmen, spätestens T-13):** (a) `KvnrOhneKontext` G-K18-Schlusssatz einschränken: „mit
+  Kontextwort davor" gilt nicht bei einer URL ohne Schema (G-K15) – dort bleibt die Nummer im Klartext; (b)
+  `KvNumberScanner` und `KvnrRecognizer`, G-K15-Zusatz: die geschlossene gültige Form ist nur dann ein Fund
+  (0,60), wenn sie vom Pfad bzw. der URL abgesetzt steht; direkt hinter `/` als Segment greift G-K18 (kein
+  Fund). Maßgeblich bis dahin: dieser Nachtrag und die Tests `bekannteGrenzeGK18_…`.

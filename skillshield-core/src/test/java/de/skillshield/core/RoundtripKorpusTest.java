@@ -1425,6 +1425,111 @@ class RoundtripKorpusTest {
         return f;
     }
 
+    /**
+     * Korpusfaelle zum Feature kvnr-bsnr-erkennung Teil 1b (T-11, KVNR ohne Kontextwort; AK-11 bis AK-15, AK-17,
+     * AK-20, Kollisionsfall K-1 und die bekannten Grenzen von 1b): je Fall der erwartete pseudonymisierte Text, die
+     * erwarteten Typen und der Roundtrip. Eigene Liste, nicht Teil von {@link #kvnrFaelle()}: Die Faelle dort sind eine
+     * Textmenge der Bestandstests und enthalten bewusst keine geschlossene, gueltige, grossgeschriebene KVNR ohne
+     * Kontextwort (Regel 12). Namen {@code ko-...}, disjunkt zu den anderen Korpora. Alle Nummern sind die Konstanten
+     * von {@link SynthetischeKvNummern} oder Teilstuecke davon; Sonderzeichen kommen als {@code (char)}-Konstanten.
+     * Die Liste gehoert zum 1b-Inventar (Plan Regel 14).
+     */
+    static List<KvFall> kvnrOhneKontextFaelle() {
+        List<KvFall> f = new ArrayList<>();
+        String g = SynthetischeKvNummern.KVNR_GUELTIG;
+        String g2 = SynthetischeKvNummern.KVNR_GUELTIG_ZWEI;
+        String g3 = SynthetischeKvNummern.KVNR_GUELTIG_BUCHSTABE_C;
+        String g4 = SynthetischeKvNummern.KVNR_NULL;
+        String u1 = SynthetischeKvNummern.KVNR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN;
+        String u2 = SynthetischeKvNummern.KVNR_UNGUELTIG_VERTAUSCHT;
+        String z = kvnrZiffern(g);
+        String nb = zeichen(0xA0);
+        // AK-11: Grundfall, weitere Nummern, Kontextwort weiter weg als drei Woerter, mit Kontextwort nur ein Fund
+        f.add(kn("ko-ak11-allein", "", g, ""));
+        f.add(kn("ko-ak11-im-satz", "Der Patient ", g, " kam gestern"));
+        for (String n : List.of(g2, g3, g4)) {
+            f.add(kn("ko-ak11-weitere-nummer-" + f.size(), "Notiz ", n, " Ende"));
+        }
+        f.add(kn("ko-ak11-kontextwort-weit-weg", "KVNR der Frau Beispiel von hier aus ", g, ""));
+        f.add(kn("ko-ak11-mit-kontextwort-ein-fund", "KVNR ", g, ""));
+        f.add(kn("ko-ak11-mit-kontextwort-doppelpunkt", "Versichertennummer: ", g, " kam gestern"));
+        // AK-12: eng gefasst, jeweils ohne Fund (Text unveraendert)
+        f.add(kein("ko-ak12-ungueltig", "Der Patient " + u1 + " kam"));
+        f.add(kein("ko-ak12-ungueltig-vertauscht", "Der Patient " + u2 + " kam"));
+        f.add(kein("ko-ak12-klein", "Der Patient " + g.toLowerCase(Locale.ROOT) + " kam"));
+        f.add(kein("ko-ak12-trenner-hinter-buchstabe", "Der Patient " + g.charAt(0) + " " + z + " kam"));
+        f.add(kein("ko-ak12-gruppiert", "Der Patient " + kvnrGruppiert(g, "", new int[] {3, 3, 3}, " ") + " kam"));
+        f.add(kein("ko-ak12-zwei-buchstaben", "Der Patient A" + g + " kam"));
+        f.add(kein("ko-ak12-neun-zeichen", "Der Patient " + SynthetischeKvNummern.KVNR_ACHT_ZIFFERN + " kam"));
+        f.add(kein("ko-ak12-elf-zeichen", "Der Patient " + SynthetischeKvNummern.KVNR_ZEHN_ZIFFERN + " kam"));
+        // AK-13: Wortgrenzen; Fund bei Leerraum, Tab, Umbruch, Anfang, Ende, ( ) " : davor und . , ; ) dahinter
+        String[] davorFund = {" ", "\t", "\n", "\r\n", nb, "(", "\"", ":"};
+        for (int i = 0; i < davorFund.length; i++) {
+            f.add(kn("ko-ak13-davor-" + i, "Wert" + davorFund[i], g, " Ende"));
+        }
+        String[] dahinterFund = {".", ",", ";", ")", " ", "\t", "\n", nb};
+        for (int i = 0; i < dahinterFund.length; i++) {
+            f.add(kn("ko-ak13-dahinter-" + i, "Wert (", g, dahinterFund[i] + "Ende"));
+        }
+        f.add(kn("ko-ak13-textanfang", "", g, " Ende"));
+        f.add(kn("ko-ak13-textende", "Ende ", g, ""));
+        f.add(kn("ko-ak13-punkt-ohne-ziffer-dahinter", "Ende ", g, ". Neuer Satz"));
+        String[] sperr = {"x", "7", "_", "-", "@"};
+        for (int i = 0; i < sperr.length; i++) {
+            f.add(kein("ko-ak13-sperre-davor-" + i, "Wert " + sperr[i] + g + " Ende"));
+            f.add(kein("ko-ak13-sperre-dahinter-" + i, "Wert " + g + sperr[i] + " Ende"));
+        }
+        f.add(kein("ko-ak13-dezimalpunkt-dahinter", "Wert " + g + ".5 Ende"));
+        f.add(kein("ko-ak13-dezimalkomma-dahinter", "Wert " + g + ",5 Ende"));
+        // AK-14: Negativkontext (D-4), jeweils ohne Fund; Wort mit Doppelpunkt, Gleichheitszeichen, Schreibweise
+        String[] negativ = {"Artikelnummer", "Art.-Nr.", "Rechnungsnummer", "Rechnungs-Nr.", "Vorgangsnummer",
+            "Aktenzeichen", "Az.", "Kennzeichen", "Bestellnummer", "Auftragsnummer", "Kundennummer", "Seriennummer",
+            "Sendungsnummer", "Ticket"};
+        String[] negativTrenner = {" ", ": ", "="};
+        for (int i = 0; i < negativ.length; i++) {
+            for (int t = 0; t < negativTrenner.length; t++) {
+                f.add(kein("ko-ak14-" + i + "-" + t, negativ[i] + negativTrenner[t] + g));
+            }
+            f.add(kein("ko-ak14-" + i + "-klein", negativ[i].toLowerCase(Locale.ROOT) + " " + g));
+            f.add(kein("ko-ak14-" + i + "-gross", negativ[i].toUpperCase(Locale.ROOT) + ": " + g));
+        }
+        f.add(kein("ko-ak14-tab", "Rechnungsnummer\t" + g));
+        f.add(kein("ko-ak14-umbruch", "Rechnungsnummer\n" + g));
+        f.add(kein("ko-ak14-geschuetztes-leerzeichen", "Rechnungsnummer" + nb + g));
+        f.add(kn("ko-ak14-patient-statt-negativwort", "Rechnung fuer Patient ", g, ""));
+        f.add(kn("ko-ak14-fuellwort-zwischen-wort-und-nummer", "Rechnungsnummer Muster ", g, ""));
+        f.add(kn("ko-ak14-wort-und-kvnr-davor", "Rechnung KVNR ", g, ""));
+        // AK-15: Enthaltensein im Bestand, Dateiname ohne Pfad
+        f.add(kvFall("ko-ak15-url", "https://example.invalid/praxis?x=" + g, "[[URL_1]]", "URL"));
+        f.add(kvFall("ko-ak15-pfad", "C:" + BS_KN + "Praxis" + BS_KN + g + BS_KN + "x.txt", "[[PFAD_1]]", "PFAD"));
+        f.add(kvFall("ko-ak15-email", g + "@example.invalid", "[[EMAIL_1]]", "EMAIL"));
+        f.add(kn("ko-ak15-dateiname-ohne-pfad", "", g, ".pdf"));
+        // Kollisionsfall K-1: LANR- oder IK-Kontextwort direkt vor der Form: der KVNR-Fund umschliesst den Fund
+        f.add(kn("ko-k1-lanr", "LANR ", g, ""));
+        f.add(kn("ko-k1-ik", "IK ", g2, ""));
+        f.add(kn("ko-k1-lanr-doppelpunkt", "Praxis-LANR: ", g3, " Ende"));
+        // AK-17 und AK-20: Konsistenz (Platzhalter nach Wert und Schreibweise)
+        f.add(kvFall("ko-ak17-gleiche-nummer-zweimal", g + " ... " + g, "[[KVNR_1]] ... [[KVNR_1]]", "KVNR,KVNR"));
+        f.add(kvFall("ko-ak17-mit-und-ohne-kontextwort", "KVNR " + g + " ... " + g, "KVNR [[KVNR_1]] ... [[KVNR_1]]",
+                "KVNR,KVNR"));
+        f.add(kvFall("ko-ak17-ohne-und-mit-kontextwort", g + " ... KVNR " + g, "[[KVNR_1]] ... KVNR [[KVNR_1]]",
+                "KVNR,KVNR"));
+        f.add(kvFall("ko-ak17-mit-und-ohne-trenner", g + " ... KVNR " + g.charAt(0) + " " + z,
+                "[[KVNR_1]] ... KVNR [[KVNR_2]]", "KVNR,KVNR"));
+        f.add(kvFall("ko-ak17-aufzaehlung-ohne-kontextwort", g + ", " + g2 + " und " + g3,
+                "[[KVNR_1]], [[KVNR_2]] und [[KVNR_3]]", "KVNR,KVNR,KVNR"));
+        f.add(kvFall("ko-ak21-alle-funde-in-einem-text", "Mail " + MAIL + ", Server 192.0.2.10, Link "
+                + "https://example.invalid/a, Pfad C:" + BS_KN + "Tools" + BS_KN + "a.exe, IK " + IK_GUELTIG
+                + ", LANR " + LANR_GUELTIG + ", Patient " + g,
+                "Mail [[EMAIL_1]], Server [[IP_2]], Link [[URL_3]], Pfad [[PFAD_4]], IK [[IK_5]], LANR [[LANR_6]],"
+                + " Patient [[KVNR_7]]", "EMAIL,IP,URL,PFAD,IK,LANR,KVNR"));
+        // bekannte Grenzen von 1b: Nicht-ASCII-Ziffer als Nachbar sperrt, Kontextwort direkt am Buchstaben
+        f.add(kein("ko-grenze-arabische-ziffer-davor", "Wert " + zeichen(0x665) + g + " Ende"));
+        f.add(kein("ko-grenze-vollbreite-ziffer-dahinter", "Wert " + g + zeichen(0xFF15) + " Ende"));
+        f.add(kein("ko-grenze-kontextwort-am-buchstaben", "KVNR" + g));
+        return f;
+    }
+
     /** Die Texte aller KV-Korpusfaelle (fuer den Differenztest). */
     static List<String> kvTexte() {
         List<String> texte = new ArrayList<>();
@@ -1745,6 +1850,119 @@ class RoundtripKorpusTest {
                 "KVNR [[KVNR_1]], IK [[IK_2]]", "KVNR,IK"));
         ReidentificationResult r = umformen(p, "Antwort: IK [[IK_2]] und KVNR ([[KVNR_1]]), nochmal [[KVNR_1]].");
         assertTrue(("Antwort: IK " + IK_GUELTIG + " und KVNR (" + g + "), nochmal " + g + ".").equals(r.text()),
+                "KI-Antwort wird rueckuebersetzt");
+        assertTrue(r.unresolved().isEmpty(), "keine Meldung");
+    }
+
+    // ------------------------------------------------------------------ KVNR ohne Kontextwort (T-11)
+
+    @Test
+    void kvnrOhneKontext_korpusIstGrossGenugUndNamenSindEindeutigUndDisjunkt() {
+        List<KvFall> faelle = kvnrOhneKontextFaelle();
+        // Istwerte: 139 Faelle, davon 96 ohne Fund, 40 mit KVNR-Fund und 4 mit Bestand; Untergrenzen bei 70 Prozent
+        assertTrue(faelle.size() >= 97, "Korpusgroesse KVNR ohne Kontextwort: " + faelle.size());
+        assertEquals(faelle.size(), faelle.stream().map(KvFall::name).distinct().count(), "Fallnamen eindeutig");
+        List<String> bestand = new ArrayList<>();
+        kvFaelle().forEach(k -> bestand.add(k.name()));
+        kvTrennerFaelle().forEach(k -> bestand.add(k.name()));
+        kvnrFaelle().forEach(k -> bestand.add(k.name()));
+        assertTrue(faelle.stream().noneMatch(k -> bestand.contains(k.name())), "Fallnamen disjunkt zum Bestand");
+        assertTrue(faelle.stream().filter(k -> k.typen().isEmpty()).count() >= 67, "Gegenproben ohne Fund");
+        assertTrue(faelle.stream().filter(k -> k.typen().contains("KVNR")).count() >= 28, "Faelle mit KVNR-Fund");
+        assertTrue(faelle.stream().filter(k -> k.typen().contains("URL") || k.typen().contains("PFAD")
+                || k.typen().contains("EMAIL")).count() >= 2, "Faelle mit Bestand");
+    }
+
+    /**
+     * AK-17 und AK-11 (Korpus): Scan, Pseudonymisierung aller Funde, Roundtrip zeichengleich ohne Meldung, keine
+     * Ziffernkette mit 6+ Ziffern und keine Folge Buchstabe und 6+ Ziffern im Ausgabetext (Faelle mit Fund), Typen und
+     * erwarteter Ausgabetext je Fall.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("kvnrOhneKontextFallStrom")
+    void kvnrOhneKontext_scanPseudonymisierungRoundtrip_keineFormEinesFundesImAusgabetext(String name, KvFall k) {
+        kvnrPruefe(k);
+    }
+
+    static Stream<Arguments> kvnrOhneKontextFallStrom() {
+        return kvnrOhneKontextFaelle().stream().map(k -> Arguments.of(k.name(), k));
+    }
+
+    /**
+     * AK-11, AK-20: Der Fund ohne Kontextwort hat Typ KVNR, Quelle {@code kvnr-ohne-kontext}, Konfidenz 0,60 (Stufe
+     * fraglich) und umfasst genau die zehn Zeichen; ersetzt wird nur, was der Aufrufer uebergibt (leere Liste: Text
+     * unveraendert).
+     */
+    @Test
+    void kvnrOhneKontext_ak11Ak20_fundIstFraglichUndWirdNurBeiUebergabeErsetzt() {
+        String g = SynthetischeKvNummern.KVNR_GUELTIG;
+        String text = "Der Patient " + g + " kam gestern";
+        List<Finding> funde = SCANNER.scan(text);
+        assertEquals(1, funde.size(), "ein Fund");
+        Finding fund = funde.get(0);
+        assertEquals(FindingType.KVNR, fund.type(), "Typ KVNR");
+        assertEquals(0.60, fund.confidence(), 1e-9, "Konfidenz");
+        assertEquals(ConfidenceLevel.FRAGLICH, fund.level(), "Stufe fraglich");
+        assertTrue("kvnr-ohne-kontext".equals(fund.source()), "Quelle");
+        assertEquals("Der Patient ".length(), fund.start(), "Start");
+        assertEquals("Der Patient ".length() + g.length(), fund.end(), "Ende");
+        PseudonymizationResult leer = PSEUDONYMIZER.pseudonymize(text, List.of());
+        assertTrue(text.equals(leer.text()), "ohne Uebergabe bleibt der Text unveraendert");
+        assertTrue(leer.mapping().size() == 0, "keine Zuordnung");
+        PseudonymizationResult alle = PSEUDONYMIZER.pseudonymize(text, funde);
+        assertTrue("Der Patient [[KVNR_1]] kam gestern".equals(alle.text()), "mit Uebergabe ersetzt");
+        // allein: kein Kontextwort, genau der eine Fund
+        assertEquals(1, SCANNER.scan(g).size(), "die Nummer allein ist ein Fund");
+    }
+
+    /**
+     * AK-13: Der Schraegstrich und der Rueckwaertsstrich direkt vor und hinter der Nummer sperren: kein KVNR-Fund (ein
+     * Pfad kann dort entstehen, dann liegt die Nummer in dessen Fund oder bleibt stehen, dem Plan entsprechend).
+     * Gegenprobe: mit Leerzeichen statt des Sperrzeichens ein KVNR-Fund.
+     */
+    @Test
+    void kvnrOhneKontext_ak13_schraegstrichUndRueckwaertsstrich_keinKvnrFund_gegenprobeMitLeerzeichen() {
+        String g = SynthetischeKvNummern.KVNR_GUELTIG;
+        for (String sperr : List.of("/", BS_KN)) {
+            for (String text : List.of("Wert " + sperr + g + " Ende", "Wert " + g + sperr + " Ende")) {
+                for (Finding fund : SCANNER.scan(text)) {
+                    assertFalse(FindingType.KVNR.equals(fund.type()), "KVNR-Fund neben dem Sperrzeichen");
+                }
+            }
+        }
+        assertEquals(1, SCANNER.scan("Wert " + g + " Ende").size(), "Gegenprobe: mit Leerzeichen ein Fund");
+    }
+
+    /**
+     * Kollisionsfall K-1 (Plan Kap. 2, Risiko R-2): Mit LANR- oder IK-Kontextwort direkt vor der Form umfasst der Fund
+     * (KVNR, 0,60) Buchstabe und Ziffern und ersetzt den alten LANR- oder IK-Fund auf den Ziffern: Die Stufe sinkt, die
+     * Position bleibt geschuetzt und wird um den Buchstaben erweitert. Gegenprobe: dieselbe Nummer mit falscher
+     * Pruefziffer ergibt weiter den Fund der Kontextwort-Art auf den Ziffern (G-D2).
+     */
+    @Test
+    void kvnrOhneKontext_k1_lanrOderIkKontextwortVorGueltigerForm_kvnrFundUmschliesstDenAltenFund() {
+        String g = SynthetischeKvNummern.KVNR_GUELTIG;
+        for (String vor : List.of("LANR ", "IK ", "Praxis-LANR: ")) {
+            List<Finding> funde = SCANNER.scan(vor + g);
+            assertEquals(1, funde.size(), "ein Fund");
+            assertEquals(FindingType.KVNR, funde.get(0).type(), "Typ KVNR");
+            assertEquals(vor.length(), funde.get(0).start(), "der Fund beginnt beim Buchstaben");
+            assertTrue(g.equals(funde.get(0).originalValue()), "der Fund umfasst Buchstabe und Ziffern");
+            assertEquals(0.60, funde.get(0).confidence(), 1e-9, "Konfidenz");
+        }
+        List<Finding> ungueltig = SCANNER.scan("LANR " + SynthetischeKvNummern.KVNR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN);
+        assertEquals(1, ungueltig.size(), "ein Fund bei falscher Pruefziffer");
+        assertEquals(FindingType.LANR, ungueltig.get(0).type(), "Typ LANR bei falscher Pruefziffer");
+    }
+
+    /** KI-Simulation (AK-17) fuer den Fund ohne Kontextwort: Platzhalter vertauscht und eingebettet. */
+    @Test
+    void kvnrOhneKontext_kiSimulation_platzhalterVertauschtUndEingebettet_ergibtOriginalwerte() {
+        String g = SynthetischeKvNummern.KVNR_GUELTIG;
+        PseudonymizationResult p = kvnrPruefe(kvFall("ko-ki", "Patient " + g + ", IK " + IK_GUELTIG,
+                "Patient [[KVNR_1]], IK [[IK_2]]", "KVNR,IK"));
+        ReidentificationResult r = umformen(p, "Antwort: IK [[IK_2]] und Patient ([[KVNR_1]]), nochmal [[KVNR_1]].");
+        assertTrue(("Antwort: IK " + IK_GUELTIG + " und Patient (" + g + "), nochmal " + g + ".").equals(r.text()),
                 "KI-Antwort wird rueckuebersetzt");
         assertTrue(r.unresolved().isEmpty(), "keine Meldung");
     }

@@ -33,6 +33,46 @@ import java.util.List;
  * Zeichen verhindert den Fund wie ein Buchstabe. Das ist die vorsichtige Lesart gegen Fehlalarme (D-5); die
  * Gegenrichtung, eine echte KVNR direkt an einer solchen Ziffer, bleibt ohne Fund und ist eine bekannte Grenze von 1b.
  *
+ * <p>Bekannte Grenzen von 1b (je Grenze ein Test {@code bekannteGrenzeOhneKontext...} in {@code KvnrGrenzenTest},
+ * Nachtrag zu T-11). "Kein Fund" heisst: kein KVNR-Fund, die Nummer bleibt im Klartext, sofern kein anderer Erkenner
+ * sie deckt.
+ * <ul>
+ * <li>G-K1: Nur die geschlossene, grossgeschriebene Form mit gueltiger Pruefziffer ist ein Fund. Kleinschreibung,
+ * jeder Trenner, zwei Buchstaben, acht oder zehn Ziffern statt neun und eine falsche Pruefziffer ergeben keinen
+ * Fund.</li>
+ * <li>Wortgrenze (AK-13): Ein Buchstabe (auch ausserhalb von ASCII), eine Ziffer (auch ausserhalb von ASCII, siehe
+ * oben), ein Kombinationszeichen oder eines von {@code _ - / \ @} direkt vor oder hinter den zehn Zeichen
+ * verhindert den Fund, ebenso {@code .} oder {@code ,} mit Ziffer dahinter. Eine echte KVNR, die so an einem Zeichen
+ * klebt, bleibt ohne Fund (siehe G-K18 zu den alltaeglichen Schreibweisen).</li>
+ * <li>G-K18 (Nachtrag 2 zu T-11, Restrisiko): Eine vollstaendige, geschlossene, gueltige KVNR ohne Kontextwort bleibt
+ * ganz im Klartext, wenn eines der Sperrzeichen {@code _ - / \ @} direkt an ihr steht und kein Fund eines anderen
+ * Erkenners (E-Mail, URL mit Schema, Pfad, IP) sie umschliesst. Alltaegliche Schreibweisen: ein Dateiname ohne Pfad
+ * mit {@code _} oder {@code -} vor oder hinter der Nummer, eine URL ohne Schema mit der Nummer als Pfadsegment und
+ * eine Nummer, die per {@code /} direkt an einer IP-Adresse haengt. Die Regel folgt aus AK-13 und wird vom
+ * eingefrorenen Fehlalarm-Pruefstand bewacht; sie ist in diesem Feature bewusst nicht geaendert (Folgefeature:
+ * {@code _} und {@code -} als zulaessige Grenze bei gueltiger Pruefziffer, mit eigener Fehlalarm-Messung). Mit
+ * Leerzeichen statt des Sperrzeichens, mit Kontextwort davor oder innerhalb eines umschliessenden Fundes entsteht ein
+ * Fund.</li>
+ * <li>Negativkontext (D-4, AK-14): Steht unmittelbar vor der Form (nur Leerraum, {@code :} und {@code =} dazwischen)
+ * ein Wort der Negativliste, gibt es keinen Fund, auch dann nicht, wenn es eine echte KVNR ist
+ * ({@code Rechnungsnummer} vor einer KVNR). Ein Fuellwort dazwischen hebt die Sperre auf.</li>
+ * <li>G-K2 (bewusst eingegangener Fehlalarm, E-3): Eine Fremdnummer aus Buchstabe und neun Ziffern mit zufaellig
+ * passender Pruefziffer, ohne Wort der Negativliste davor, ist ein Fund der Stufe fraglich (rund jede zehnte solche
+ * Nummer; ersetzt wird nur bei Uebergabe durch den Menschen, AK-20). Der Fehlalarm-Pruefstand von T-9 misst die
+ * Rate.</li>
+ * <li>G-K9: Haengt ein Kontextwort ohne Trenner am Buchstaben der Nummer, fehlt die Wortgrenze davor: kein Fund, auch
+ * nicht aus Teil 1a.</li>
+ * <li>G-K15: Zwischen Kontextwort und Nummer ein Pfad oder eine URL, die den Kontext beenden: Nur die geschlossene,
+ * grossgeschriebene, gueltige Form wird von 1b gefunden (0,60); die gruppierte und die kleingeschriebene Form sowie
+ * Nummern mit falscher Pruefziffer bleiben dort ohne Fund.</li>
+ * <li>G-D2 und K-1: Ein LANR- oder IK-Kontextwort direkt vor einer gueltigen, geschlossenen, grossgeschriebenen Form
+ * ergibt einen KVNR-Fund (0,60) ueber Buchstabe und Ziffern, der den LANR- oder IK-Fund auf den Ziffern umschliesst:
+ * die Position bleibt geschuetzt und wird um den Buchstaben erweitert, die Stufe kann sinken (Risiko R-2).</li>
+ * <li>Bestand (AK-15, G-K14): Gibt es einen umschliessenden Fund (E-Mail, Pfad, URL mit Schema, IP), gehoert die
+ * Form diesem Fund ({@code TextScanner} schneidet den Kandidaten zu); ein Rest mit weniger als drei Ziffern bleibt
+ * stehen. Gibt es keinen solchen Fund, gilt die Wortgrenze allein: siehe G-K18.</li>
+ * </ul>
+ *
  * <p>Linearitaet: Je Startposition werden hoechstens elf Zeichen vorwaerts gelesen. Zwei Kandidaten liegen mindestens
  * elf Zeichen auseinander (neun Ziffern und die Grenze hinten); der Rueckwaertslauf ueber Leerraum, {@code :} und
  * {@code =} endet spaetestens an der letzten Ziffer des vorigen Kandidaten, die Rueckwaertslaeufe sind also disjunkt,

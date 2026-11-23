@@ -902,4 +902,99 @@ class GrenzlastTest {
             }
         }
     }
+
+    // ------------------------------------------------------------ AK-22: KVNR ohne Kontextwort, Zusatzfaelle (T-11)
+
+    /**
+     * Ein Lastfall mit der erwarteten Fundzahl je Typ: Praefix, Baustein, Schluss, Bausteinlaenge, Wiederholungen r
+     * (Formel {@code (1 000 000 - |Praefix| - |Schluss| + |Baustein| - 1) / |Baustein|}, ganzzahlig, aus den Regeln
+     * und nicht aus einem Probelauf), erwartete KVNR-Funde (alle Stufe fraglich, Quelle {@code kvnr-ohne-kontext}),
+     * erwartete IP-Funde und der Text, der im pseudonymisierten Text nicht stehen darf ({@code null}: keiner). Mit
+     * Aufwaermlauf, je Schritt unter 2 Sekunden, Fundzahl exakt, Roundtrip zeichengleich. Die Hilfe dient auch den
+     * beiden vorgemerkten Faellen aus security T-8 unten; diese sind nicht 1b-Inventar.
+     */
+    private static void zusatzLastFall(String name, String praefix, String baustein, String schluss,
+            int bausteinLaenge, int r, int kvnrFraglich, int ip, String verboten) {
+        assertEquals(bausteinLaenge, baustein.length(), "Bausteinlaenge " + name);
+        assertEquals(r, kvWiederholungen(praefix, baustein, schluss, MIN_ZEICHEN), "Wiederholungen " + name);
+        String warm = kvText(praefix, baustein, schluss, 10_000);
+        KvnrSynthetischWaechter.assertKvnrSynthetisch(warm);
+        assertEquals(0, neunerfenster(warm, "00")[1], "Waechter Aufwaermtext " + name);
+        drei(warm, GRENZE_GROSSER_TEXT);
+
+        String text = kvText(praefix, baustein, schluss, MIN_ZEICHEN);
+        assertTrue(text.length() >= MIN_ZEICHEN, "Textlaenge " + text.length());
+        KvnrSynthetischWaechter.assertKvnrSynthetisch(text);
+        assertEquals(0, neunerfenster(text, "00")[1], "Waechter " + name);
+
+        Durchlauf d = drei(text, GRENZE_PATHOLOGISCH);
+        List<Finding> funde = d.funde();
+        List<Finding> kvnr = funde.stream().filter(f -> FindingType.KVNR.equals(f.type())).toList();
+        assertEquals(kvnrFraglich + ip, funde.size(), "Fundzahl " + name);
+        assertEquals(kvnrFraglich, kvnr.size(), "KVNR-Funde " + name);
+        assertEquals(kvnrFraglich, kvnr.stream().filter(f -> f.level() == ConfidenceLevel.FRAGLICH).count(),
+                "Stufe fraglich " + name);
+        assertEquals(ip, funde.stream().filter(f -> FindingType.IP.equals(f.type())).count(), "IP-Funde " + name);
+        pruefeRoundtrip(text, d);
+        if (verboten != null) {
+            assertFalse(d.pseudo().text().contains(verboten), "Klartext im Ausgabetext " + name);
+        } else if (funde.isEmpty()) {
+            assertTrue(text.equals(d.pseudo().text()), "Text ohne Fund veraendert " + name);
+        }
+    }
+
+    /**
+     * Die Lastfaelle der KVNR ohne Kontextwort (Teil 1b, AK-22): 1 000 000 Zeichen, Scan, Pseudonymisierung und
+     * Rueckuebersetzung je unter 2 Sekunden. Fall 01 ist der Fall aus AK-22 ({@code <gueltige KVNR> } wiederholt:
+     * aufgerundet 10 hoch 6 durch 11 = 90 910 Funde, ueber 80 000). Fall 02: LANR-Kontextwort direkt vor der Form
+     * (K-1): je Wiederholung ein KVNR-Fund ueber Buchstabe und Ziffern. Fall 03: ein Wort der Negativliste direkt davor
+     * (D-4): kein Fund. Fall 04: Punkt und Leerzeichen hinter der Nummer (Wortgrenze hinten): je Wiederholung ein Fund.
+     */
+    static Stream<Arguments> kvnrOhneKontextLastFaelle() {
+        String n = KVNR_NULL;
+        return Stream.of(
+            // 01 Nullnummer (zehn Zeichen) und Leerzeichen = 11 Zeichen, r = (1 000 000 + 10) / 11 = 90 910
+            Arguments.of("01 gueltige Nummer und Leerzeichen wiederholt", "", n + " ", "", 11, 90_910, 90_910, 0, n),
+            // 02 "LANR " + Nullnummer + " " = 16 Zeichen, r = (1 000 000 + 15) / 16 = 62 500; der KVNR-Fund
+            // umschliesst den LANR-Fund auf den Ziffern: 62 500 Funde Typ KVNR
+            Arguments.of("02 LANR-Kontextwort und gueltige Nummer wiederholt", "", "LANR " + n + " ", "", 16, 62_500,
+                62_500, 0, n),
+            // 03 "Rechnungsnummer " (16) + Nullnummer + " " = 27 Zeichen, r = (1 000 000 + 26) / 27 = 37 038; kein Fund
+            Arguments.of("03 Negativkontext und gueltige Nummer wiederholt", "", "Rechnungsnummer " + n + " ", "",
+                27, 37_038, 0, 0, null),
+            // 04 Nullnummer + ". " = 12 Zeichen, r = (1 000 000 + 11) / 12 = 83 334; je Wiederholung ein Fund
+            Arguments.of("04 gueltige Nummer, Punkt und Leerzeichen wiederholt", "", n + ". ", "", 12, 83_334, 83_334,
+                0, n));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("kvnrOhneKontextLastFaelle")
+    void ak22_kvnrOhneKontext_eineMillionZeichen_dreiSchritteJeUnterZweiSekundenMitExakterFundzahl(String name,
+            String praefix, String baustein, String schluss, int bausteinLaenge, int r, int kvnr, int ip,
+            String verboten) {
+        zusatzLastFall(name, praefix, baustein, schluss, bausteinLaenge, r, kvnr, ip, verboten);
+    }
+
+    /**
+     * Vorgemerkt aus security T-8 (Nachtrag zu T-11, Punkt 3 b): gesperrt geschriebenes Kontextwort, Buchstabe und
+     * IP-Adresse. Baustein {@code K V N R } (8 Zeichen), {@code Z}, Dokumentations-IP (12 Zeichen) und Leerzeichen = 22
+     * Zeichen, r = (1 000 000 + 21) / 22 = 45 455. Je Wiederholung gewinnt der IP-Fund (der Buchstabe ist kein
+     * Nummernanfang vor der IPv4-Gestalt, der Bestand hat Vorrang): 45 455 IP-Funde, kein KVNR-Fund. Nicht 1b-Inventar.
+     */
+    @Test
+    void ak22_kvnr_gesperrtesKontextwortBuchstabeUndIp_dreiSchritteJeUnterZweiSekunden() {
+        zusatzLastFall("gesperrtes Kontextwort, Buchstabe und IP", "", "K V N R Z" + IK_FORM_DOKU_IP + " ", "", 22,
+                45_455, 0, 45_455, null);
+    }
+
+    /**
+     * Vorgemerkt aus security T-8 (Nachtrag zu T-11, Punkt 3 b): ein Lauf unsichtbarer Zeichen zwischen Kontextwort und
+     * einem Buchstaben mit IP-Adresse. Praefix {@code KVNR } (5), Lauf aus 999 982 Zeichen U+200B, Schluss {@code Z}
+     * und Dokumentations-IP (13 Zeichen): genau ein IP-Fund, kein KVNR-Fund. Nicht 1b-Inventar.
+     */
+    @Test
+    void ak22_kvnr_laufUnsichtbarerZeichenUndIp_dreiSchritteJeUnterZweiSekunden() {
+        zusatzLastFall("Lauf unsichtbarer Zeichen und IP", "KVNR ", String.valueOf(ZWSP), "Z" + IK_FORM_DOKU_IP, 1,
+                999_982, 0, 1, null);
+    }
 }
