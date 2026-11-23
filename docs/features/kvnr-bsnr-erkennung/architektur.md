@@ -984,3 +984,20 @@ Begründung Kap. 1 und R-4).
      Kette behält ihre bisherige Art (keine Umstellung bestehender Assertions).
   4. **Absicherung der Wortlänge:** `KvNumberScanner` wirft beim Aufbau eine `IllegalStateException` mit fester
      Meldung, wenn ein Kontext- oder Vorwort länger als `MAX_KONTEXTWORT` ist (security-Hinweis aus T-2).
+- **Nachtrag zu T-4 (security-Befund „mittel" und Hinweise, Entscheidung der Hauptsitzung; verbindlich):**
+  1. **Unsichtbare Zeichen vor dem Buchstaben der KVNR** (z. B. U+200B, U+00AD, U+FEFF, U+2060, U+200E; dieselbe
+     Menge „unsichtbar" wie im Vorgänger) dürfen die Erkennung nicht verhindern: Nur für die Buchstabenform gilt ein
+     Lauf aus unsichtbaren Zeichen, auf den genau ein ASCII-Buchstabe und eine Ziffer (bzw. ein Trenner nach D-1 und
+     eine Ziffer) folgen, als Buchstabenanfang. Die unsichtbaren Zeichen gehören nicht zum Fund; der Fund beginnt beim
+     Buchstaben. Eine laufende Sperr- oder Weit-Folge endet davor. Das gilt hinter jedem Kontextwort aus D-2, hinter
+     `KV-Nr.` und hinter gesperrten Kontextwörtern. Der Vorgriff bleibt in der Summe linear.
+  2. **G-K5 wird geschlossen, soweit ohne Nebenwirkung möglich:** Steht der Sperr-Verfolger im Zustand „Trenner" und
+     ergibt der Sperrpuffer zusammen mit dem aktuellen Buchstaben ein Kontextwort der Art, wird der Buchstabe als
+     Sperr-Buchstabe verarbeitet und nicht als Buchstabenanfang; die reine Ziffernfolge dahinter wird dann nach D-3
+     ein Fund mit 0,40. Vorrang hat die echte KVNR-Form: `K V N R Z<Ziffern>` und `K V N R Z <Ziffern>` müssen
+     weiter als Buchstabenform gefunden werden. Lässt sich beides nicht zugleich sauber erfüllen, bleibt G-K5 als
+     dokumentierte Grenze (Test in T-8), und der engineer berichtet.
+  3. **Bleiben dokumentierte Grenzen (Tests `bekannteGrenze…` in T-8):** Kontextwort direkt am Buchstaben ohne
+     Trenner (`KVNR` unmittelbar gefolgt von Buchstabe und Ziffern); Trenner außerhalb D-1 zwischen Buchstabe und
+     Ziffern (Tab, zwei Leerzeichen, Doppelpunkt mit Leerzeichen, `_`, `,`, Halbgeviertstrich, Zeilenumbruch) →
+     höchstens ein Fund 0,40 über die Ziffern, hinter `KV-Nr.` kein Fund.

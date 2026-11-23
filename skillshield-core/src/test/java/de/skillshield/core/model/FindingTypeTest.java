@@ -77,6 +77,16 @@ class FindingTypeTest {
     }
 
     @Test
+    void kvFundtypKvnrIstGueltigeKonstante_undErgibtDenPlatzhalterKvnr1() {
+        assertEquals("KVNR", FindingType.KVNR.name());
+        assertTrue(FindingType.isValidName(FindingType.KVNR.name()));
+        assertEquals(FindingType.KVNR, new FindingType("KVNR"));
+        assertNotEquals(FindingType.KVNR, FindingType.LANR);
+        assertNotEquals(FindingType.KVNR, FindingType.IK);
+        assertEquals("[[KVNR_1]]", PlaceholderSyntax.format(FindingType.KVNR, 1));
+    }
+
+    @Test
     void kvFundtypenErgebenDiePlatzhalterIkUndLanr() {
         assertEquals("[[IK_1]]", PlaceholderSyntax.format(FindingType.IK, 1));
         assertEquals("[[LANR_1]]", PlaceholderSyntax.format(FindingType.LANR, 1));

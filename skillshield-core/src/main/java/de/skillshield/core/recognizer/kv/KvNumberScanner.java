@@ -8,10 +8,10 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Gemeinsamer Zeichendurchlauf der KV-Nummern-Erkenner (LANR und IK, je Art konfiguriert ueber {@link KvArt}). Der
- * Text wird einmal von links nach rechts gelesen und in Ereignisse zerlegt: Kontextwort, Fuellwort, Ziffernkette,
- * Satzende und Zeilenumbruch. Eine Ziffernkette wird nur dann ein Fund, wenn ein Kontextwort sie erschliesst. Die
- * Pruefziffer bestimmt nur Stufe und Quelle, nie, ob ein Fund entsteht.
+ * Gemeinsamer Zeichendurchlauf der KV-Nummern-Erkenner (LANR, IK und KVNR, je Art konfiguriert ueber
+ * {@link KvArt}). Der Text wird einmal von links nach rechts gelesen und in Ereignisse zerlegt: Kontextwort,
+ * Fuellwort, Ziffernkette, Satzende und Zeilenumbruch. Eine Ziffernkette wird nur dann ein Fund, wenn ein
+ * Kontextwort sie erschliesst. Die Pruefziffer bestimmt nur Stufe und Quelle, nie, ob ein Fund entsteht.
  *
  * <p><b>Zeichenklassen.</b> Ziffer: nur ASCII {@code 0} bis {@code 9}. Buchstabe: Codepunkt mit
  * {@link Character#isLetter(int)} oder Kombinationszeichen. Unsichtbares Zeichen: Formatzeichen
@@ -70,6 +70,34 @@ import java.util.Set;
  * Fuellwort. Danach geht der Durchlauf hinter dem Segment bzw. hinter dem ersten Block weiter; der Rest der Kette
  * wird als neue Kette gelesen. Die Praefixsuche bricht ab, sobald mehr als 12 Ziffern gezaehlt sind (auch mitten in
  * einem Block). Unsichtbare Zeichen innerhalb einer Nummer beenden die Kette (bekannte Grenze, nicht veraendert).
+ *
+ * <p><b>KVNR (Buchstabenform, nur Arten mit {@link KvArt#buchstabenform()}; LANR und IK laufen unveraendert).</b>
+ * Drei Ergaenzungen, jeweils nur fuer die KVNR wirksam: (1) Ein Lauf aus genau einem ASCII-Buchstaben, dem
+ * unmittelbar eine Ziffer oder genau ein Gruppentrenner und eine Ziffer folgt, ist der Anfang einer Kette (vor der
+ * Verfolgung von Sperr- und Weit-Folge geprueft, die er beendet: {@code K V N R Z...} hat ein gesperrtes
+ * Kontextwort). Die Ziffernbloecke dahinter werden mit derselben Praefixregel zerlegt; das Segment reicht vom
+ * Buchstaben bis zum Ende der gewaehlten Bloecke. Gibt es kein Segment, zaehlen Buchstabe und erster Block zusammen
+ * als ein Fuellwort, und die Regel "nummerierte Liste" gilt nicht. Zwei Buchstaben ({@code AB1}) sind ein Lauf mit
+ * zwei Buchstaben und kein Anfang. (2) Eine Kette aus Ziffern, vor der unmittelbar ein Buchstabe steht
+ * ({@code KVNR1234...}, {@code AB1234...}), ergibt kein Segment; der erste Block zaehlt als Fuellwort (Grenze G-K4).
+ * (3) Das Vorwort {@code kv} mit Nachsatzwort ({@code KV-Nr.}, {@code KV-Nummer}, {@code KV Nr.}) beginnt einen
+ * Kontext mit dem Merker {@code nurBuchstabenform}: Eine Ziffernfolge ohne Buchstaben ist dort bei {@code aktiv}
+ * ein Fuellwort, und beim nachgestellten Kontext werden nur offene Segmente mit einem Buchstaben am Anfang ausgegeben
+ * (Grenze G-K7). Neun Ziffern mit Buchstaben und gueltiger Pruefziffer ({@link KvnrPruefziffer}) haben bei direktem
+ * Kontext 0,95, sonst gelten die Stufen von LANR und IK (0,80, Komma 0,60, gesperrt hoechstens 0,80); ungueltige
+ * Pruefziffer 0,50 ({@code kvnr-pruefziffer-ungueltig}); Buchstabe mit 6 bis 12 Ziffern ausser neun und jede reine
+ * Ziffernfolge von 6 bis 12 Ziffern (auch neun) 0,40 ({@code kvnr-form-abweichend}). Der Fundbereich beginnt beim
+ * Buchstaben. Bekannte Folge G-K6: {@code KVNR AB 1234...} (zwei Buchstaben, dann Trenner) ergibt 0,40 ueber die
+ * reinen Ziffern. Unsichtbare Zeichen (Formatzeichen, Variantenwaehler) unmittelbar vor dem Buchstaben, auch
+ * mehrere, gehoeren nicht zum Fund: Der Lauf aus ihnen, einem ASCII-Buchstaben und einer Ziffer oder einem Trenner und
+ * einer Ziffer ist der Anfang einer Kette; der Fund beginnt beim Buchstaben, eine laufende Sperr- oder Weit-Folge endet
+ * davor. G-K5 (geschlossen, soweit sauber moeglich): Steht die Sperrfolge im Zustand "Trenner" und ergibt sie mit dem
+ * Buchstaben ein Kontextwort der Art ({@code K V N R 1234...}), ist der Buchstabe dessen letzter Buchstabe; die
+ * reine Ziffernfolge dahinter hat 0,40. {@code K V N R Z1234...} und {@code K V N R Z 1234...} bleiben die
+ * Buchstabenform. Rest der Grenze: Ein Einzelbuchstabe mit unmittelbar folgender Ziffer oder Trenner und Ziffer gilt
+ * sonst als Buchstabe einer Nummer; die Sperrfolge davor endet und ist kein Kontextwort. Ein Kontextwort unmittelbar
+ * vor dem Buchstaben ohne Trenner ({@code KVNRZ1234...}) und ein unsichtbares Zeichen zwischen Buchstabe und Ziffern
+ * bleiben Grenzen.
  *
  * <p><b>Zustand und Ereignisse.</b> Zustand: {@code aktiv} (ein Kontextwort erschliesst Zahlen), {@code direkt}
  * (seit dem Kontextwort kam nichts ausser Sonstigem und Nachsatzwoertern), {@code woerter} (Fuellwoerter seit
@@ -224,10 +252,13 @@ import java.util.Set;
  * damit hoechstens zweimal beruehrt, und da der Vorgriff nur am Ende eines Laufs mit Vorwort beginnt, ueberlappen
  * sich die Vorgriffe nicht. Die Praefixsuche einer Kette liest den ersten Block ganz und danach hoechstens 13 Ziffern
  * und 13 Trenner; da der Durchlauf mindestens hinter dem ersten Block weitergeht, wird jeder Block hoechstens
- * 13-mal beruehrt. Der Zeilenanfang-Merker ({@code zeilenanfang}) wird vorwaerts mitgefuehrt, nicht rueckwaerts
- * gesucht. Der Merker {@code crOffen} (CR UZ+ LF als ein Umbruch) ist ein einzelnes Flag, wird je Zeichen in
- * konstanter Zeit gesetzt oder geloescht und braucht weder Vorgriff noch Rueckkehr; {@code CR} gefolgt von einer
- * Million unsichtbarer Zeichen ist ein einziger Lauf. Der Weit-Verfolger (erweiterte Trenner) macht je Zeichen
+ * 13-mal beruehrt. Nur bei der KVNR liest ein Vorgriff an jedem Laufanfang den Lauf unsichtbarer Zeichen bis zum
+ * ersten anderen Zeichen und einen festen Rest (Buchstabe, Trenner, Ziffer); der Lauf wird danach uebersprungen oder
+ * einmal von der Hauptschleife gelesen, jedes Zeichen also hoechstens zweimal. Der Zeilenanfang-Merker
+ * ({@code zeilenanfang}) wird vorwaerts mitgefuehrt, nicht rueckwaerts gesucht. Der Merker {@code crOffen}
+ * (CR UZ+ LF als ein Umbruch) ist ein einzelnes Flag, wird je Zeichen in konstanter Zeit gesetzt oder
+ * geloescht und braucht weder Vorgriff noch Rueckkehr; {@code CR} gefolgt von einer Million unsichtbarer Zeichen
+ * ist ein einziger Lauf. Der Weit-Verfolger (erweiterte Trenner) macht je Zeichen
  * ausserhalb eines Laufs und je Lauf ebenfalls konstante Arbeit und setzt die Leseposition nie zurueck: Er fuehrt einen
  * Puffer fester Groesse (27 Buchstaben) plus Zaehler, hoechstens drei Leerraumzeichen je Luecke (danach endet die
  * Folge, weitere Leerzeichen kosten je Zeichen konstante Zeit), das Abbild der offenen Segmente (sechs Werte) und
@@ -364,6 +395,10 @@ final class KvNumberScanner {
         return c >= '0' && c <= '9';
     }
 
+    private static boolean istAsciiBuchstabe(char c) {
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+    }
+
     private static boolean istBuchstabe(int cp) {
         if (Character.isLetter(cp)) {
             return true;
@@ -461,6 +496,11 @@ final class KvNumberScanner {
         /** D-3: Der Kontext endet, sobald {@code direkt} verloren geht (gesetzt nur durch {@code I K}). */
         private boolean nurDirekt;
         /**
+         * D-2: Der Kontext stammt vom Vorwort {@code kv} ({@code KV-Nr.}) und erschliesst nur Nummern in
+         * Buchstabenform (KVNR); eine reine Ziffernfolge ist dann ein Fuellwort und wird nie nachgestellt ausgegeben.
+         */
+        private boolean nurBuchstabenform;
+        /**
          * 14h: {@code I K} bei laufendem Kontext hat {@code direkt} nicht gesetzt (die Konfidenz bleibt die des
          * Kontexts), aber unmittelbar dahinter gilt der Kontext wie {@code direkt} fuer das Nachsatzwort (kein
          * Fuellwort) und den Punkt (kein Satzende), wie beim frischen Kontext von {@code I K}.
@@ -551,6 +591,19 @@ final class KvNumberScanner {
                 char c = text.charAt(i);
                 int cp = text.codePointAt(i);
                 if (istUnsichtbar(cp) || istBuchstabe(cp)) {
+                    int anfang = art.buchstabenform() ? buchstabenAnfang(i) : -1;
+                    if (anfang >= 0) {
+                        // Unsichtbare Zeichen vor dem Buchstaben (i bis anfang) gehoeren nicht zum Fund. Weder
+                        // laufEnde noch laufBuchstaben werden gesetzt: Eine Kette aus Buchstabe und Ziffern ist
+                        // kein Wort, und der Punkt dahinter kann nie auf dem alten laufEnde liegen (es liegt vor
+                        // dem Buchstaben); fuer LANR und IK ist der Zweig nie erreichbar.
+                        crOffen = false;
+                        char buchstabe = text.charAt(anfang);
+                        sperrSchritt(buchstabe); // beendet eine laufende Sperrfolge (K V N R vor dem Buchstaben)
+                        weitSchritt(buchstabe); // beendet eine laufende Weit-Folge
+                        i = ziffernkette(anfang); // die Kette beginnt beim Buchstaben
+                        continue;
+                    }
                     i = laufMitVerfolger(i);
                     if (buchstaben > 0) {
                         crOffen = false; // ein Buchstabe oder Kombinationszeichen: kein CR UZ+ LF mehr (D-1)
@@ -609,14 +662,20 @@ final class KvNumberScanner {
             offenUnd = false;
         }
 
-        private void kontextwort() {
-            offenNachgestelltAusgeben();
-            kontextBeginnen(KEIN_DECKEL, false);
+        /** Ein Kontextwort; {@code nurBuchstabenformKontext}: Vorwort {@code kv} (D-2), nur Buchstabenform. */
+        private void kontextwort(boolean nurBuchstabenformKontext) {
+            offenNachgestelltAusgeben(nurBuchstabenformKontext);
+            kontextBeginnen(KEIN_DECKEL, false, nurBuchstabenformKontext);
+        }
+
+        private void kontextBeginnen(double deckel, boolean nurDirektKontext) {
+            kontextBeginnen(deckel, nurDirektKontext, false);
         }
 
         /** Beginnt einen Kontext: leert die offenen Segmente, setzt alle Kontextmerker (zentral, hier erweitern). */
-        private void kontextBeginnen(double deckel, boolean nurDirektKontext) {
+        private void kontextBeginnen(double deckel, boolean nurDirektKontext, boolean nurBuchstabenformKontext) {
             offenLeeren();
+            nurBuchstabenform = nurBuchstabenformKontext;
             aktiv = true;
             direkt = true;
             woerter = 0;
@@ -637,18 +696,26 @@ final class KvNumberScanner {
 
         /** Auswertung der Luecke beim Kontextwort: gibt die offenen Segmente aus oder nicht (Bestand und D-5). */
         private void offenNachgestelltAusgeben() {
+            offenNachgestelltAusgeben(false);
+        }
+
+        /** Wie oben; bei {@code nurBuchstabenformKontext} nur Segmente mit einem Buchstaben am Anfang (D-2). */
+        private void offenNachgestelltAusgeben(boolean nurBuchstabenformKontext) {
             if (offenAnzahl > 0 && !offenSchraeg && !offenUnd) {
                 if (offenKomma == 0) {
-                    offenAusgeben(KEIN_DECKEL);
+                    offenAusgeben(KEIN_DECKEL, nurBuchstabenformKontext);
                 } else if (offenKomma == 1 && !offenKlammerVorKomma) {
-                    offenAusgeben(CONFIDENCE_KOMMA_NACHGESTELLT);
+                    offenAusgeben(CONFIDENCE_KOMMA_NACHGESTELLT, nurBuchstabenformKontext);
                 }
             }
         }
 
-        private void offenAusgeben(double deckel) {
+        private void offenAusgeben(double deckel, boolean nurBuchstabenformKontext) {
             for (int k = 0; k < offenAnzahl; k++) {
-                ausgeben(offenDaten[3 * k], offenDaten[3 * k + 1], offenDaten[3 * k + 2], false, deckel);
+                int start = offenDaten[3 * k];
+                if (!nurBuchstabenformKontext || istAsciiBuchstabe(text.charAt(start))) {
+                    ausgeben(start, offenDaten[3 * k + 1], offenDaten[3 * k + 2], false, deckel);
+                }
             }
         }
 
@@ -719,6 +786,10 @@ final class KvNumberScanner {
 
         /** Ein Segment [start, end) mit {@code anzahl} Ziffern wurde gelesen. */
         private void segment(int start, int end, int anzahl) {
+            if (aktiv && nurBuchstabenform && !istAsciiBuchstabe(text.charAt(start))) {
+                fuellwort(); // D-2: KV-Nr. vor einer reinen Ziffernfolge ist kein KVNR-Kontext
+                return;
+            }
             if (aktiv) {
                 ausgeben(start, end, anzahl, direkt, kontextDeckel);
                 direktVerloren();
@@ -742,8 +813,9 @@ final class KvNumberScanner {
         private void ausgeben(int start, int end, int anzahl, boolean mitDirektemKontext, double deckel) {
             double konfidenz;
             String quelle;
-            if (anzahl == NEUN) {
-                if (art.isValid(ziffernwerte(start, end))) {
+            char buchstabe = art.buchstabenform() && istAsciiBuchstabe(text.charAt(start)) ? text.charAt(start) : 0;
+            if (anzahl == NEUN && (!art.buchstabenform() || buchstabe != 0)) {
+                if (art.isValid(buchstabe, ziffernwerte(start, end))) {
                     konfidenz = mitDirektemKontext ? art.confidenceDirekt() : CONFIDENCE_KONTEXT_ENTFERNT;
                     quelle = art.source();
                 } else {
@@ -1079,7 +1151,7 @@ final class KvNumberScanner {
                 if (buchstaben > vorwort) {
                     offenLeeren();
                 }
-                kontextwort();
+                kontextwort(nurBuchstabenVorwort(vorwort));
             } else if (kontextImLauf) {
                 if (seitKontext > 0 && restBuchstabe) {
                     fuellwort();
@@ -1090,6 +1162,12 @@ final class KvNumberScanner {
                 fuellwort();
             }
             return p;
+        }
+
+        /** Ist das Vorwort am Ende des Fensters (Laenge {@code laenge}) eines aus {@code nurBuchstabenVorwoerter}? */
+        private boolean nurBuchstabenVorwort(int laenge) {
+            Set<String> nur = art.nurBuchstabenVorwoerter();
+            return !nur.isEmpty() && nur.contains(new String(fenster, fensterLaenge - laenge, laenge));
         }
 
         private void anhaengen(int cp, boolean neuesTeilstueck) {
@@ -1112,7 +1190,7 @@ final class KvNumberScanner {
                 if (buchstaben > treffer) {
                     offenLeeren(); // Teilstuecke davor wirken wie ein Fuellwort
                 }
-                kontextwort();
+                kontextwort(false);
                 kontextImLauf = true;
                 seitKontext = 0;
                 restBuchstabe = false;
@@ -1204,8 +1282,18 @@ final class KvNumberScanner {
         private int ziffernkette(int start) {
             boolean anfang = zeilenanfang;
             zeilenanfang = false;
-            int blockEnde = ziffernEnde(start);
-            int ersterBlock = blockEnde - start;
+            if (art.buchstabenform() && angeklebtAnBuchstabe(start)) {
+                int ende = ziffernEnde(start);
+                fuellwort(); // G-K4: Ziffern direkt an einem Buchstaben sind keine Nummer dieser Art
+                return ende;
+            }
+            // Buchstabenform: Der Buchstabe und ein Trenner gehoeren zum Segment, die Bloecke beginnen dahinter.
+            int ziffernStart = start;
+            if (art.buchstabenform() && istAsciiBuchstabe(text.charAt(start))) {
+                ziffernStart = istZiffer(text.charAt(start + 1)) ? start + 1 : start + 2;
+            }
+            int blockEnde = ziffernEnde(ziffernStart);
+            int ersterBlock = blockEnde - ziffernStart;
             int anzahl = ersterBlock;
             int neunEnde = -1;
             int besteEnde = -1;
@@ -1244,12 +1332,70 @@ final class KvNumberScanner {
                 segment(start, besteEnde, besteAnzahl);
                 return besteEnde;
             }
-            if (anfang && ersterBlock <= 2 && blockEnde < n && text.charAt(blockEnde) == '.'
+            if (anfang && ziffernStart == start && ersterBlock <= 2 && blockEnde < n
+                    && text.charAt(blockEnde) == '.'
                     && (blockEnde + 1 >= n || !istZiffer(text.charAt(blockEnde + 1)))) {
                 return blockEnde + 1; // nummerierte Liste: Ziffern samt Punkt sind neutral
             }
             fuellwort();
             return blockEnde;
+        }
+
+        /** Steht unmittelbar vor der Ziffer an {@code start} ein Buchstabe (auch ein Kombinationszeichen)? */
+        private boolean angeklebtAnBuchstabe(int start) {
+            return istZiffer(text.charAt(start)) && start > 0 && istBuchstabe(text.codePointBefore(start));
+        }
+
+        /**
+         * Liefert die Position des Buchstabens, wenn der Lauf ab {@code i} (Laufanfang) aus null oder mehr unsichtbaren
+         * Zeichen und dann genau einem ASCII-Buchstaben mit folgender Ziffer oder Trenner und Ziffer besteht (Anfang
+         * einer Nummer in Buchstabenform), sonst -1. Der Vorgriff liest nur den Lauf unsichtbarer Zeichen und einen
+         * festen Rest und beginnt nur an einem Laufanfang: Der Lauf wird danach entweder uebersprungen oder einmal von
+         * {@link #laufMitVerfolger(int)} gelesen, jedes Zeichen also hoechstens zweimal.
+         *
+         * <p>G-K5: Steht die Sperrfolge im Zustand "Trenner" und ergibt sie mit diesem Buchstaben ein Kontextwort
+         * der Art, und folgt auf den Buchstaben ein Trenner ({@code K V N R 1234...}), ist er der letzte Buchstabe
+         * des gesperrten Kontextworts und kein Anfang. {@code K V N R Z 1234...} bleibt die Buchstabenform, denn
+         * {@code KVNRZ} ist kein Kontextwort. Grenze: Ein Buchstabe, der zugleich Wortende und Buchstabe einer Nummer
+         * sein koennte ({@code K V N R} mit einer Nummer, die mit {@code R} beginnt und einen Trenner hat), gilt als
+         * Wortende.
+         */
+        private int buchstabenAnfang(int i) {
+            int j = i;
+            while (j < n) {
+                int cp = text.codePointAt(j);
+                if (!istUnsichtbar(cp)) {
+                    break;
+                }
+                j += Character.charCount(cp);
+            }
+            if (j >= n || !istBuchstabenAnfang(j)) {
+                return -1;
+            }
+            return sperrBuchstabeDesKontextworts(j) ? -1 : j;
+        }
+
+        /** Ist der ASCII-Buchstabe bei {@code j}, hinter einem Trenner der Sperrfolge, deren letzter Buchstabe? */
+        private boolean sperrBuchstabeDesKontextworts(int j) {
+            int laenge = sperrLaenge + 1;
+            if (sperrZustand != SPERR_TRENNER || laenge < MIN_SPERR_BUCHSTABEN || laenge > MAX_KONTEXTWORT
+                    || !kontextLaenge[laenge] || !istTrenner(text.charAt(j + 1))) {
+                return false;
+            }
+            sperrZeichen[sperrLaenge] = vergleichszeichen(text.charAt(j)); // wird beim Anhaengen ueberschrieben
+            return istKontextwort(sperrZeichen, laenge);
+        }
+
+        /**
+         * Beginnt bei {@code i} ein einzelner ASCII-Buchstabe, dem unmittelbar eine Ziffer oder genau ein
+         * Gruppentrenner und eine Ziffer folgen (Anfang einer Nummer in Buchstabenform, O(1) Vorgriff)?
+         */
+        private boolean istBuchstabenAnfang(int i) {
+            if (!istAsciiBuchstabe(text.charAt(i)) || i + 1 >= n) {
+                return false;
+            }
+            char c1 = text.charAt(i + 1);
+            return istZiffer(c1) || (istTrenner(c1) && i + 2 < n && istZiffer(text.charAt(i + 2)));
         }
 
         private int ziffernEnde(int start) {

@@ -13,6 +13,8 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
@@ -444,38 +446,78 @@ class SynthetischeKvNummernTest {
         }
     }
 
+    /**
+     * Prueft per Reflexion alle statischen String-Felder der zentralen Klasse in jeder Sichtbarkeit (auch private,
+     * {@code setAccessible}) und alle Zeichenketten, die statische Methoden ohne Parameter in jeder Sichtbarkeit als
+     * {@code String[]} oder als {@link java.util.Collection} (also auch {@code List}, {@code Set}) liefern, gegen den
+     * Laufzeit-Waechter {@link KvnrSynthetischWaechter}: Eine gueltige KVNR-Form ohne die Ziffern 0000 ist ein
+     * Verstoss (Ausnahme: das Lehrbeispiel).
+     *
+     * <p>Bewusste Grenze (kein dritter Pruefschritt): Reine Neunerfolgen aus Ziffern sind LANR-, IK- und
+     * BSNR-Vektoren mit dem Praefix {@code 00}; eine KVNR entsteht erst mit einem Buchstaben davor. Jede Neunerfolge
+     * mit allen Buchstaben A bis Z gegen die Referenz zu pruefen, wuerde alle LANR- und IK-Konstanten treffen, weil
+     * bei zehn moeglichen Pruefziffern fast jede Neunerfolge mit irgendeinem Buchstaben eine gueltige KVNR ergibt.
+     * Eine reine Neunerfolge ohne Buchstaben wird deshalb hier nicht als KVNR bewertet; die Praefixregel fuer reine
+     * Neunerfolgen prueft {@code TestdatenSynthetischTest}.
+     */
     @Test
-    void zentraleKlasse_alleOeffentlichenStringFelderUndListenwerte_bestehenDenLaufzeitWaechter()
+    void zentraleKlasse_alleStringFelderUndSammlungswerteJederSichtbarkeit_bestehenDenLaufzeitWaechter()
             throws ReflectiveOperationException {
         int felder = 0;
         int kvnrFelder = 0;
-        int listenwerte = 0;
-        for (Field feld : SynthetischeKvNummern.class.getFields()) {
-            int modus = feld.getModifiers();
-            if (Modifier.isStatic(modus) && Modifier.isFinal(modus) && feld.getType() == String.class) {
+        int sammlungswerte = 0;
+        for (Field feld : SynthetischeKvNummern.class.getDeclaredFields()) {
+            if (!Modifier.isStatic(feld.getModifiers()) || feld.isSynthetic()) {
+                continue;
+            }
+            feld.setAccessible(true);
+            Object inhalt = feld.get(null);
+            if (feld.getType() == String.class) {
                 felder++;
                 kvnrFelder += feld.getName().startsWith("KVNR_") ? 1 : 0;
-                assertEquals(0, KvnrSynthetischWaechter.pruefe((String) feld.get(null)).verstoesse(),
+            }
+            for (String wert : zeichenketten(inhalt)) {
+                assertEquals(0, KvnrSynthetischWaechter.pruefe(wert).verstoesse(),
                         "Feld " + feld.getName() + " enthaelt eine gueltige KVNR-Form ohne die Ziffern 0000");
             }
         }
-        for (Method methode : SynthetischeKvNummern.class.getMethods()) {
+        for (Method methode : SynthetischeKvNummern.class.getDeclaredMethods()) {
+            Class<?> rueckgabe = methode.getReturnType();
             if (Modifier.isStatic(methode.getModifiers()) && methode.getParameterCount() == 0
-                    && methode.getReturnType() == List.class) {
-                for (Object wert : (List<?>) methode.invoke(null)) {
-                    listenwerte++;
-                    assertEquals(0, KvnrSynthetischWaechter.pruefe((String) wert).verstoesse(),
-                            "Listenwert aus " + methode.getName() + " ohne die Ziffern 0000");
+                    && !methode.isSynthetic()
+                    && (Collection.class.isAssignableFrom(rueckgabe) || rueckgabe == String[].class)) {
+                methode.setAccessible(true);
+                for (String wert : zeichenketten(methode.invoke(null))) {
+                    sammlungswerte++;
+                    assertEquals(0, KvnrSynthetischWaechter.pruefe(wert).verstoesse(),
+                            "Wert aus " + methode.getName() + " ohne die Ziffern 0000");
                 }
             }
         }
-        // Istwert 44 Felder, davon 11 KVNR-Felder, 24 Listenwerte; Mindestzahlen unter 70 Prozent (30, 7, 16)
-        assertTrue(felder >= 30 && kvnrFelder >= 7 && listenwerte >= 16,
-                "Felder " + felder + ", KVNR-Felder " + kvnrFelder + ", Listenwerte " + listenwerte);
+        // Istwert 44 Felder, davon 11 KVNR-Felder, 24 Sammlungswerte; Mindestzahlen unter 70 Prozent (30, 7, 16)
+        assertTrue(felder >= 30 && kvnrFelder >= 7 && sammlungswerte >= 16,
+                "Felder " + felder + ", KVNR-Felder " + kvnrFelder + ", Sammlungswerte " + sammlungswerte);
         // Das Lehrbeispiel ist die einzige gueltige Form ohne 0000, und der Waechter erkennt es als gueltig
         KvnrSynthetischWaechter.Befund lehr = KvnrSynthetischWaechter.pruefe(KVNR_LEHRBEISPIEL);
         assertEquals(1, lehr.gueltigeFormen());
         assertEquals(0, lehr.verstoesse());
+    }
+
+    /** Die Zeichenketten eines Feld- oder Methodenwerts: {@code String}, {@code String[]} oder Sammlung davon. */
+    private static List<String> zeichenketten(Object inhalt) {
+        List<String> ergebnis = new ArrayList<>();
+        if (inhalt instanceof String text) {
+            ergebnis.add(text);
+        } else if (inhalt instanceof String[] feld) {
+            ergebnis.addAll(Arrays.asList(feld));
+        } else if (inhalt instanceof Collection<?> sammlung) {
+            for (Object element : sammlung) {
+                if (element instanceof String text) {
+                    ergebnis.add(text);
+                }
+            }
+        }
+        return ergebnis;
     }
 
     @Test
