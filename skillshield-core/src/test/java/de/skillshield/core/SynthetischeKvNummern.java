@@ -9,6 +9,9 @@ import java.util.Random;
  * ihre Texte per Verkettung mit diesen Konstanten. {@code TestdatenSynthetischTest} (Regel "Ziffernketten")
  * erzwingt das und verlangt, dass jede neunstellige Ziffernfolge in dieser Datei mit {@code 00} beginnt.
  *
+ * <p>Seit dem Feature kvnr-bsnr-erkennung steht hier auch der Abschnitt KVNR (Buchstabe und neun Ziffern, AK-6, AK-23,
+ * AK-24); fuer KVNR-Formen verlangt der Waechter statt {@code 00} die Ziffern {@code 0000} an den Stellen 2 bis 5.
+ *
  * <p><b>Quellenvermerk Pr\u00FCfverfahren LANR (AK-29).</b> Quelle: Wikipedia, "Lebenslange Arztnummer", Abschnitt
  * "Aufbau", https://de.wikipedia.org/wiki/Lebenslange_Arztnummer; gleichlautend: krankenkasseninfo.de,
  * Krankenkassenlexikon, Eintrag "Arztnummer",
@@ -106,6 +109,76 @@ public final class SynthetischeKvNummern {
      */
     public static final String IK_MARKER = "005916484";
 
+    // ------------------------------------------------------------------ KVNR (AK-6, AK-23)
+
+    // Quellenvermerk Pruefverfahren KVNR (AK-24): Quelle: Wikipedia, Artikel "Krankenversichertennummer",
+    // https://de.wikipedia.org/wiki/Krankenversichertennummer, abgerufen am 23.11.2026. Status: Sekundaerquelle, nicht
+    // gegen die offizielle Spezifikation verifiziert. Offizielle Quelle: GKV-Datenaustausch, "Pruefziffernberechnung
+    // fuer die Krankenversichertennummer nach Paragraph 290 SGB V" (Anlage 1, 2. Januar 2023), nicht eingesehen.
+    //
+    // Rechenweg KVNR: Buchstabe zur zweistelligen Alphabetposition (A = 01 bis Z = 26), dazu die ersten acht Ziffern:
+    // zehn Ziffern, von links abwechselnd mit 1, 2, 1, 2 ... gewichtet, je Produkt die Quersumme, Summe S; die
+    // neunte Ziffer nach dem Buchstaben ist S modulo 10.
+    //
+    // Bildungsregel (A-6, H-1): Buchstabe Z, die ersten vier der acht Ziffern 0000, Rest und Pruefziffer rechnerisch.
+    // Nach H-1 verwenden einzelne Vektoren andere Buchstaben (zweistellige gegen einstellige Buchstabenwertung ist nur
+    // mit A bis I pruefbar); die vier Ziffern 0000 bleiben. Einzige Ausnahme ist das Lehrbeispiel der Quelle.
+    //
+    // Restrisiko (OF-3): Es ist nicht belegt, dass Nummern mit den Ziffern 0000 an den Stellen 2 bis 5 real nie
+    // vergeben werden; eine zufaellige Uebereinstimmung waere ohne Bezug zu einer Person und ohne Kontext im Test.
+
+    /**
+     * Lehrbeispiel der Quelle (keine vergebene Nummer): Buchstabe A, danach die Ziffern eins bis acht aufsteigend, dann
+     * die Pruefziffer. A = 01: 0*1 + 1*2 = 2; Ziffern 1..8: 1, 4, 3, 8, 5, (12 -> 3), 7, (16 -> 7) = 38; Summe 40,
+     * Pruefziffer 0. Einziger Vektor ohne die Ziffern 0000 (H-1); aus Teilen zusammengesetzt, damit die Folge in
+     * dieser Datei nicht als zusammenhaengende neunstellige Zeichenfolge ohne Praefix 00 steht.
+     */
+    public static final String KVNR_LEHRBEISPIEL = "A" + "12345678" + "0";
+
+    /** Z = 26: 2*1 + 6*2 (12 -> 3) = 5; Ziffern 0,0,0,0,1,2,3,4: 1 + 4 + 3 + 8 = 16; Summe 21, Pruefziffer 1. */
+    public static final String KVNR_GUELTIG = "Z000012341";
+
+    /** Z = 26: 5; Ziffern 0,0,0,0,4,3,2,1: 4 + 6 + 2 + 2 = 14; Summe 19, Pruefziffer 9. */
+    public static final String KVNR_GUELTIG_ZWEI = "Z000043219";
+
+    /**
+     * C = 03: 0*1 + 3*2 = 6; Ziffern 0,0,0,0,5,6,7,8: 5, (12 -> 3), 7, (16 -> 7) = 22; Summe 28, Pruefziffer 8.
+     * Unterscheidet bei den Varianten: Gewichtsbeginn 2 ergibt 3, einstellige Buchstabenwertung ergibt 3, Summe ohne
+     * Quersummen ergibt 6; enthaelt Produkte ueber 9 (H-1: Buchstabe aus A bis I).
+     */
+    public static final String KVNR_GUELTIG_BUCHSTABE_C = "C000056788";
+
+    /** Marker, gueltig. M = 13: 1*1 + 3*2 = 7; Ziffern 0,0,0,0,7,3,9,1: 7 + 6 + 9 + 2 = 24; Summe 31, Pruefziffer 1. */
+    public static final String KVNR_MARKER = "M000073911";
+
+    /**
+     * Buchstabe S und nur Nullen: S = 19: 1*1 + 9*2 (18 -> 9) = 10; Summe 10, Pruefziffer 0 (gueltig); Grenzlast und
+     * Aufzaehlungen mit Nullfolge (zehn Zeichen, lauter gleiche Ziffern).
+     */
+    public static final String KVNR_NULL = "S" + "000000000";
+
+    // ------------------------------------------------------------------ KVNR ungueltig (AK-6)
+
+    /** Wie {@link #KVNR_GUELTIG}: Summe 21, erwartet 1, die neunte Ziffer ist 2 (Pruefziffer verschoben). */
+    public static final String KVNR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN = "Z000012342";
+
+    /**
+     * Ziffern 0,0,0,0,1,2,4,3 statt 1,2,3,4 (Nachbarziffern vertauscht): 1 + 4 + 4 + 6 = 15; Summe 20, erwartet 0;
+     * die neunte Ziffer ist 1.
+     */
+    public static final String KVNR_UNGUELTIG_VERTAUSCHT = "Z000012431";
+
+    /** Ziffern 0,0,0,0,1,2,3,5 (Ziffer geaendert): 1 + 4 + 3 + (10 -> 1) = 9; Summe 14, erwartet 4, Stelle 9 ist 1. */
+    public static final String KVNR_UNGUELTIG_ZIFFER_GEAENDERT = "Z000012351";
+
+    // ------------------------------------------------------------------ KVNR Formabweichungen (AK-8)
+
+    /** Buchstabe und acht Ziffern: zu kurz fuer die Neunerform. */
+    public static final String KVNR_ACHT_ZIFFERN = "Z" + "00001234";
+
+    /** Buchstabe und zehn Ziffern: zu lang fuer die Neunerform. */
+    public static final String KVNR_ZEHN_ZIFFERN = "Z0000123412";
+
     // ------------------------------------------------------------------ Trennerformen (AK-6)
 
     /** LANR mit Leerzeichen, Gruppen 3-3-3; ohne Trenner {@link #LANR_GUELTIG}. */
@@ -172,6 +245,18 @@ public final class SynthetischeKvNummern {
                 LANR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN, LANR_UNGUELTIG_VERTAUSCHT, LANR_UNGUELTIG_ZIFFER_GEAENDERT,
                 IK_GUELTIG, IK_GUELTIG_ZWEI, IK_GUELTIG_DREI, IK_UNGUELTIG_KOMPLEMENT, IK_UNGUELTIG_NULL,
                 IK_UNGUELTIG_VERTAUSCHT, LANR_MARKER, IK_MARKER);
+    }
+
+    /** Alle gueltigen KVNR-Vektoren (Buchstabe und neun Ziffern) samt Marker und Lehrbeispiel. */
+    public static List<String> alleKvnrGueltig() {
+        return List.of(KVNR_LEHRBEISPIEL, KVNR_GUELTIG, KVNR_GUELTIG_ZWEI, KVNR_GUELTIG_BUCHSTABE_C, KVNR_MARKER,
+                KVNR_NULL);
+    }
+
+    /** Alle ungueltigen KVNR-Vektoren (Buchstabe und neun Ziffern, Pruefziffer falsch). */
+    public static List<String> alleKvnrUngueltig() {
+        return List.of(KVNR_UNGUELTIG_PRUEFZIFFER_VERSCHOBEN, KVNR_UNGUELTIG_VERTAUSCHT,
+                KVNR_UNGUELTIG_ZIFFER_GEAENDERT);
     }
 
     // ------------------------------------------------------------------ unabhaengige Referenzpruefungen

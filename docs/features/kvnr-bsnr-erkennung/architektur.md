@@ -969,3 +969,18 @@ Begründung Kap. 1 und R-4).
      die alten Funde geprüft.
   5. Erweist sich eine dieser Grenzen später an einem plangemäßen Fall als zu eng, hält der engineer an und
      berichtet; er ändert sie nicht selbst.
+- **Nachtrag zu T-3 (Entscheidung der Hauptsitzung):**
+  1. **Einfrieren ab Tag `kb-t1-bestand`:** `KvnrBsnrHilfen`, `KvStandTrennerDifferenzTest`, `KvArtBestandTest`, die
+     Kopie `KvNumberScannerStandTrenner` und `KvStandTrenner` bleiben unverändert (wie Regel 13). Wo der Plan
+     Ergänzungen in `KvnrBsnrHilfen` vorsieht (`kvnrGueltigReferenz`, `assertKvnrSynthetisch`, spätere Hilfen wie
+     die Nachrechnung über `ConflictResolver.resolve`), stehen sie in neuen Testklassen. Als unabhängige Referenz der
+     Prüfziffer gilt `KvnrBsnrHilfen.kvnrPruefziffer`; der Laufzeit-Wächter steht in `KvnrSynthetischWaechter`.
+     Einzige Ausnahme vom Einfrieren: Der Plan verlangt für einen späteren Task ausdrücklich eine neue Textmenge
+     (Fuzz 1f bis 1h) in `KvStandTrennerDifferenzTest` – das geschieht dann nur ergänzend in einer neuen Testklasse
+     mit denselben Prüfregeln, nicht durch Ändern der eingefrorenen.
+  2. **Lehrbeispiel:** steht in der zentralen Klasse aus Teilen zusammengesetzt, weil der Bestandstest
+     `ak28_zentraleKlasse_jedeNeunstelligeFolgeBeginntMit00` unverändert bleibt.
+  3. **Wächter-Art `KVNR_FORM`:** greift dort, wo die Ausnahmeliste eine Kette sonst zuließe; eine ohnehin gemeldete
+     Kette behält ihre bisherige Art (keine Umstellung bestehender Assertions).
+  4. **Absicherung der Wortlänge:** `KvNumberScanner` wirft beim Aufbau eine `IllegalStateException` mit fester
+     Meldung, wenn ein Kontext- oder Vorwort länger als `MAX_KONTEXTWORT` ist (security-Hinweis aus T-2).

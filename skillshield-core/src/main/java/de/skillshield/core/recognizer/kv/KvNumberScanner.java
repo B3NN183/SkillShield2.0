@@ -216,8 +216,7 @@ import java.util.Set;
  * der letzten 28 Buchstaben des Laufs (laengere Teilstuecke koennen keinem Eintrag gleichen, das laengste Kontextwort
  * hat hoechstens 27 Zeichen) und eine Bitmaske der Teilstueckanfaenge darin. Am Ende jedes Teilstuecks werden die
  * Fenstersuffixe ab einem Teilstueckanfang verglichen: hoechstens 28 Vergleiche mit Texten von hoechstens 27 Zeichen,
- * also
- * konstanter Aufwand je Teilstueck; jedes Zeichen des Laufs wird einmal gelesen, unsichtbare Zeichen werden ohne
+ * also konstanter Aufwand je Teilstueck; jedes Zeichen des Laufs wird einmal gelesen, unsichtbare Zeichen werden ohne
  * Speicherung uebersprungen. Das Nachsatzwort hinter einem Kontextwort desselben Laufs wird ueber dieselbe Zaehlung
  * der Buchstaben seit dem Kontextwort (hoechstens sechs) erkannt, ohne Vorausschau. Hinter einem Vorwort am Ende
  * eines Laufs wird der Anfang des folgenden Laufs fuer das Nachsatzwort einmal vorausgelesen (hoechstens sechs
@@ -286,7 +285,21 @@ final class KvNumberScanner {
      * Laengstes denkbares Kontextwort (27 Zeichen, Reserve fuer {@code nebenbetriebsstaettennummer}) und damit
      * Puffergroesse von Sperr- und Weit-Folge.
      */
-    private static final int MAX_KONTEXTWORT = FENSTER - 1;
+    static final int MAX_KONTEXTWORT = FENSTER - 1;
+    /** Feste Meldung, wenn ein Kontext- oder Vorwort die Fenstergroesse sprengt; nennt nie das Wort. */
+    private static final String FEHLER_WORT_ZU_LANG = "Kontext- oder Vorwort laenger als MAX_KONTEXTWORT";
+
+    /**
+     * Sichert, dass jedes Kontext- und Vorwort in Fenster, Sperr- und Weit-Puffer passt. Ein zu langes Wort wuerde
+     * sonst nie gefunden (Laenge {@code FENSTER}) oder den Laengenmerker verfehlen; die Pruefung schlaegt sofort und
+     * eindeutig fehl, fuer gueltige Woerter (Laenge 1 bis {@code MAX_KONTEXTWORT}) hat sie keine Wirkung.
+     */
+    static void pruefeWortLaenge(String wort) {
+        if (wort.length() > MAX_KONTEXTWORT) {
+            throw new IllegalStateException(FEHLER_WORT_ZU_LANG);
+        }
+    }
+
     /**
      * Kuerzeste gesperrte Folge, die ein Ereignis ausloest ({@code I K}, D-3); genau diese Laenge gilt nur fuer die
      * unmittelbar folgende Nummer.
@@ -521,10 +534,12 @@ final class KvNumberScanner {
             this.text = text;
             this.n = text.length();
             for (String w : art.kontextwoerter()) {
+                pruefeWortLaenge(w);
                 kontextAnfang[w.charAt(0)] = true;
                 kontextLaenge[w.length()] = true;
             }
             for (String w : art.vorwoerter()) {
+                pruefeWortLaenge(w);
                 kontextAnfang[w.charAt(0)] = true;
                 vorwortLaenge[w.length()] = true;
             }

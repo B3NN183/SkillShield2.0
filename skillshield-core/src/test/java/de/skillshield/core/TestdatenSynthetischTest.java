@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import de.skillshield.core.recognizer.kv.KvnrBsnrHilfen;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
@@ -85,6 +86,19 @@ import org.junit.jupiter.api.Test;
  * (Dateiname) und genau diese Kette; ein Eintrag, der in dieser Datei nicht mehr als Verstoss vorkommt, macht den
  * Test rot. Meldungen nennen Datei, Zeile, Spalte und die Art des Verstosses, nie die Ziffern.
  *
+ * <p><b>KVNR-Form</b> (Feature kvnr-bsnr-erkennung, T-3). Steht unmittelbar vor einer Kette ein einzelner
+ * ASCII-Buchstabe (davor kein weiterer Buchstabe) oder ein einzelner Buchstabe und genau ein Trenner (Buchstabe,
+ * optional ein Trenner, Ziffern), ist die Kette der Ziffernteil einer KVNR-Form (zwei Buchstaben oder das Ende eines
+ * Wortes sind keine). Ausserhalb der zentralen Klasse ist eine KVNR-Form mit neunstelliger Folge im Sinne der Regeln
+ * (1) bis (3) ein Verstoss ohne jede Ausnahme: Eine Kette, die {@code AUSNAHMEN_ZIFFERN} sonst zulaesst, bleibt als
+ * {@code KVNR_FORM} ein Verstoss. Eine Kette, die ohnehin ein Verstoss ist, behaelt ihre bisherige Art
+ * ({@code NEUN_ZIFFERN_*}), damit sich keine bestehende Erwartung aendert. In der zentralen Klasse muss jede
+ * KVNR-Form mit neunstelliger Folge mit den Ziffern {@code 0000} beginnen (Stelle 2 bis 5, Anforderung A-6, H-1;
+ * Verstoss {@code ZENTRALE_KVNR_OHNE_0000}), alle anderen neunstelligen Folgen weiter mit {@code 00}. Das
+ * Lehrbeispiel der Quelle hat keine Ziffern {@code 0000} und steht in der zentralen Klasse aus Teilen zusammengesetzt
+ * (keine zusammenhaengende neunstellige Folge); der Laufzeit-Waechter {@code KvnrSynthetischWaechter} kennt es als
+ * einzige Ausnahme. Acht oder zehn Ziffern hinter dem Buchstaben sind (wie bei jeder Kette) keine neunstellige Folge.
+ *
  * <p><b>Verbleibende Grenzen der Ziffernketten-Regel.</b> Nicht erkannt werden: verkettete Literale (Teilstuecke, die
  * erst zur Laufzeit eine Neunerfolge ergeben), reine Zahlenliterale mit Unterstrichen (nur Gesamtzahl und Block,
  * nicht gleitend), {@code char}-Arrays, Neunerfolgen, die ueber Zeilen oder Textbloecke
@@ -93,8 +107,11 @@ import org.junit.jupiter.api.Test;
  * wird eine Neunerfolge, die nur ueber Punkte hinweg als Praefix einer laengeren Kette entsteht (die ersten Bloecke
  * einer Kette mit Punkt ergeben zusammen neun Ziffern, danach folgen weitere Bloecke, zum Beispiel
  * IP-Adressketten wie 300.300.192.0.2.10): eine solche Regel schlaegt im Bestand an 17 Stellen in
- * {@code Ipv4RecognizerTest} an (zu viele fuer Einzelausnahmen), deshalb gilt sie nicht. Diese Faelle werden durch
- * die Durchsicht von reviewer und security gedeckt.
+ * {@code Ipv4RecognizerTest} an (zu viele fuer Einzelausnahmen), deshalb gilt sie nicht. Vollbreite Ziffern
+ * (U+FF10 bis U+FF19) zaehlen hier nicht als Ziffern: Das legt der bestehende Selbsttest
+ * {@code selbsttest_ziffern_keinVerstoss_andereLaengenUndZweiTrenner} fest, eine Aenderung wuerde diese Erwartung
+ * brechen. Der Laufzeit-Waechter {@code KvnrSynthetischWaechter} zaehlt sie als Ziffern und deckt die Felder der
+ * zentralen Klasse zur Laufzeit ab. Diese Faelle werden durch die Durchsicht von reviewer und security gedeckt.
  */
 class TestdatenSynthetischTest {
 
@@ -170,7 +187,9 @@ class TestdatenSynthetischTest {
         NEUN_ZIFFERN_BLOCK("Kette mit einem Block aus neun Ziffern"),
         NEUN_ZIFFERN_GLEITEND("Kette mit aufeinanderfolgenden Bloecken aus zusammen neun Ziffern"),
         BACKSLASH_ESCAPE("Unicode-Escape fuer den Rueckwaertsstrich (Escape-Aufloesung waere umgehbar)"),
-        ZENTRALE_OHNE_PRAEFIX_00("neunstellige Folge ohne fuehrende Doppelnull in der zentralen Klasse");
+        ZENTRALE_OHNE_PRAEFIX_00("neunstellige Folge ohne fuehrende Doppelnull in der zentralen Klasse"),
+        KVNR_FORM("KVNR-Form (Buchstabe, optional ein Trenner, neun Ziffern) trotz Ausnahme ausserhalb der Zentrale"),
+        ZENTRALE_KVNR_OHNE_0000("KVNR-Form in der zentralen Klasse ohne vier Nullen am Anfang der Ziffern");
 
         private final String beschreibung;
 
@@ -653,6 +672,56 @@ class TestdatenSynthetischTest {
         return erg;
     }
 
+    /** Die Ziffern, mit denen jede KVNR-Form der zentralen Klasse beginnt (Stelle 2 bis 5 der KVNR, A-6, H-1). */
+    private static final String KVNR_ZIFFERN_PRAEFIX = "0000";
+
+    private static boolean istAsciiBuchstabe(char c) {
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+    }
+
+    /**
+     * Steht unmittelbar vor der Kette ein einzelner ASCII-Buchstabe, oder ein einzelner Buchstabe und genau ein
+     * Trenner? Dann ist die Kette der Ziffernteil einer KVNR-Form (Buchstabe, optional ein Trenner, Ziffern). Ein
+     * Buchstabe gilt nur als einzeln, wenn davor kein weiterer ASCII-Buchstabe steht: Zwei oder mehr Buchstaben sind
+     * keine KVNR-Form (Anforderung D-1), das Ende eines Wortes (zum Beispiel {@code Quelle}) ebenso nicht.
+     */
+    static boolean buchstabeDavor(String zeile, int start) {
+        int buchstabe = start - 1;
+        if (buchstabe >= 1 && istTrenner(zeile.charAt(buchstabe)) && istAsciiBuchstabe(zeile.charAt(buchstabe - 1))) {
+            buchstabe--;
+        }
+        if (buchstabe < 0 || !istAsciiBuchstabe(zeile.charAt(buchstabe))) {
+            return false;
+        }
+        return buchstabe == 0 || !istAsciiBuchstabe(zeile.charAt(buchstabe - 1));
+    }
+
+    /**
+     * Ist eine neunstellige Folge ohne Vorlauf {@code 0000} nach der Referenz eine gueltige KVNR, wenn einer der bis
+     * zu drei Zeichen vor der Kette ein ASCII-Buchstabe ist? Gilt in der zentralen Klasse auch dann, wenn
+     * {@link #buchstabeDavor} nicht greift (zum Beispiel Doppelpunkt und Leerzeichen oder zwei Leerzeichen). Grenze:
+     * Die Regel arbeitet je Zeile; Buchstabe und Ziffern in verschiedenen Zeilen oder in verketteten Literalen
+     * erfasst sie nicht (dort gilt nur die Praefixregel 00). Zur Laufzeit schliesst der Test der Felder der zentralen
+     * Klasse diese Luecke.
+     */
+    static boolean gueltigeKvnrOhne0000(String zeile, int start, List<String> folgen) {
+        char buchstabe = 0;
+        for (int abstand = 1; abstand <= 3 && buchstabe == 0 && start - abstand >= 0; abstand++) {
+            char c = zeile.charAt(start - abstand);
+            buchstabe = istAsciiBuchstabe(c) ? Character.toUpperCase(c) : 0;
+        }
+        if (buchstabe == 0) {
+            return false;
+        }
+        for (String f : folgen) {
+            int pruef = KvnrBsnrHilfen.kvnrPruefziffer(buchstabe, f.substring(0, 8));
+            if (!f.startsWith(KVNR_ZIFFERN_PRAEFIX) && pruef == f.charAt(8) - '0') {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Regel "Ziffernketten" fuer eine aufgeloeste Zeile. In der zentralen Klasse gilt die Praefixregel (jede
      * neunstellige Folge nach Gesamtzahl oder Block beginnt mit {@code 00}), dort ohne gleitende Neunerfolge und ohne
@@ -676,15 +745,27 @@ class TestdatenSynthetischTest {
                 continue;
             }
             int spalte = kette.start() + 1;
+            boolean kvnrForm = buchstabeDavor(zeile, kette.start());
             if (zentral) {
-                if (!folgen.stream().allMatch(f -> f.startsWith("00"))) {
+                if (kvnrForm) {
+                    if (!folgen.stream().allMatch(f -> f.startsWith(KVNR_ZIFFERN_PRAEFIX))) {
+                        verstoesse.add(new KettenVerstoss(datei, zeilenNummer, spalte, Art.ZENTRALE_KVNR_OHNE_0000));
+                    }
+                } else if (!folgen.stream().allMatch(f -> f.startsWith("00"))) {
                     verstoesse.add(new KettenVerstoss(datei, zeilenNummer, spalte, Art.ZENTRALE_OHNE_PRAEFIX_00));
+                } else if (gueltigeKvnrOhne0000(zeile, kette.start(), folgen)) {
+                    verstoesse.add(new KettenVerstoss(datei, zeilenNummer, spalte, Art.ZENTRALE_KVNR_OHNE_0000));
                 }
                 continue;
             }
             ZiffernAusnahme schluessel = new ZiffernAusnahme(dateiname(datei), kette.text());
             if (ziffernAusnahmen.contains(schluessel)) {
-                benutzt.add(schluessel);
+                if (kvnrForm) {
+                    // Eine KVNR-Form kennt keine Ausnahme: Die Ausnahmeliste der Ziffernketten gilt nicht fuer sie.
+                    verstoesse.add(new KettenVerstoss(datei, zeilenNummer, spalte, Art.KVNR_FORM));
+                } else {
+                    benutzt.add(schluessel);
+                }
             } else {
                 verstoesse.add(new KettenVerstoss(datei, zeilenNummer, spalte, kette.verstossArt()));
             }
@@ -1339,6 +1420,148 @@ class TestdatenSynthetischTest {
         assertFalse(ziffernKetten("[[X1_" + "1234").get(0).platzhalter());
         assertFalse(ziffernKetten("[[X1_" + "1234]").get(0).platzhalter());
         assertFalse(ziffernKetten("x[[X1" + "1234]]").get(0).platzhalter());
+    }
+
+    // ------------------------------------------------------------------ KVNR-Form (Feature kvnr-bsnr-erkennung, T-3)
+
+    /** Die Ketten einer Zeile mit Buchstabe davor und einer neunstelligen Folge (KVNR-Formen im Sinne der Regel). */
+    private static List<Kette> kvnrFormen(String zeile) {
+        return ziffernKetten(zeile).stream()
+                .filter(k -> buchstabeDavor(zeile, k.start()) && !k.neunerFolgen().isEmpty()).toList();
+    }
+
+    @Test
+    void kvnr_zentraleKlasse_jedeKvnrFormHatNull000AnStelle2Bis5_undDieRegelLaeuftNichtInsLeere() {
+        String text = lies(QUELLE.resolve(ZENTRALE_DATEI));
+        int formen = 0;
+        for (String zeile : text.split("\\R", -1)) {
+            for (Kette k : kvnrFormen(loeseEscapesAuf(zeile))) {
+                formen++;
+                for (String folge : k.neunerFolgen()) {
+                    assertTrue(folge.startsWith(KVNR_ZIFFERN_PRAEFIX), "KVNR-Form ohne die Ziffern 0000 in der "
+                            + "zentralen Klasse");
+                }
+            }
+        }
+        // Istwert 7 (je ein Literal der Vektoren mit neun Ziffern nach dem Buchstaben), Mindestzahl unter 70 Prozent
+        assertTrue(formen >= 4, "Geprueft KVNR-Formen in der zentralen Klasse: " + formen);
+        assertEquals(List.of(), pruefe(ZENTRALE_DATEI, text, Set.of(), Set.of()).verstoesse());
+    }
+
+    /** Eine Ausnahmeliste, die jede Kette der Zeile (nach dem Aufloesen der Escapes) fuer {@code B.java} zulaesst. */
+    private static Set<ZiffernAusnahme> alleKettenAlsAusnahme(String zeile) {
+        return alleKettenAlsAusnahme("B.java", zeile);
+    }
+
+    private static Set<ZiffernAusnahme> alleKettenAlsAusnahme(String dateiname, String zeile) {
+        Set<ZiffernAusnahme> ausnahmen = new HashSet<>();
+        for (Kette k : ziffernKetten(loeseEscapesAuf(zeile))) {
+            ausnahmen.add(new ZiffernAusnahme(dateiname, k.text()));
+        }
+        return ausnahmen;
+    }
+
+    @Test
+    void selbsttest_kvnrForm_ausserhalbDerZentralenKlasse_ausnahmeGiltNicht_auchMitTrennernUndKleinbuchstabe() {
+        String ziffern = "0000" + "12341";
+        List<String> formen = List.of("Z" + ziffern, "z" + ziffern, "Z " + ziffern, "Z-" + ziffern, "Z." + ziffern,
+                "Z/" + ziffern, "Z" + NBSP + ziffern, "Z" + "0000 " + "12341", "Z " + "000 " + "012 " + "341",
+                "Z" + "0000" + "-12341", "Z" + "00001" + "2341", "(Z" + ziffern + ")", "KVNR: Z" + ziffern + ",",
+                "1 Z" + ziffern, "1" + "Z" + ziffern, esc('Z') + ziffern);
+        for (int i = 0; i < formen.size(); i++) {
+            String text = formen.get(i);
+            // ohne Ausnahme bleibt die bisherige Art, mit Ausnahme meldet der Waechter die KVNR-Form
+            assertEquals(1, arten(text).size(), "Beispiel " + i);
+            assertTrue(arten(text).get(0) != Art.KVNR_FORM, "Beispiel " + i);
+            assertEquals(List.of(Art.KVNR_FORM), arten("a/B.java", text, alleKettenAlsAusnahme(text)),
+                    "Beispiel " + i + " mit Ausnahme");
+        }
+    }
+
+    @Test
+    void selbsttest_kvnrForm_keineKvnrForm_wennKeinEinzelnerBuchstabeDavorSteht_unddieAusnahmeGilt() {
+        String ziffern = "0000" + "12341";
+        List<String> keine = List.of(ziffern, "AB" + ziffern, "Quelle " + ziffern, "Quelle" + ziffern,
+                "Z" + ", " + ziffern, "Z" + "  " + ziffern, "1" + " " + ziffern.substring(0, 8), "ab-" + ziffern,
+                "[[KVNR_" + "12345" + "6789" + "]]");
+        for (int i = 0; i < keine.size(); i++) {
+            String text = keine.get(i);
+            assertEquals(List.of(), arten("a/B.java", text, alleKettenAlsAusnahme(text)), "Beispiel " + i);
+        }
+        assertEquals(List.of(), arten("Z" + "00001234"));
+        assertEquals(List.of(), arten("x" + "198.51.100.1"));
+    }
+
+    @Test
+    void selbsttest_kvnrForm_zentraleKlasse_0000Pflicht_undPraefix00FuerAlleAnderenNeunerfolgen() {
+        String gut = "Z" + "0000" + "12341";
+        String ohne0000 = "Z" + "0012" + "34561";
+        String lehrbeispielZusammenhaengend = "A" + "1234" + "5678" + "0";
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, gut, Set.of()));
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, "Z " + "0000 " + "12341", Set.of()));
+        assertEquals(List.of(Art.ZENTRALE_KVNR_OHNE_0000), arten(ZENTRALE_DATEI, ohne0000, Set.of()));
+        assertEquals(List.of(Art.ZENTRALE_KVNR_OHNE_0000), arten(ZENTRALE_DATEI, "z-" + "0012" + "34561", Set.of()));
+        assertEquals(List.of(Art.ZENTRALE_KVNR_OHNE_0000), arten(ZENTRALE_DATEI, lehrbeispielZusammenhaengend,
+                Set.of()));
+        // keine KVNR-Form (kein Buchstabe davor): weiter nur die Praefixregel 00
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, "00" + "1235101", Set.of()));
+        assertEquals(List.of(Art.ZENTRALE_OHNE_PRAEFIX_00), arten(ZENTRALE_DATEI, "12" + "3456789", Set.of()));
+        // acht und zehn Ziffern sind keine neunstellige Folge (bekannte Grenze der Regel)
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, "Z" + "12345678", Set.of()));
+        // in jeder anderen Datei ist auch die gute Form ein Verstoss, mit Ausnahme als KVNR_FORM
+        assertEquals(1, arten("a/B.java", gut, Set.of()).size());
+        assertEquals(List.of(Art.KVNR_FORM), arten("a/B.java", gut, alleKettenAlsAusnahme(gut)));
+    }
+
+    @Test
+    void selbsttest_kvnrForm_zentraleKlasse_gueltigeKvnrMitBuchstabeInDreiZeichen_brauchtDieZiffern0000() {
+        String acht = "0012" + "3456";
+        String neun = KvnrBsnrHilfen.kvnrNeunZiffern('Z', acht);
+        String falsch = acht + (KvnrBsnrHilfen.kvnrPruefziffer('Z', acht) + 1) % 10;
+        // Buchstabe, Doppelpunkt oder Komma und Leerzeichen, zwei Leerzeichen, Buchstabe vor dem Wort: Verstoss
+        for (String vor : List.of("Z, ", "Z: ", "Z  ", "z: ", "Z ", "Z", "z\t")) {
+            assertEquals(List.of(Art.ZENTRALE_KVNR_OHNE_0000), arten(ZENTRALE_DATEI, vor + neun, Set.of()), vor);
+        }
+        // der Buchstabe geht mit seinem eigenen Wert in die Pruefziffer ein (hier R an dritter Stelle vor der Kette)
+        String neunR = KvnrBsnrHilfen.kvnrNeunZiffern('R', acht);
+        assertEquals(List.of(Art.ZENTRALE_KVNR_OHNE_0000), arten(ZENTRALE_DATEI, "KVNR: " + neunR, Set.of()));
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, "KVNR: " + neun, Set.of()));
+        // Prefix 0000, falsche Pruefziffer, Buchstabe weiter als drei Zeichen entfernt: kein Verstoss
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, "Z, " + KvnrBsnrHilfen.kvnrNeunZiffern('Z', "00001234"),
+                Set.of()));
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, "Z, " + falsch, Set.of()));
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, "Z   " + neun, Set.of()));
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, "= \"" + neun, Set.of()));
+        // die Meldung nennt keine Ziffern
+        String meldung = pruefe(ZENTRALE_DATEI, "Z, " + neun, Set.of(), Set.of(), true).verstoesse().get(0);
+        assertFalse(meldung.contains(neun) || meldung.contains(acht));
+        // ausserhalb der zentralen Klasse aendert sich nichts: weiter der Verstoss der Neunerfolge
+        assertEquals(List.of(Art.NEUN_ZIFFERN_GESAMT), arten("a/B.java", "Z, " + neun, Set.of()));
+    }
+
+    @Test
+    void selbsttest_kvnrForm_waechterFindetEingeschleusteNummer_auchMitAusnahmeliste_ohneZiffernInDerMeldung() {
+        String eingeschleust = "Z" + "0000" + "12341";
+        String quelltext = "class A {\n    String s = \"" + eingeschleust + "\";\n}\n";
+        Ergebnis erg = pruefe("de/x/A.java", quelltext, Set.of(), Set.of(), true);
+        assertEquals(List.of(new KettenVerstoss("de/x/A.java", 2, 18, Art.NEUN_ZIFFERN_GESAMT)),
+                erg.kettenVerstoesse());
+        // auch eine Ausnahmeliste hilft nicht: dann meldet der Waechter die KVNR-Form
+        Ergebnis mitAusnahme = pruefe("de/x/A.java", quelltext, Set.of(), alleKettenAlsAusnahme("A.java", quelltext),
+                true);
+        assertEquals(List.of(new KettenVerstoss("de/x/A.java", 2, 18, Art.KVNR_FORM)),
+                mitAusnahme.kettenVerstoesse());
+        for (String meldung : erg.verstoesse()) {
+            assertFalse(meldung.contains("0000"), "Die Meldung nennt Ziffern");
+            assertFalse(meldung.contains("12341"), "Die Meldung nennt Ziffern");
+        }
+        // dieselbe Nummer in der zentralen Klasse ist zulaessig, in einer Datei des Testbaums nicht
+        assertEquals(List.of(), pruefe(ZENTRALE_DATEI, quelltext, Set.of(), Set.of(), true).verstoesse());
+        // ein Unicode-Escape fuer den Buchstaben wird vor der Pruefung aufgeloest, die Form wird ebenso gefunden
+        String mitEscape = esc('Z') + "0000" + "12341";
+        Ergebnis escape = pruefe("de/x/A.java", mitEscape, Set.of(), alleKettenAlsAusnahme("A.java", mitEscape),
+                true);
+        assertEquals(List.of(Art.KVNR_FORM), escape.kettenVerstoesse().stream().map(KettenVerstoss::art).toList());
     }
 
     // ------------------------------------------------------------------ Selbsttests: E-Mail

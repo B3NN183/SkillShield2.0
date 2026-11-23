@@ -7,6 +7,12 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import de.skillshield.core.recognizer.kv.KvnrBsnrHilfen;
+import de.skillshield.core.recognizer.kv.KvnrSynthetischWaechter;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
@@ -366,5 +372,132 @@ class SynthetischeKvNummernTest {
             }
         }
         return !s.isEmpty();
+    }
+
+    // ------------------------------------------------------------------ KVNR (kvnr-bsnr-erkennung, AK-6, AK-23)
+
+    private static boolean istKvnrForm(String s, int ziffern) {
+        if (s.length() != 1 + ziffern || s.charAt(0) < 'A' || s.charAt(0) > 'Z') {
+            return false;
+        }
+        return istNurAsciiZiffern(s.substring(1));
+    }
+
+    private static boolean kvnrGueltigReferenz(String s) {
+        int soll = KvnrBsnrHilfen.kvnrPruefziffer(s.charAt(0), s.substring(1, 9));
+        return soll == s.charAt(9) - '0';
+    }
+
+    @Test
+    void ak23_kvnrVektoren_habenBuchstabeUndNeunZiffern_mindestensEinGueltigerUndDreiUngueltige() {
+        assertTrue(alleKvnrGueltig().size() >= 1);
+        assertTrue(alleKvnrUngueltig().size() >= 3);
+        for (String n : alleKvnrGueltig()) {
+            assertTrue(istKvnrForm(n, 9), "gueltiger Vektor hat nicht die Form Buchstabe und neun Ziffern");
+            assertTrue(kvnrGueltigReferenz(n), "gueltiger Vektor ist nach der Referenz ungueltig");
+        }
+        for (String n : alleKvnrUngueltig()) {
+            assertTrue(istKvnrForm(n, 9), "ungueltiger Vektor hat nicht die Form Buchstabe und neun Ziffern");
+            assertFalse(kvnrGueltigReferenz(n), "ungueltiger Vektor ist nach der Referenz gueltig");
+        }
+    }
+
+    @Test
+    void ak23_kvnrVektoren_sindVerschieden_undNurDasLehrbeispielOhneDieZiffern0000() {
+        List<String> alle = new ArrayList<>(alleKvnrGueltig());
+        alle.addAll(alleKvnrUngueltig());
+        assertEquals(alle.size(), new HashSet<>(alle).size(), "doppelte KVNR-Vektoren");
+        for (String n : alle) {
+            if (n.equals(KVNR_LEHRBEISPIEL)) {
+                assertEquals('A', n.charAt(0));
+                assertFalse(n.startsWith("0000", 1));
+            } else {
+                assertTrue(n.startsWith("0000", 1), "KVNR-Vektor ohne die Ziffern 0000 an Stelle 2 bis 5");
+            }
+        }
+    }
+
+    @Test
+    void ak23_kvnrVektoren_markerUndNullfolgeUndFormabweichungenHabenDieBenanntenEigenschaften() {
+        assertTrue(kvnrGueltigReferenz(KVNR_MARKER));
+        assertTrue(alleKvnrGueltig().contains(KVNR_MARKER));
+        assertEquals(1, alleKvnrGueltig().stream().filter(n -> n.regionMatches(1, KVNR_MARKER, 1, 9)).count());
+        assertTrue(kvnrGueltigReferenz(KVNR_NULL));
+        assertEquals(1, KVNR_NULL.substring(1).chars().distinct().count(), "Nullfolge hat nicht nur gleiche Ziffern");
+        assertEquals('0', KVNR_NULL.charAt(1));
+        assertTrue(istKvnrForm(KVNR_ACHT_ZIFFERN, 8));
+        assertTrue(istKvnrForm(KVNR_ZEHN_ZIFFERN, 10));
+        assertTrue(KVNR_ACHT_ZIFFERN.startsWith("0000", 1) && KVNR_ZEHN_ZIFFERN.startsWith("0000", 1));
+    }
+
+    @Test
+    void ak6_kvnrVektoren_enthaltenBuchstabeZ_undEinenVektorMitBuchstabeAusAbisI() {
+        assertEquals('Z', KVNR_GUELTIG.charAt(0));
+        assertEquals('Z', KVNR_GUELTIG_ZWEI.charAt(0));
+        assertTrue(KVNR_GUELTIG_BUCHSTABE_C.charAt(0) >= 'A' && KVNR_GUELTIG_BUCHSTABE_C.charAt(0) <= 'I');
+        assertEquals('A', KVNR_LEHRBEISPIEL.charAt(0));
+        assertEquals(10, KVNR_LEHRBEISPIEL.length());
+        assertTrue(istKvnrForm(KVNR_LEHRBEISPIEL, 9));
+        assertTrue(kvnrGueltigReferenz(KVNR_LEHRBEISPIEL));
+        for (int stelle = 1; stelle <= 8; stelle++) {
+            assertEquals(stelle, KVNR_LEHRBEISPIEL.charAt(stelle) - '0', "Lehrbeispiel nicht eins bis acht");
+        }
+    }
+
+    @Test
+    void zentraleKlasse_alleOeffentlichenStringFelderUndListenwerte_bestehenDenLaufzeitWaechter()
+            throws ReflectiveOperationException {
+        int felder = 0;
+        int kvnrFelder = 0;
+        int listenwerte = 0;
+        for (Field feld : SynthetischeKvNummern.class.getFields()) {
+            int modus = feld.getModifiers();
+            if (Modifier.isStatic(modus) && Modifier.isFinal(modus) && feld.getType() == String.class) {
+                felder++;
+                kvnrFelder += feld.getName().startsWith("KVNR_") ? 1 : 0;
+                assertEquals(0, KvnrSynthetischWaechter.pruefe((String) feld.get(null)).verstoesse(),
+                        "Feld " + feld.getName() + " enthaelt eine gueltige KVNR-Form ohne die Ziffern 0000");
+            }
+        }
+        for (Method methode : SynthetischeKvNummern.class.getMethods()) {
+            if (Modifier.isStatic(methode.getModifiers()) && methode.getParameterCount() == 0
+                    && methode.getReturnType() == List.class) {
+                for (Object wert : (List<?>) methode.invoke(null)) {
+                    listenwerte++;
+                    assertEquals(0, KvnrSynthetischWaechter.pruefe((String) wert).verstoesse(),
+                            "Listenwert aus " + methode.getName() + " ohne die Ziffern 0000");
+                }
+            }
+        }
+        // Istwert 44 Felder, davon 11 KVNR-Felder, 24 Listenwerte; Mindestzahlen unter 70 Prozent (30, 7, 16)
+        assertTrue(felder >= 30 && kvnrFelder >= 7 && listenwerte >= 16,
+                "Felder " + felder + ", KVNR-Felder " + kvnrFelder + ", Listenwerte " + listenwerte);
+        // Das Lehrbeispiel ist die einzige gueltige Form ohne 0000, und der Waechter erkennt es als gueltig
+        KvnrSynthetischWaechter.Befund lehr = KvnrSynthetischWaechter.pruefe(KVNR_LEHRBEISPIEL);
+        assertEquals(1, lehr.gueltigeFormen());
+        assertEquals(0, lehr.verstoesse());
+    }
+
+    @Test
+    void selbsttest_feldWaechter_meldetEineRegelwidrigeNummer_rechnerischGebildetOhneLiteral() {
+        String acht = "1234" + "5671";
+        String regelwidrig = "Q" + KvnrBsnrHilfen.kvnrNeunZiffern('Q', acht);
+        KvnrSynthetischWaechter.Befund befund = KvnrSynthetischWaechter.pruefe(regelwidrig);
+        assertEquals(1, befund.gueltigeFormen());
+        assertEquals(1, befund.verstoesse());
+        assertTrue(kvnrGueltigReferenz(regelwidrig));
+        assertFalse(regelwidrig.startsWith("0000", 1));
+    }
+
+    @Test
+    void kvnrVektoren_ihreNeunZiffernSindKeineEintraegeDerLanrIkListe() {
+        List<String> andere = alleNeunstelligenNummern();
+        for (String n : alleKvnrGueltig()) {
+            assertFalse(andere.contains(n.substring(1)), "KVNR-Ziffern stehen schon in der LANR/IK-Liste");
+        }
+        for (String n : alleKvnrUngueltig()) {
+            assertFalse(andere.contains(n.substring(1)), "KVNR-Ziffern stehen schon in der LANR/IK-Liste");
+        }
+        assertEquals(15, andere.size(), "die Liste der LANR/IK-Nummern bleibt unveraendert");
     }
 }

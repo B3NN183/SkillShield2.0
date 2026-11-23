@@ -4,6 +4,7 @@ import static de.skillshield.core.SynthetischeKvNummern.IK_GUELTIG;
 import static de.skillshield.core.SynthetischeKvNummern.LANR_GUELTIG;
 import static de.skillshield.core.recognizer.kv.KvTestHilfen.ZWSP;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -24,6 +25,7 @@ class KvFensterTest {
     private static final int MAX_LAUF = 30;
     private static final int MIN_FOLGE = 23;
     private static final int MAX_FOLGE = 28;
+    private static final int MIN_LANGE_FOLGE = 24;
     private static final String FUELL = "x";
     private static final String[] ENDEN_LANR = {"lanr", "arztnummer"};
     private static final String[] ENDEN_IK = {"ik"};
@@ -148,5 +150,70 @@ class KvFensterTest {
                 "IK Laufzeitgrenze 2 s ueberschritten");
         assertEquals(0, lanr, "LANR Fundzahl");
         assertEquals(0, ik, "IK Fundzahl");
+    }
+
+    // ------------------------------------------------------------------ Zustand nach einer langen Folge (T-3, c)
+
+    private static void nachLangerFolge(Recognizer neu, Recognizer alt, String kontext, String nummer, String name) {
+        String[] folgeLuecken = {" ", "  ", ". ", "-"};
+        String[] enden = {", ", "\n", ",\n"};
+        for (String luecke : folgeLuecken) {
+            for (int laenge = MIN_LANGE_FOLGE; laenge <= MAX_FOLGE; laenge++) {
+                String folge = gesperrt(wiederholt(FUELL, laenge), luecke);
+                for (String ende : enden) {
+                    String text = folge + ende + gesperrt(kontext, " ") + " " + nummer;
+                    String fall = name + " Folge " + laenge + " Luecke " + luecke.length() + " Ende " + ende.length();
+                    assertEquals(1, neu.detect(text).size(), "genau ein Fund nach langer Folge: " + fall);
+                    gleichWieStand(neu, alt, text, fall);
+                }
+            }
+        }
+    }
+
+    @Test
+    void lanrGesperrtesKontextwortNachLangerFolgeFindetGenauEineNummer() {
+        nachLangerFolge(new LanrRecognizer(), KvStandTrenner.lanr(), "LANR", LANR_GUELTIG, "LANR");
+    }
+
+    @Test
+    void ikGesperrtesKontextwortNachLangerFolgeFindetGenauEineNummer() {
+        nachLangerFolge(new IkRecognizer(), KvStandTrenner.ik(), "IKNR", IK_GUELTIG, "IK");
+    }
+
+    // ------------------------------------------------------------------ Wortlaengen (T-3, a)
+
+    @Test
+    void alleKontextUndVorwoerterAllerArtenPassenInsFenster() {
+        for (KvArt art : KvArt.values()) {
+            for (String wort : art.kontextwoerter()) {
+                assertTrue(!wort.isEmpty() && wort.length() <= KvNumberScanner.MAX_KONTEXTWORT,
+                        "Kontextwort ausserhalb 1 bis MAX_KONTEXTWORT bei Art " + art);
+            }
+            for (String wort : art.vorwoerter()) {
+                assertTrue(!wort.isEmpty() && wort.length() <= KvNumberScanner.MAX_KONTEXTWORT,
+                        "Vorwort ausserhalb 1 bis MAX_KONTEXTWORT bei Art " + art);
+            }
+            assertTrue(KvNumberScanner.detect(art, "x").isEmpty(), "Scanner baut sich nicht fuer Art " + art);
+        }
+        assertTrue(KvNumberScanner.MAX_KONTEXTWORT == 27, "MAX_KONTEXTWORT weicht vom Plan (27) ab");
+    }
+
+    @Test
+    void pruefeWortLaenge_wirftNurFuerWorteUeberMaxKontextwort_mitFesterMeldungOhneDasWort() {
+        int max = KvNumberScanner.MAX_KONTEXTWORT;
+        KvNumberScanner.pruefeWortLaenge(wiederholt(FUELL, max));
+        KvNumberScanner.pruefeWortLaenge(FUELL);
+        KvNumberScanner.pruefeWortLaenge("");
+        String zuLang = wiederholt("q", max + 1);
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> KvNumberScanner.pruefeWortLaenge(zuLang));
+        String meldung = e.getMessage();
+        assertTrue(meldung != null && !meldung.isEmpty(), "Meldung fehlt");
+        assertTrue(!meldung.contains(zuLang) && !meldung.contains("q"), "Die Meldung enthaelt das Wort");
+        assertTrue(meldung.chars().noneMatch(Character::isDigit), "Die Meldung enthaelt Ziffern");
+        // dieselbe feste Meldung unabhaengig von Wort und Laenge
+        IllegalStateException laenger = assertThrows(IllegalStateException.class,
+                () -> KvNumberScanner.pruefeWortLaenge(wiederholt("w", max + 10)));
+        assertEquals(meldung, laenger.getMessage(), "Die Meldung haengt vom Wort ab");
     }
 }
