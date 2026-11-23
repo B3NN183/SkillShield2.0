@@ -1,5 +1,6 @@
 package de.skillshield.core;
 
+import de.skillshield.core.recognizer.kv.KvnrBsnrHilfen;
 import java.util.List;
 import java.util.Random;
 
@@ -359,5 +360,47 @@ public final class SynthetischeKvNummern {
         int rest = ikQuersummenSumme(sb.toString()) % 10;
         sb.setCharAt(8, (char) ('0' + rest));
         return sb.toString();
+    }
+
+    // ------------------------------------------------------------------ Fremdnummern (Fehlalarm-Pruefstand 1b)
+
+    /** Zahl der zufaelligen Ziffern einer Fremdnummer; davor stehen die vier Nullen (A-6, H-1). */
+    private static final int FREMD_ZUFALLSZIFFERN = 4;
+
+    /** Die ersten acht Ziffern einer Fremdnummer: {@code 0000} und vier zufaellige Ziffern. */
+    private static String fremdAchtZiffern(Random zufall) {
+        StringBuilder sb = new StringBuilder("0000");
+        for (int i = 0; i < FREMD_ZUFALLSZIFFERN; i++) {
+            sb.append(zufall.nextInt(10));
+        }
+        return sb.toString();
+    }
+
+    private static char fremdBuchstabe(Random zufall) {
+        return (char) ('A' + zufall.nextInt(26));
+    }
+
+    /**
+     * Bildet zur Laufzeit eine Fremdnummer der Form Grossbuchstabe {@code A-Z} und neun Ziffern: {@code 0000}, vier
+     * zufaellige Ziffern und eine Pruefziffer, die nach {@code KvnrBsnrHilfen.kvnrPruefziffer} passt
+     * ({@code gueltig}) oder sicher nicht passt (eine andere Ziffer als die berechnete). Die Nummer steht nie als
+     * Literal im Code (Regel 4 des Plans kvnr-bsnr-erkennung).
+     */
+    public static String fremdKvnr(Random zufall, boolean gueltig) {
+        char buchstabe = fremdBuchstabe(zufall);
+        String acht = fremdAchtZiffern(zufall);
+        int richtig = KvnrBsnrHilfen.kvnrPruefziffer(buchstabe, acht);
+        int pruefziffer = gueltig ? richtig : (richtig + 1 + zufall.nextInt(9)) % 10;
+        return buchstabe + acht + pruefziffer;
+    }
+
+    /**
+     * Wie {@link #fremdKvnr}, aber die letzte Ziffer ist gleichverteilt (0 bis 9) und damit in etwa jedem zehnten Fall
+     * die passende Pruefziffer (reine Pruefziffer-Erwartung des Abbruchkriteriums D-5, AK-16 c).
+     */
+    public static String zufallsKvnr(Random zufall) {
+        char buchstabe = fremdBuchstabe(zufall);
+        String acht = fremdAchtZiffern(zufall);
+        return buchstabe + acht + zufall.nextInt(10);
     }
 }

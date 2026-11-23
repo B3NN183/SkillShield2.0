@@ -1304,3 +1304,20 @@ Tests in `KvnrGrenzenTest`, sofern nicht anders genannt. Diese Liste ergänzt un
      („bei vermehrten Fehlalarmen lassen").
   3. Mengen, die absichtlich KVNR enthalten (Fuzz 1f, `kvnrFaelle()`, KVNR-Testklassen), gehören nicht zu den
      Bestandsmengen von (a).
+- **Nachtrag 2 zu T-9 (Entscheidung der Hauptsitzung nach Bericht des engineers):**
+  1. `KvnrOhneKontextFehlalarmTest` liegt im Paket `de.skillshield.core` (nicht `recognizer/kv`), weil er die
+     paketprivaten Generatoren der Bestandsmengen braucht und bestehende Dateien nicht geöffnet werden sollen.
+     Angenommen; `KvnrOhneKontextHilfen` bleibt in `recognizer/kv`.
+  2. Die Aussage „auf dem Stand nach T-8 genau 0 KVNR-Funde" steht nicht im eingefrorenen Test (sie gilt ab T-10
+     nicht mehr), sondern wurde einmalig gemessen und wird von security/qa bei der Abnahme von T-9 nachgemessen.
+  3. Messwerte T-9 (enge Referenz auf den Bestandsmengen): 13 Treffer (Fuzz 1c 5, 1d 1, 1e 5, Generatoren 2),
+     davon 12 mit bereits durch einen Bestandsfund abgedeckten Ziffern und 1 bisher frei. Das ist die
+     Obergrenze der zusätzlichen KVNR-Funde, die T-10 auf dem Bestand erzeugen darf.
+- **Nachtrag 3 zu T-9 (zweiter Durchlauf, Entscheidung der Hauptsitzung):** Der Prüfstand wurde vor dem Einfrieren
+  um die security-Hinweise erweitert (155 Fremdmuster; Achter-/Zehnerformen mit passender Prüfziffer;
+  Nicht-ASCII-Buchstaben und Kombinationszeichen an der Wortgrenze; Nicht-ASCII-Großbuchstabe als Anfang; Tab,
+  Zeilenumbruch und geschütztes Leerzeichen im Negativkontext; (c) auch über `standard()`; Ausnahme in (a) nur für
+  Quelle `kvnr-ohne-kontext` mit 0,60; Funde je Menge ≤ Referenztreffer). **Bewusst nicht festgelegt:** eine
+  Nicht-ASCII-Ziffer direkt neben der Form. Kap. 4.3 sagt nur „Ziffer", A-3 nennt Nicht-ASCII-Ziffern „keine
+  KVNR-Zeichen"; beide Lesarten (sperrt / sperrt nicht) sind in T-10 zulässig, der Prüfstand prüft den Fall nicht.
+  T-10 dokumentiert die gewählte Lesart im Javadoc.
