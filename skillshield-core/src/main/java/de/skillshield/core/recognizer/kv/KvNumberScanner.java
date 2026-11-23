@@ -109,11 +109,14 @@ import java.util.Set;
  * gespeichert. Ein normales Kontextwort setzt Deckel 1,0 und {@code nurDirekt = false} ({@code I K IK N}:
  * 0,92).</li>
  * <li>Weit-Kontextwort (Ereignis am Ende der Weit-Folge, vor der Verarbeitung des beendenden Zeichens bzw. Laufs; der
- * Weit-Verfolger laeuft neben dem Sperr-Verfolger und schreibt nur hier in den Zustand): Nur wenn kein Kontext
- * {@code aktiv} ist (D-7), werden die zu Beginn der Folge offenen Segmente (eigenes Abbild aus sechs Werten) wie beim
- * gesperrten Kontextwort wiederhergestellt und ausgewertet (nachgestellter Kontext, Komma-Regel); dann
- * {@code aktiv = direkt = true}, {@code woerter = umbrueche = 0}, Deckel {@link #CONFIDENCE_SPERRSCHRIFT} (0,80 in
- * jedem Zustand, nachgestellt mit Komma 0,60). Bei laufendem Kontext geschieht nichts. Alle Zwischenzustaende des
+ * Weit-Verfolger laeuft neben dem Sperr-Verfolger und schreibt nur hier in den Zustand): Ohne laufenden Kontext
+ * werden die zu Beginn der Folge offenen Segmente (eigenes Abbild aus sechs Werten) wie beim gesperrten Kontextwort
+ * wiederhergestellt und ausgewertet (nachgestellter Kontext, Komma-Regel); dann {@code aktiv = direkt = true},
+ * {@code woerter = umbrueche = 0}, Deckel {@link #CONFIDENCE_SPERRSCHRIFT} (0,80 in jedem Zustand, nachgestellt mit
+ * Komma 0,60). Ist am Folgenende ein Kontext {@code aktiv}, wird er mit denselben Werten neu begonnen, ohne
+ * Wiederherstellen und ohne Ausgabe offener Segmente (D-5, D-7 im Sinne der Vergleichsform: dort ist der Kontext am
+ * Ende des Worts nie mehr aktiv; er laeuft hier nur durch ein strenges Teilereignis wie {@code L A N R.} oder
+ * {@code I K.} innerhalb der Folge). Das nimmt nie etwas weg. Alle Zwischenzustaende des
  * Weit-Verfolgers sind wirkungslos: Auf einem Text ohne Weit-Kontextwort ist die Fundliste die des Sperr-Verfolgers
  * allein. Die Buchstaben der Folge werden unveraendert je als Fuellwort verarbeitet.</li>
  * <li>Segment bei {@code aktiv}: wird ausgegeben; danach {@code direkt = false}, {@code woerter = umbrueche = 0}
@@ -193,8 +196,8 @@ import java.util.Set;
  * mit Tab, Leerraum vor dem Punkt, zwei Punkte, {@code -} oder U+2013 mit Leerraum, Zeilenumbruch, {@code ,},
  * {@code ;}, {@code :}, {@code /}, {@code _} und andere Unicode-Leerraeume (U+2002, U+3000) als Luecke. Bekannte
  * Folge 14cF: Initialen oder Einzelbuchstaben, die zusammengelesen genau ein Kontextwort ab vier Buchstaben ergeben
- * ({@code Prof. L. A. N. R. Beispiel, Rechnung N}), erschliessen eine folgende Zahl. Das Weit-Kontextwort wirkt nur
- * ohne laufenden Kontext (D-7); die Regel fuer den laufenden Kontext folgt (T-7).
+ * ({@code Prof. L. A. N. R. Beispiel, Rechnung N}), erschliessen eine folgende Zahl. Bei laufendem Kontext wird
+ * er durch das Weit-Kontextwort neu begonnen (T-7, siehe oben).
  *
  * <p><b>Linearitaet.</b> Ein Durchlauf, keine Rekursion, kein regulaerer Ausdruck, kein Zuruecksetzen der
  * Leseposition der Hauptschleife. Jeder Lauf wird in einem Zug gelesen. Dabei fuehrt der Durchlauf nur ein Fenster
@@ -825,7 +828,8 @@ final class KvNumberScanner {
         /**
          * Die Weit-Folge ist zu Ende. Nur hier schreibt der Weit-Verfolger in den Bestandszustand: Hat die Folge
          * mindestens eine erweiterte Luecke, vier bis 23 Buchstaben und gleicht sie einem Kontextwort der Art, beginnt
-         * (ohne laufenden Kontext) ein Kontext wie bei einem gesperrten Kontextwort ab drei Buchstaben.
+         * ein Kontext wie bei einem gesperrten Kontextwort ab drei Buchstaben; ein laufender Kontext wird dabei
+         * neu begonnen, ohne das Abbild der offenen Segmente wiederherzustellen (Plan Kap. 3.2.5).
          */
         private void weitEnde() {
             int laenge = weitLaenge;
@@ -840,7 +844,10 @@ final class KvNumberScanner {
                 return;
             }
             if (aktiv) {
-                return; // D-7: bei laufendem Kontext wirkt die erweiterte Sperrschrift nicht
+                // Laeuft ein Kontext, geht er nur auf ein strenges Teilereignis innerhalb der Folge zurueck
+                // (L A N R. N R, I K. N R): Es gibt keine offenen Segmente, das Abbild bleibt unberuehrt.
+                kontextBeginnen(CONFIDENCE_SPERRSCHRIFT, false);
+                return;
             }
             weitAbbildWiederherstellen();
             offenNachgestelltAusgeben();

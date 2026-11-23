@@ -16,7 +16,8 @@ import org.junit.jupiter.api.Test;
 /**
  * Tests zu gesperrt geschriebenen Kontextwoertern ab vier Buchstaben mit erweiterten Trennern (Feature
  * kv-trenner-und-umbruch, Task T-6, Teil 2, D-2 bis D-7, D-9; AK-7 bis AK-14, AK-17, AK-20, AK-21 (Bereich, Quelle),
- * Grenzfaelle aus Plan Kap. 3.2.7, Laufzeit AK-26 auf Erkennerebene). Je Art wird das Kontextwort {@code LANR}
+ * Grenzfaelle aus Plan Kap. 3.2.7, Laufzeit AK-26 auf Erkennerebene) und zum laufenden Kontext (Task T-7: AK-18,
+ * AK-19, AK-21 an Beispielen, D-5, D-7, Plan Kap. 3.2.5). Je Art wird das Kontextwort {@code LANR}
  * bzw. {@code IKNR} benutzt. Jeder Text geht durch den Waechter, die Differenzpruefungen gegen beide eingefrorenen
  * Staende und den Fehlalarm-Pruefstand in {@link KvTestHilfen#scan}. Nummern stammen aus
  * {@code SynthetischeKvNummern}; die Quelle wird aus der Nummer abgeleitet.
@@ -474,6 +475,189 @@ class KvTrennerTest {
             fund(a, folge(w, ". ") + ".-Nummer ");
             fund(a, folge(w, "\t") + " Nr. ");
             kein(a, folge(w, ". ") + ". des der die dann ");
+        }
+    }
+
+    // ------------------------------------------------------------------ T-7: laufender Kontext (D-5, D-7)
+
+    /**
+     * Die erweiterte Form und ihre Vergleichsform (jede erweiterte Luecke durch ein Leerzeichen ersetzt) liefern
+     * dieselben Funde: gleiche Zahl, gleicher Wert (damit Typ), gleiche Quelle, gleiche Konfidenz (gleich der
+     * erwarteten) und der Bereich der erweiterten Form liegt auf dem Wert des Textes (die Nummern sind verschieden).
+     */
+    private static void gleichDerVergleichsform(Art a, String erweitert, String vergleich, double... konfidenzen) {
+        List<Finding> e = scan(a, erweitert);
+        List<Finding> v = scan(a, vergleich);
+        assertEquals(konfidenzen.length, e.size(), a.name + " Anzahl Funde erweitert");
+        assertEquals(konfidenzen.length, v.size(), a.name + " Anzahl Funde Vergleichsform");
+        int ab = 0;
+        for (int i = 0; i < konfidenzen.length; i++) {
+            Finding fe = e.get(i);
+            Finding fv = v.get(i);
+            assertTrue(fv.originalValue().equals(fe.originalValue()), a.name + " Wert " + i);
+            assertEquals(konfidenzen[i], fe.confidence(), a.name + " Konfidenz erweitert " + i);
+            assertEquals(konfidenzen[i], fv.confidence(), a.name + " Konfidenz Vergleichsform " + i);
+            assertEquals(fv.source(), fe.source(), a.name + " Quelle " + i);
+            assertEquals(erweitert.indexOf(fe.originalValue(), ab), fe.start(), a.name + " Start " + i);
+            ab = fe.end();
+        }
+    }
+
+    @Test
+    void ak18_fuellwoerterBisDrei_vierFuellwoerterKeinFund() {
+        for (Art a : ARTEN) {
+            String v = folge(wort(a), ". ") + ". ";
+            fund(a, v + "des Behandlers ");
+            fund(a, v + "des der die ");
+            kein(a, v + "des der die dann ");
+            kein(a, v + "Der Behandler mit dem ");
+        }
+    }
+
+    @Test
+    void ak18_aufzaehlung_jedeNummerEinFundMit080() {
+        for (Art a : ARTEN) {
+            String v = folge(wort(a), ". ") + ". ";
+            assertFolge(a, v + a.gueltig + ", " + a.gueltig2, new Erw(a.gueltig, SPERR), new Erw(a.gueltig2, SPERR));
+            assertFolge(a, v + a.gueltig + "; " + a.gueltig2, new Erw(a.gueltig, SPERR), new Erw(a.gueltig2, SPERR));
+            assertFolge(a, folge(wort(a), "\t") + "\t" + a.gueltig + ", " + a.gueltig2,
+                    new Erw(a.gueltig, SPERR), new Erw(a.gueltig2, SPERR));
+        }
+    }
+
+    @Test
+    void ak18_umbruchEinfachFundLeerzeileKeinFund() {
+        for (Art a : ARTEN) {
+            String v = folge(wort(a), ". ") + ".:";
+            fund(a, v + "\n");
+            fund(a, v + "\r\n");
+            fund(a, v + "\r");
+            kein(a, v + "\n\n");
+            kein(a, v + "\r\n\r\n");
+            kein(a, v + "\n \n");
+        }
+    }
+
+    @Test
+    void ak18_nrUndNummerAlsNachsatzwort_einFundMit080() {
+        for (Art a : ARTEN) {
+            String w = wort(a);
+            fund(a, folge(w, ". ") + ". Nr. ");
+            fund(a, folge(w, ". ") + ".-Nummer ");
+            fund(a, folge(w, ". ") + ".-Nr. ");
+            fund(a, folge(w, "  ") + " Nr. ");
+        }
+        fund(IK_ART, "I. K. N. R.-Nr. ");
+        fund(LANR_ART, "L. A. N. R.-Nr. ");
+    }
+
+    @Test
+    void ak18_lanrStrengesTeilereignisInDerFolge_gleichDerVergleichsform() {
+        Art a = LANR_ART;
+        String g = a.gueltig;
+        gleichDerVergleichsform(a, "L A N R.  N R " + g, "L A N R N R " + g, SPERR);
+        gleichDerVergleichsform(a, "L A N R.  N R des der " + g, "L A N R N R des der " + g, SPERR);
+        gleichDerVergleichsform(a, "L A N R.  N R des der die " + g, "L A N R N R des der die " + g, SPERR);
+        gleichDerVergleichsform(a, "L A N R.  N R des der die dann " + g, "L A N R N R des der die dann " + g);
+        gleichDerVergleichsform(a, "L A N R.   N R des der " + g, "L A N R N R des der " + g, SPERR);
+        gleichDerVergleichsform(a, "L A N R." + NBSP + " N R des der " + g, "L A N R N R des der " + g, SPERR);
+        gleichDerVergleichsform(a, "l a n r.  n r des der " + g, "l a n r n r des der " + g, SPERR);
+        gleichDerVergleichsform(a, g + " L A N R.  N R", g + " L A N R N R", SPERR);
+        gleichDerVergleichsform(a, g + ", L A N R.  N R", g + ", L A N R N R", KOMMA);
+    }
+
+    @Test
+    void ak18_lanrStrengesTeilereignisMitNachsatzUnsichtbaremZeichenUndPunkt_gleichDerVergleichsform() {
+        Art a = LANR_ART;
+        String g = a.gueltig;
+        gleichDerVergleichsform(a, "L A N R. " + ZWSP + " N R des der " + g, "L A N R N R des der " + g, SPERR);
+        gleichDerVergleichsform(a, "L A N R.  N" + ZWSP + " R des der " + g, "L A N R N R des der " + g, SPERR);
+        gleichDerVergleichsform(a, "L A N R.  N R. des der " + g, "L A N R N R. des der " + g, SPERR);
+        gleichDerVergleichsform(a, "L A N R.  N R-Nummer des der " + g, "L A N R N R-Nummer des der " + g,
+                SPERR);
+        gleichDerVergleichsform(a, "L A N R.  N R." + ZWSP + " " + g, "L A N R N R." + ZWSP + " " + g, SPERR);
+        gleichDerVergleichsform(a, "L A N R.  N R.:\n" + g, "L A N R N R.:\n" + g, SPERR);
+        gleichDerVergleichsform(a, "L A N R.  N R.:\n\n" + g, "L A N R N R.:\n\n" + g);
+    }
+
+    @Test
+    void ak18_ikStrengesTeilereignisInDerFolge_gleichDerVergleichsform() {
+        Art a = IK_ART;
+        String g = a.gueltig;
+        gleichDerVergleichsform(a, "IK: I K.  N R " + g, "IK: I K N R " + g, SPERR);
+        gleichDerVergleichsform(a, "IK: I K.  N R des der " + g, "IK: I K N R des der " + g, SPERR);
+        gleichDerVergleichsform(a, "IK: I K.  N R des der die " + g, "IK: I K N R des der die " + g, SPERR);
+        gleichDerVergleichsform(a, "IK: I K.  N R des der die dann " + g, "IK: I K N R des der die dann " + g);
+        gleichDerVergleichsform(a, "IK: I K." + NBSP + " N R des der " + g, "IK: I K N R des der " + g, SPERR);
+        gleichDerVergleichsform(a, g + " I K.  N R", g + " I K N R", SPERR);
+    }
+
+    @Test
+    void ak18_ikNurDirektKontextOhneLaufendenKontext_gleichDerVergleichsform() {
+        Art a = IK_ART;
+        String g = a.gueltig;
+        gleichDerVergleichsform(a, "I K.  N R " + g, "I K N R " + g, SPERR);
+        gleichDerVergleichsform(a, "I K.  N R des der " + g, "I K N R des der " + g, SPERR);
+        gleichDerVergleichsform(a, "I. K.  N R " + g, "I K N R " + g, SPERR);
+        gleichDerVergleichsform(a, "I K.  N R des der die dann " + g, "I K N R des der die dann " + g);
+    }
+
+    @Test
+    void ak18_typwechsel_kontextDerAnderenArtBeeinflusstDasWeitKontextwortNicht() {
+        for (Art a : ARTEN) {
+            String fremd = a.fremdeKws[0] + ": ";
+            String w = wort(a);
+            fund(a, fremd + folge(w, ". ") + ". ");
+            fund(a, fremd + folge(w, "  ") + " ");
+            fund(a, fremd + "Praxis " + folge(w, "\t") + "\t");
+            kein(a, fremd + "des der die dann " + folge(w, ". ") + ". x ");
+            gleichDerVergleichsform(a, fremd + folge(w, ". ") + ". des der " + a.gueltig,
+                    fremd + folge(w, " ") + " des der " + a.gueltig, SPERR);
+        }
+    }
+
+    @Test
+    void ak19_nachgestellterKontext_klammerOhneKlammerUndKomma() {
+        for (Art a : ARTEN) {
+            String w = wort(a);
+            String g = a.gueltig;
+            gleichDerVergleichsform(a, g + " (" + folge(w, ". ") + ".)", g + " (" + folge(w, " ") + ")", SPERR);
+            gleichDerVergleichsform(a, g + " " + folge(w, "  "), g + " " + folge(w, " "), SPERR);
+            gleichDerVergleichsform(a, g + ", " + folge(w, ". ") + ".", g + ", " + folge(w, " "), KOMMA);
+            gleichDerVergleichsform(a, g + "; " + folge(w, "\t"), g + "; " + folge(w, " "), KOMMA);
+        }
+    }
+
+    @Test
+    void ak19_laufenderKontextLanr_wieVergleichsform() {
+        Art a = LANR_ART;
+        gleichDerVergleichsform(a, "LANR: L. A. N. R. " + a.gueltig, "LANR: L A N R " + a.gueltig, SPERR);
+        gleichDerVergleichsform(a, "LANR: L  A  N  R " + a.gueltig, "LANR: L A N R " + a.gueltig, SPERR);
+        gleichDerVergleichsform(a, "LANR: L. A. N. R. des " + a.gueltig, "LANR: L A N R des " + a.gueltig, SPERR);
+        gleichDerVergleichsform(a, "LANR: L. A. N. R. die " + a.gueltig + ", " + a.gueltig2,
+                "LANR: L A N R die " + a.gueltig + ", " + a.gueltig2, SPERR, SPERR);
+    }
+
+    @Test
+    void ak19_laufenderKontextIk_wieVergleichsform() {
+        Art a = IK_ART;
+        gleichDerVergleichsform(a, "IK: I. K. N. R. " + a.gueltig, "IK: I K N R " + a.gueltig, SPERR);
+        gleichDerVergleichsform(a, "IK: I  K  N  R " + a.gueltig, "IK: I K N R " + a.gueltig, SPERR);
+        // zwei Buchstaben (D-4): kein Fund, wie heute; die Vergleichsform I K ist der Bestand 14h und nicht gleich
+        assertKein(a, "IK: Praxis I. K. Nr " + a.gueltig);
+        gleichDerVergleichsform(a, a.gueltig + " (I. K. N. R.)", a.gueltig + " (I K N R)", SPERR);
+    }
+
+    @Test
+    void ak19_bestandsschutzMitNormalemKontextwort_nummerNachDemWeitWortUnveraendert() {
+        for (Art a : ARTEN) {
+            String weit = folge(wort(a), ". ") + ". ";
+            // N1 0,95 bzw. 0,92 (Bestand), der Kontext erlischt nach den Buchstaben, dann das Weit-Wort: N2 0,80
+            assertFolge(a, a.kw + " " + a.gueltig + " " + weit + a.gueltig2,
+                    new Erw(a.gueltig, a.sicher), new Erw(a.gueltig2, SPERR));
+            // erst das Weit-Wort (N1 0,80), danach ein normales Kontextwort: N2 mit voller Konfidenz
+            assertFolge(a, weit + a.gueltig + " " + a.kw + " " + a.gueltig2,
+                    new Erw(a.gueltig, SPERR), new Erw(a.gueltig2, a.sicher));
         }
     }
 
