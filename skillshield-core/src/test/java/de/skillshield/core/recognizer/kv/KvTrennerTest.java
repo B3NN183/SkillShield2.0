@@ -636,6 +636,10 @@ class KvTrennerTest {
         gleichDerVergleichsform(a, "LANR: L. A. N. R. des " + a.gueltig, "LANR: L A N R des " + a.gueltig, SPERR);
         gleichDerVergleichsform(a, "LANR: L. A. N. R. die " + a.gueltig + ", " + a.gueltig2,
                 "LANR: L A N R die " + a.gueltig + ", " + a.gueltig2, SPERR, SPERR);
+        // laufender normaler Kontext vor dem strengen Teilereignis (Plan 3.2.5), wie beim IK-Fall
+        gleichDerVergleichsform(a, "LANR: L A N R.  N R " + a.gueltig, "LANR: L A N R N R " + a.gueltig, SPERR);
+        gleichDerVergleichsform(a, "LANR: L A N R.  N R des der " + a.gueltig,
+                "LANR: L A N R N R des der " + a.gueltig, SPERR);
     }
 
     @Test
@@ -645,6 +649,7 @@ class KvTrennerTest {
         gleichDerVergleichsform(a, "IK: I  K  N  R " + a.gueltig, "IK: I K N R " + a.gueltig, SPERR);
         // zwei Buchstaben (D-4): kein Fund, wie heute; die Vergleichsform I K ist der Bestand 14h und nicht gleich
         assertKein(a, "IK: Praxis I. K. Nr " + a.gueltig);
+        assertEin(a, "IK: Praxis I K Nr ", a.gueltig, "", SPERR, a.quelle);
         gleichDerVergleichsform(a, a.gueltig + " (I. K. N. R.)", a.gueltig + " (I K N R)", SPERR);
     }
 
