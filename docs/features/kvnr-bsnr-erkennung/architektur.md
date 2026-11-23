@@ -1321,3 +1321,15 @@ Tests in `KvnrGrenzenTest`, sofern nicht anders genannt. Diese Liste ergänzt un
   Nicht-ASCII-Ziffer direkt neben der Form. Kap. 4.3 sagt nur „Ziffer", A-3 nennt Nicht-ASCII-Ziffern „keine
   KVNR-Zeichen"; beide Lesarten (sperrt / sperrt nicht) sind in T-10 zulässig, der Prüfstand prüft den Fall nicht.
   T-10 dokumentiert die gewählte Lesart im Javadoc.
+- **Nachtrag zu T-10 (Entscheidung der Hauptsitzung, 23.11.2026; geht der Task-Beschreibung T-10 vor):**
+  1. `KvStandTrennerDifferenzTest` und `KvnrBsnrHilfen` bleiben eingefroren (Tag `kb-t1-bestand`); die in T-10
+     vorgesehene Methode `…OhneKontext…` (S-1 bis S-3 mit enger Referenz) steht in der **neuen** Klasse
+     `test/…/KvnrOhneKontextBestandTest.java` (Paket `de.skillshield.core`) und gehört zum 1b-Inventar (Regel 14).
+  2. Ab Tag `kb-t9-pruefstand` eingefroren: `KvnrOhneKontextFehlalarmTest`, `KvnrOhneKontextHilfen`, in
+     `SynthetischeKvNummern` die Methoden `fremdKvnr`/`zufallsKvnr` (Regel 13, sinngemäß für die neue Hilfsklasse).
+  3. **D-5 (a) in der Fassung des Nachtrags zu T-9:** zulässig sind auf den Bestandsmengen höchstens die 13
+     Funde auf den Referenzstellen (Quelle `kvnr-ohne-kontext`, 0,60). Wird dadurch ein eingefrorener oder
+     bestehender Test rot (z. B. `KvStandTrennerDifferenzTest`, Siegel/Hashes der Fuzz-Teile 1c/1d/1e, Korpus-,
+     Generator-Tests), ändert der engineer **nichts** an diesen Tests, sondern hält an und meldet Testname und
+     Zahl; die Hauptsitzung entscheidet (Regel 15).
+  4. Nicht-ASCII-Ziffer als Nachbar der Form: Lesart frei (Nachtrag 3 zu T-9), im Javadoc zu dokumentieren.
