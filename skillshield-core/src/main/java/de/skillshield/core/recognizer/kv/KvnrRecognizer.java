@@ -71,8 +71,9 @@ import java.util.List;
  * jedes Host-Label als Segment, abgedeckt bleibt nur eine sehr kurze URL (Schema und hoechstens zwei weitere
  * Segmente, kein Punkt hinter einem langen Wort, keine Query); jede URL mit einem laengeren Host-Label vor einem
  * Punkt, mit mehr als drei Segmenten oder mit Query bleibt ohne Fund. Mit Teil 1b ist die geschlossene,
- * grossgeschriebene, gueltige Form in dieser Stellung ein Fund (0.60); die gruppierte und die kleingeschriebene Form
- * sowie Nummern mit falscher Pruefziffer bleiben ohne Fund.</li>
+ * grossgeschriebene, gueltige Form in dieser Stellung nur dann ein Fund (0.60), wenn sie vom Pfad bzw. der URL
+ * abgesetzt steht; direkt hinter {@code /} als Segment greift G-K18 (kein Fund). Die gruppierte und die
+ * kleingeschriebene Form sowie Nummern mit falscher Pruefziffer bleiben ohne Fund.</li>
  * <li>G-K18 (Restrisiko, Nachtrag 2 zu T-11): Eine gueltige, geschlossene Nummer ohne Kontextwort mit {@code _},
  * {@code -}, {@code /}, {@code \} oder {@code @} direkt daran (Dateiname ohne Pfad, URL ohne Schema, Nummer per
  * {@code /} an einer IP) bleibt im Klartext, wenn kein E-Mail-, URL-, Pfad- oder IP-Fund sie umschliesst; Einzelheiten

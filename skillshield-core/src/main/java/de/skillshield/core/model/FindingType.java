@@ -25,6 +25,8 @@ public record FindingType(String name) {
     public static final FindingType LANR = new FindingType("LANR");
     /** Krankenversichertennummer (KVNR), Buchstabe und neun Ziffern. */
     public static final FindingType KVNR = new FindingType("KVNR");
+    /** Betriebsstaettennummer (BSNR), neun Ziffern. */
+    public static final FindingType BSNR = new FindingType("BSNR");
     /** Literalschutz für platzhalterähnlichen Originaltext. */
     public static final FindingType TEXT = new FindingType("TEXT");
 

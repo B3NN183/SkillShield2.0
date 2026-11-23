@@ -240,6 +240,40 @@ public final class SynthetischeKvNummern {
      */
     public static final String BSNR_MARKER = "430000082";
 
+    /**
+     * Netzverbundnummer-Form (T-13, Anforderung D-8): Praefix 99 (kein Schluessel der Anlage 1, hinter einem
+     * BSNR-Kontextwort ein Fund niedriger Stufe), Stellen 3 bis 7 gleich 00000, Stellen 8 und 9 gleich 1 und 2. LANR:
+     * Summe 4*9 + 9*9 = 117, erwartete Stelle 7 waere 3, ist 0 (ungueltig). IK: Stelle 8 ungleich Stelle 9 (ungueltig).
+     */
+    public static final String BSNR_NETZVERBUND = "990000012";
+
+    /**
+     * Sonderkennung 35 (Paragraph 6 Absatz 3), Stellen 3 und 4 gleich 00 (kein Schluessel der Anlage 1, also
+     * unbekannt), Stellen 8 und 9 gleich 1 und 2. LANR: Summe 4*3 + 9*5 = 57, erwartete Stelle 7 waere 3, ist 0
+     * (ungueltig). IK: Stelle 8 ungleich Stelle 9 (ungueltig).
+     */
+    public static final String BSNR_SONDER_35 = "350000012";
+
+    /**
+     * Sonderkennung 75 wie {@link #BSNR_SONDER_35}. LANR: Summe 4*7 + 9*5 = 73, erwartete Stelle 7 waere 7, ist 0
+     * (ungueltig). IK: Stelle 8 ungleich Stelle 9 (ungueltig).
+     */
+    public static final String BSNR_SONDER_75 = "750000012";
+
+    /**
+     * Sonderkennung 35 mit bekanntem Schluessel (Paragraph 6 Absatz 3): Praefix 35, Schluessel 01 an Stelle 3 und 4
+     * (Anlage 1, also bekannt), Stellen 5 bis 9 gleich 00000. LANR: Summe 4*3 + 9*5 + 4*0 + 9*1 = 66, erwartete
+     * Stelle 7 waere 4, ist 0 (ungueltig). IK: Summe aus Stelle 3 bis 8 (0, 1, 0, 0, 0, 0 mit Gewichten 2, 1, 2, 1, 2,
+     * 1) gleich 1, erwartete Stelle 9 waere 1, ist 0 (ungueltig).
+     */
+    public static final String BSNR_SONDER_35_SCHLUESSEL = "350100000";
+
+    /**
+     * Sonderkennung 75 mit bekanntem Schluessel wie {@link #BSNR_SONDER_35_SCHLUESSEL}. LANR: Summe 4*7 + 9*5 + 4*0 +
+     * 9*1 = 82, erwartete Stelle 7 waere 8, ist 0 (ungueltig). IK: wie oben, Summe 1, erwartet 1, ist 0 (ungueltig).
+     */
+    public static final String BSNR_SONDER_75_SCHLUESSEL = "750100000";
+
     // ------------------------------------------------------------------ Trennerformen (AK-6)
 
     /** LANR mit Leerzeichen, Gruppen 3-3-3; ohne Trenner {@link #LANR_GUELTIG}. */

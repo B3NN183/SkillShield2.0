@@ -1427,3 +1427,22 @@ Tests in `KvnrGrenzenTest`, sofern nicht anders genannt. Diese Liste ergänzt un
      Großbuchstaben mit Wortgrenze stehen, wenn daraus eine gültige KVNR-Form würde (Wächter).
   6. Aus T-11 vorgemerkte Javadoc-Korrekturen (G-K18-Schlusssatz, G-K15-Zusatz) nimmt T-13 mit.
   7. Wird ein bestehender Test rot: nicht anpassen, anhalten, melden (Testname, Zahl, Art – ohne Text/Ziffern).
+- **Nachtrag zu T-13 (nach reviewer FAIL / security FAIL „mittel", Entscheidung der Hauptsitzung, 24.11.2026):**
+  1. **Testnummer Sonderkennung 35/75 mit bekanntem Schlüssel:** Bildung „Präfix 35 bzw. 75 + Schlüssel `01` +
+     `00000`" (Stellen 5 bis 9 Null; nach LANR- und IK-Verfahren ungültig – nachzuweisen im Test), als
+     Konstanten in `SynthetischeKvNummern`. `BsnrSynthetischWaechter` erhält dafür eine eng gefasste dritte
+     zulässige Form (Präfix 35/75, Schlüssel der Anlage 1, danach fünf Nullen) mit Selbsttest;
+     `scanBsnrOhneWaechter` entfällt. `TestdatenSynthetischTest` lässt diese Form in der zentralen Datei zu
+     (Zulässigkeit (c), eng, mit Selbsttest; keine Mindestzahl sinkt).
+  2. **Keine echten Familiennamen in Testtexten** (A-6): Platzhalter wie „Muster".
+  3. **Schutzlücken außerhalb D-8 (security, niedrig):** Als Vorwort mit Nachsatzwort (`Nr`/`Nummer`) wird
+     zusätzlich die eindeutige Abkürzung `Betriebsst` aufgenommen („Betriebsst.-Nr.", „Betriebsst. Nr."), sofern
+     das allein über die Wortliste in `KvArt.BSNR` geht, LANR/IK/KVNR unverändert bleiben und kein Bestandstest
+     rot wird; andernfalls bleibt es bei der Grenze. **Nicht** aufgenommen (Verwechslungs- und Fehlalarmgefahr,
+     Nutzervorgabe „bei vermehrten Fehlalarmen lassen"): `BS-Nr.`, `BSN`, `BSt-Nr.`, `HBSNR`, Pluralformen,
+     Tippfehler, Trennstrich im Wort. Diese werden in T-15 als bekannte Grenzen dokumentiert und getestet.
+- **Vorgemerkt aus security T-13 Durchlauf 3 (niedrig, nur Kommentar; in T-14/T-15 mitzunehmen):** Die Bedingung
+  „nach LANR- und IK-Verfahren ungültig" der dritten Wächter-Form auch im Klassen-Javadoc von
+  `BsnrSynthetischWaechter` (Regel 1, `Befund.verstoesse`, Assertion-Meldung) und in `TestdatenSynthetischTest`
+  (Klassen-Javadoc, Javadoc von `istBsnrForm`) nennen. `Betriebsst.-Nr.` bleibt bekannte Grenze (T-15,
+  Folgefeature-Vorschlag: Abkürzungspunkt als Nachsatz-Trenner).

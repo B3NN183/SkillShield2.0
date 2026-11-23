@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import de.skillshield.core.recognizer.kv.BsnrSynthetischWaechter;
 import de.skillshield.core.recognizer.kv.KvnrBsnrHilfen;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -82,7 +83,9 @@ import org.junit.jupiter.api.Test;
  * Typname ({@code [A-Z][A-Z0-9]{0,31}}) und {@code _}, unmittelbar danach {@code ]]}; (b) sie selbst eine gueltige
  * IPv4 im Dokumentationsbereich ist; (c) sie in der Datei {@code SynthetischeKvNummern.java} steht und jede ihrer
  * neunstelligen Ziffernfolgen (Gesamtzahl neun oder Block aus neun) mit {@code 00} beginnt oder an den Stellen 3 bis 7
- * {@code 00000} hat (BSNR-Form nach A-6, Feature kvnr-bsnr-erkennung, T-12; alle anderen Folgen bleiben
+ * {@code 00000} hat (BSNR-Form nach A-6, Feature kvnr-bsnr-erkennung, T-12) oder die eng gefasste Sonderkennung
+ * (Praefix 35 oder 75, Schluessel der Anlage 1 an Stelle 3 und 4, {@code 00000} an Stelle 5 bis 9; T-13); alle
+ * anderen Folgen bleiben
  * {@code ZENTRALE_OHNE_PRAEFIX_00}); oder (d) sie in der
  * geschlossenen Ausnahmeliste {@code AUSNAHMEN_ZIFFERN} steht. Ein Eintrag gilt nur fuer genau eine benannte Datei
  * (Dateiname) und genau diese Kette; ein Eintrag, der in dieser Datei nicht mehr als Verstoss vorkommt, macht den
@@ -681,9 +684,14 @@ class TestdatenSynthetischTest {
     /** Die Ziffern an Stelle 3 bis 7 einer BSNR-Testnummer nach A-6 (Feature kvnr-bsnr-erkennung, T-12). */
     private static final String BSNR_NULLBLOCK = "00000";
 
-    /** Ist die neunstellige Folge eine BSNR-Form nach A-6: {@code 00000} an Stelle 3 bis 7? */
+    /**
+     * Ist die neunstellige Folge eine BSNR-Form nach A-6: {@code 00000} an Stelle 3 bis 7, oder die eng gefasste
+     * Sonderkennung (Praefix 35 oder 75, Schluessel der Anlage 1 an Stelle 3 und 4, {@code 00000} an Stelle 5 bis 9;
+     * Nachtrag zu T-13)?
+     */
     static boolean istBsnrForm(String neunerFolge) {
-        return neunerFolge.length() == 9 && neunerFolge.startsWith(BSNR_NULLBLOCK, 2);
+        return (neunerFolge.length() == 9 && neunerFolge.startsWith(BSNR_NULLBLOCK, 2))
+                || BsnrSynthetischWaechter.istSonderkennungMitSchluessel(neunerFolge);
     }
 
     private static boolean istAsciiBuchstabe(char c) {
@@ -1624,6 +1632,45 @@ class TestdatenSynthetischTest {
     }
 
     @Test
+    void selbsttest_bsnrForm_zentraleKlasse_sonderkennungMitSchluessel_engZulaessig() {
+        String s35 = SynthetischeKvNummern.BSNR_SONDER_35_SCHLUESSEL;
+        String s75 = SynthetischeKvNummern.BSNR_SONDER_75_SCHLUESSEL;
+        // Zulaessig, auch mit Trennern
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, "x = \"" + s35 + "\";", Set.of()));
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, "x = \"" + s75 + "\";", Set.of()));
+        assertEquals(List.of(), arten(ZENTRALE_DATEI, s35.substring(0, 2) + " " + s35.substring(2, 4) + " "
+                + s35.substring(4), Set.of()));
+        assertTrue(istBsnrForm(s35) && istBsnrForm(s75));
+        // knapp daneben bleibt Verstoss: anderes Praefix, Schluessel ausserhalb der Anlage 1, Nullblock unvollstaendig
+        String anderesPraefix = "36" + s35.substring(2);
+        String schluesselUnbekannt = s35.substring(0, 3) + "4" + s35.substring(4);
+        String nullblockUnvollstaendig = s75.substring(0, 8) + "3";
+        for (String falsch : List.of(anderesPraefix, schluesselUnbekannt, nullblockUnvollstaendig)) {
+            assertEquals(List.of(Art.ZENTRALE_OHNE_PRAEFIX_00), arten(ZENTRALE_DATEI, falsch, Set.of()));
+            assertFalse(istBsnrForm(falsch));
+        }
+        // in jeder anderen Datei bleibt die Form ein Verstoss
+        assertEquals(List.of(Art.NEUN_ZIFFERN_GESAMT), arten("a/B.java", s35, Set.of()));
+        // die KVNR-Form (Buchstabe davor) braucht weiter die Ziffern 0000
+        assertEquals(List.of(Art.ZENTRALE_KVNR_OHNE_0000), arten(ZENTRALE_DATEI, "Z" + s35, Set.of()));
+    }
+
+    @Test
+    void zentraleKlasse_sonderkennungMitSchluessel_istErfasst() {
+        String text = lies(QUELLE.resolve(ZENTRALE_DATEI));
+        int sonder = 0;
+        for (String zeile : text.split("\\R", -1)) {
+            for (Kette k : ziffernKetten(loeseEscapesAuf(zeile))) {
+                for (String folge : k.neunerFolgen()) {
+                    sonder += BsnrSynthetischWaechter.istSonderkennungMitSchluessel(folge) ? 1 : 0;
+                }
+            }
+        }
+        // Istwert 2 (35 und 75 mit Schluessel); Mindestzahl 1 (unter 70 Prozent, aufgerundet)
+        assertTrue(sonder >= 1, "Sonderkennungen mit Schluessel in der zentralen Klasse: " + sonder);
+    }
+
+    @Test
     void zentraleKlasse_bsnrAbschnitt_wirdErfasstUndKeineMindestzahlSinkt() {
         String text = lies(QUELLE.resolve(ZENTRALE_DATEI));
         int bsnrFormen = 0;
@@ -1634,8 +1681,8 @@ class TestdatenSynthetischTest {
                 }
             }
         }
-        // Istwert 3 (bekannter Code mit Nullblock ohne Praefix 00: BSNR_BEKANNT, BSNR_BEKANNT_ZWEI, BSNR_MARKER);
-        // Mindestzahl 2 (unter 70 Prozent des Istwerts aufgerundet)
+        // Istwert 8 (Nullblock ohne Praefix 00: die BSNR-Konstanten mit bekanntem Code, Netzverbund und
+        // Sonderkennungen, dazu die zwei Sonderkennungen mit Schluessel); die Mindestzahl 2 bleibt unveraendert
         assertTrue(bsnrFormen >= 2, "BSNR-Formen ohne Praefix 00 in der zentralen Klasse: " + bsnrFormen);
         assertEquals(List.of(), pruefe(ZENTRALE_DATEI, text, Set.of(), Set.of()).verstoesse());
     }

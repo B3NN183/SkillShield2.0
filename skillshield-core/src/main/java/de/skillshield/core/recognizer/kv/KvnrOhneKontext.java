@@ -52,7 +52,8 @@ import java.util.List;
  * eingefrorenen Fehlalarm-Pruefstand bewacht; sie ist in diesem Feature bewusst nicht geaendert (Folgefeature:
  * {@code _} und {@code -} als zulaessige Grenze bei gueltiger Pruefziffer, mit eigener Fehlalarm-Messung). Mit
  * Leerzeichen statt des Sperrzeichens, mit Kontextwort davor oder innerhalb eines umschliessenden Fundes entsteht ein
- * Fund.</li>
+ * Fund. Ausnahme zum Kontextwort davor: Steht zwischen Kontextwort und Nummer eine URL ohne Schema, beendet sie den
+ * Kontext (G-K15); die Nummer bleibt dort im Klartext, wenn sie direkt am {@code /} haengt.</li>
  * <li>Negativkontext (D-4, AK-14): Steht unmittelbar vor der Form (nur Leerraum, {@code :} und {@code =} dazwischen)
  * ein Wort der Negativliste, gibt es keinen Fund, auch dann nicht, wenn es eine echte KVNR ist
  * ({@code Rechnungsnummer} vor einer KVNR). Ein Fuellwort dazwischen hebt die Sperre auf.</li>

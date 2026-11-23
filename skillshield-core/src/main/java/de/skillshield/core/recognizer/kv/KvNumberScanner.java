@@ -8,7 +8,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Gemeinsamer Zeichendurchlauf der KV-Nummern-Erkenner (LANR, IK und KVNR, je Art konfiguriert ueber
+ * Gemeinsamer Zeichendurchlauf der KV-Nummern-Erkenner (LANR, IK, KVNR und BSNR, je Art konfiguriert ueber
  * {@link KvArt}). Der Text wird einmal von links nach rechts gelesen und in Ereignisse zerlegt: Kontextwort,
  * Fuellwort, Ziffernkette, Satzende und Zeilenumbruch. Eine Ziffernkette wird nur dann ein Fund, wenn ein
  * Kontextwort sie erschliesst. Die Pruefziffer bestimmt nur Stufe und Quelle, nie, ob ein Fund entsteht.
@@ -19,10 +19,11 @@ import java.util.Set;
  * Folge aus Buchstaben und unsichtbaren Zeichen. Teilstueck: maximale Buchstabenfolge innerhalb eines Laufs; die
  * unsichtbaren Zeichen trennen die Teilstuecke. Wort (Kontextwort, Vorwort, Nachsatzwort): eine zusammenhaengende
  * Folge ganzer Teilstuecke eines Laufs, verglichen ohne die unsichtbaren Zeichen dazwischen und mit Faltung von
- * {@code A-Z} (kein {@code toLowerCase}, damit die tuerkischen i-Formen und das Kelvin-Zeichen nicht zu {@code i}
- * und {@code k} werden). Teilstueckgrenzen sind Wortgrenzen: {@code PraxisLANR} ohne unsichtbares Zeichen, {@code
- * LANRX}, {@code Technik} und {@code IKEA} haben kein Kontextwort, {@code Praxis}+U+200B+{@code LANR} und
- * {@code LA}+U+00AD+{@code NR} haben eines. Ein Kombinationszeichen direkt am Kontextwort bleibt Teil seines
+ * {@code A-Z} und von U+00C4 zu U+00E4 (kein {@code toLowerCase}, damit die tuerkischen i-Formen und das
+ * Kelvin-Zeichen nicht zu {@code i} und {@code k} werden; die Faltung des Umlauts dient den Woertern der BSNR, fuer
+ * LANR und IK bleibt sie ohne Wirkung). Teilstueckgrenzen sind Wortgrenzen: {@code PraxisLANR} ohne unsichtbares
+ * Zeichen, {@code LANRX}, {@code Technik} und {@code IKEA} haben kein Kontextwort, {@code Praxis}+U+200B+{@code LANR}
+ * und {@code LA}+U+00AD+{@code NR} haben eines. Ein Kombinationszeichen direkt am Kontextwort bleibt Teil seines
  * Teilstuecks und ergibt damit ein anderes Wort. Kontextwort: ein Wort, das einem Eintrag von
  * {@link KvArt#kontextwoerter()} gleicht, oder ein Wort aus {@link KvArt#vorwoerter()}, dem nach hoechstens einem
  * {@code -}, Leerzeichen, U+00A0, U+2011 oder U+2013 die ersten Teilstuecke des naechsten Laufs als Wort {@code nr}
@@ -72,24 +73,27 @@ import java.util.Set;
  * einem Block). Unsichtbare Zeichen innerhalb einer Nummer beenden die Kette (bekannte Grenze, nicht veraendert).
  *
  * <p><b>KVNR (Buchstabenform, nur Arten mit {@link KvArt#buchstabenform()}; LANR und IK laufen unveraendert).</b>
- * Drei Ergaenzungen, jeweils nur fuer die KVNR wirksam: (1) Ein Lauf aus genau einem ASCII-Buchstaben, dem
- * unmittelbar eine Ziffer oder genau ein Gruppentrenner und eine Ziffer folgt, ist der Anfang einer Kette (vor der
- * Verfolgung von Sperr- und Weit-Folge geprueft, die er beendet: {@code K V N R Z...} hat ein gesperrtes
- * Kontextwort). Die Ziffernbloecke dahinter werden mit derselben Praefixregel zerlegt; das Segment reicht vom
- * Buchstaben bis zum Ende der gewaehlten Bloecke. Gibt es kein Segment, zaehlen Buchstabe und erster Block zusammen
- * als ein Fuellwort, und die Regel "nummerierte Liste" gilt nicht. Zwei Buchstaben ({@code AB1}) sind ein Lauf mit
- * zwei Buchstaben und kein Anfang. (2) Eine Kette aus Ziffern, vor der unmittelbar ein Buchstabe steht
- * ({@code KVNR1234...}, {@code AB1234...}), ergibt kein Segment; der erste Block zaehlt als Fuellwort (Grenze G-K4).
+ * Vier Ergaenzungen; (1) bis (3) wirken nur fuer die KVNR, (4) auch fuer die BSNR: (1) Ein Lauf aus genau einem
+ * ASCII-Buchstaben, dem unmittelbar eine Ziffer oder genau ein Gruppentrenner und eine Ziffer folgt, ist der Anfang
+ * einer Kette (vor der Verfolgung von Sperr- und Weit-Folge geprueft, die er beendet: {@code K V N R Z...} hat ein
+ * gesperrtes Kontextwort). Die Ziffernbloecke dahinter werden mit derselben Praefixregel zerlegt; das Segment
+ * reicht vom Buchstaben bis zum Ende der gewaehlten Bloecke. Gibt es kein Segment, zaehlen Buchstabe und erster
+ * Block zusammen als ein Fuellwort, und die Regel "nummerierte Liste" gilt nicht. Zwei Buchstaben ({@code AB1})
+ * sind ein Lauf mit zwei Buchstaben und kein Anfang. (2) Eine Kette aus Ziffern, vor der unmittelbar ein Buchstabe
+ * steht ({@code KVNR1234...}, {@code AB1234...}), ergibt kein Segment; der erste Block zaehlt als Fuellwort
+ * (Grenze G-K4).
  * (3) Das Vorwort {@code kv} mit Nachsatzwort ({@code KV-Nr.}, {@code KV-Nummer}, {@code KV Nr.}) beginnt einen
  * Kontext mit dem Merker {@code nurBuchstabenform}: Eine Ziffernfolge ohne Buchstaben ist dort bei {@code aktiv}
  * ein Fuellwort, und beim nachgestellten Kontext werden nur offene Segmente mit einem Buchstaben am Anfang ausgegeben
  * (Grenze G-K7). (4) Nachgestelltes Kompositum (Nachtrag 2 zu T-5): Steht hinter offenen Segmenten ein Wort, auf das
  * unmittelbar (ein Abkuerzungspunkt ist erlaubt) ein {@code -} und unmittelbar danach ein Kontextwort der Art oder ein
  * Vorwort mit {@code Nr.}/{@code Nummer} folgt ({@code Patienten-KVNR}, {@code Pat.-KVNR},
- * {@code eGK-Versichertennummer}), ist das Wort kein Fuellwort und leert die offenen Segmente nicht; sie werden beim
- * Kontextwort wie beim einfachen nachgestellten Kontextwort ausgewertet (Klammer oder ohne 0,80, hinter einem Komma
- * oder Semikolon 0,60). Zwei Woerter ({@code des Patienten-KVNR}), ein Strich mit Leerraum und ein Wort davor, das
- * nicht zu einem Kontextwort fuehrt ({@code Patienten-VKNR}), bleiben "Wort dazwischen: kein Fund". Die
+ * {@code eGK-Versichertennummer}; bei der BSNR ebenso, T-13: {@code Praxis-BSNR}, {@code Pat.-Betriebsstaette Nr.},
+ * auch mit dem Umlaut; {@link KvArt#nachgestelltesKompositum()}), ist das Wort kein Fuellwort und leert die offenen
+ * Segmente nicht; sie werden beim Kontextwort wie beim einfachen nachgestellten Kontextwort ausgewertet (Klammer
+ * oder ohne 0,80, hinter einem Komma oder Semikolon 0,60). Zwei Woerter ({@code des Patienten-KVNR}), ein Strich mit
+ * Leerraum und ein Wort davor, das nicht zu einem Kontextwort fuehrt ({@code Patienten-VKNR}), bleiben
+ * "Wort dazwischen: kein Fund". Die
  * vorangestellte Form ({@code Pat.-KVNR: N}) und LANR und IK sind unveraendert. Neun Ziffern mit Buchstaben und
  * gueltiger Pruefziffer ({@link KvnrPruefziffer}) haben bei direktem
  * Kontext 0,95, sonst gelten die Stufen von LANR und IK (0,80, Komma 0,60, gesperrt hoechstens 0,80); ungueltige
@@ -112,6 +116,20 @@ import java.util.Set;
  * sonst als Buchstabe einer Nummer; die Sperrfolge davor endet und ist kein Kontextwort. Ein Kontextwort unmittelbar
  * vor dem Buchstaben ohne Trenner ({@code KVNRZ1234...}) und ein unsichtbares Zeichen zwischen Buchstabe und Ziffern
  * bleiben Grenzen.
+ *
+ * <p><b>BSNR (T-13, Anforderung D-8, AK-25 bis AK-29).</b> Neun Ziffern ohne Pruefziffer; die Stellen 1 und 2 sind der
+ * Regionalcode ({@link BsnrRegionalcodes}, bei 35 und 75 gelten die Stellen 3 und 4). Alle Regeln von LANR und IK
+ * gelten unveraendert (Ziffernketten, Fuellwoerter, Zeilenumbruch, Aufzaehlung, nachgestellter Kontext, Komma,
+ * gesperrte und Weit-Schreibweise); es gibt keine Buchstabenform und kein {@code nurBuchstabenform}. Die Woerter
+ * stehen in {@link KvArt} mit {@code ae} und mit dem Umlaut; der Vergleich faltet U+00C4 zu U+00E4. Das laengste Wort
+ * ({@code nebenbetriebsstaettennummer}) hat 27 Zeichen und passt in Fenster und Puffer. Konfidenzen: bekannter
+ * Regionalcode 0,90 (direkt), 0,80 (weiterer Kontext, nachgestellt, gesperrt hoechstens 0,80), 0,60 (nachgestellt
+ * hinter Komma oder Semikolon); unbekannter Regionalcode 0,50 (Quelle {@code bsnr-regionalcode-unbekannt}); Laenge 6
+ * bis 12 Ziffern ausser neun 0,40 (Quelle {@code bsnr-laenge-abweichend}). Das nachgestellte Kompositum gilt auch fuer
+ * die BSNR (Entscheidung T-13: LANR und IK bleiben ueber {@code KvArt#nachgestelltesKompositum()} ausgenommen und
+ * damit verhaltensgleich). Bekannte Grenzen: zerlegte Umlaute ({@code a} plus U+0308) sind Kombinationszeichen und
+ * ergeben kein Kontextwort; die Netzverbundnummer (Praefix 99) und jede Nummer mit unbekanntem Regionalcode ist ein
+ * Fund niedriger Stufe (0,50, Schutz geht vor); eine BSNR ohne Kontextwort bleibt Klartext (E-2).
  *
  * <p><b>Zustand und Ereignisse.</b> Zustand: {@code aktiv} (ein Kontextwort erschliesst Zahlen), {@code direkt}
  * (seit dem Kontextwort kam nichts ausser Sonstigem und Nachsatzwoertern), {@code woerter} (Fuellwoerter seit
@@ -316,9 +334,10 @@ import java.util.Set;
  * Pfadsegmente), kein Punkt hinter einem Wort mit mehr als vier Buchstaben, keine Query. Jede laengere URL, jede URL
  * mit Domain hinter einem langen Wort, mit zwei Pfadsegmenten hinter dem Host oder mit Query bleibt ohne Fund.
  * Mit Teil 1b ist die geschlossene, grossgeschriebene, gueltige Form in dieser Stellung ein Fund (0,60, Quelle
- * {@code kvnr-ohne-kontext}); die gruppierte und die kleingeschriebene Form sowie Nummern mit falscher Pruefziffer
- * bleiben ohne Fund. Behebung nicht Teil dieses Features (Kandidat fuer ein Folgefeature "Kontext ueber Pfade und URLs
- * hinweg").</li>
+ * {@code kvnr-ohne-kontext}), aber nur, wenn sie vom Pfad bzw. der URL abgesetzt steht (Leerraum davor); steht sie
+ * direkt hinter {@code /} als Segment, greift G-K18 (kein Fund). Die gruppierte und die kleingeschriebene Form sowie
+ * Nummern mit falscher Pruefziffer bleiben ohne Fund. Behebung nicht Teil dieses Features (Kandidat fuer ein
+ * Folgefeature "Kontext ueber Pfade und URLs hinweg").</li>
  * <li>G-K16: Der Pseudonymizer ersetzt nur gefundene Stellen; steht derselbe Wert an einer zweiten, nicht erkannten
  * Stelle (zum Beispiel mit dem Kontextwort ohne Trenner an den Buchstaben geklebt), bleibt er dort stehen. Ein
  * Abgleich aller Vorkommen (Leak-Check) ist nicht Teil des Features.</li>
@@ -354,7 +373,8 @@ import java.util.Set;
  * und unabhaengig von der Textlaenge (hoechstens vier: {@code buchstabenAnfang}, {@code nachsatzFolgt},
  * {@code vorausArt}, Lauf). Die IPv4-Pruefung ({@code ipv4GestaltHinter}) liest hinter einem Buchstabenanfang
  * hoechstens 16 Zeichen, einmal je Laufanfang. Der Vorgriff auf ein nachgestelltes Kompositum
- * ({@code kompositumVorKontextwort}) laeuft nur bei der KVNR, nur bei offenen Segmenten und je Wort hoechstens
+ * ({@code kompositumVorKontextwort}) laeuft nur bei Arten mit {@code nachgestelltesKompositum()} (KVNR und BSNR), nur
+ * bei offenen Segmenten und je Wort hoechstens
  * einmal; er liest einen Punkt, einen Strich und hoechstens 28 Buchstaben (danach das Nachsatzwort mit hoechstens
  * sechs), springt bei einem Treffer hinter den Strich und leert danach die offenen Segmente nicht, bei keinem
  * Treffer leert das Wort sie wie bisher; ein Treffer beginnt unmittelbar danach den Kontext (leert sie), sodass der
@@ -425,6 +445,9 @@ final class KvNumberScanner {
     private static final int MAX_FUELLWOERTER = 3;
     private static final int FENSTER = 28;
     private static final int MAX_ABKUERZUNG = 4;
+    /** Umlaut ae (U+00C4 gross, U+00E4 klein) in den Woertern der BSNR. */
+    private static final char AE_GROSS = (char) 0xC4;
+    private static final char AE_KLEIN = (char) 0xE4;
     /**
      * Laengstes denkbares Kontextwort (27 Zeichen, Reserve fuer {@code nebenbetriebsstaettennummer}) und damit
      * Puffergroesse von Sperr- und Weit-Folge.
@@ -555,10 +578,17 @@ final class KvNumberScanner {
         return c == '-' || c == ' ' || c == NBSP || c == GESCHUETZTER_BINDESTRICH || c == HALBGEVIERTSTRICH;
     }
 
-    /** Gefaltetes Vergleichszeichen: {@code A-Z} klein, sonst unveraendert, ausserhalb der BMP ein Platzhalter. */
+    /**
+     * Gefaltetes Vergleichszeichen: {@code A-Z} klein, U+00C4 zu U+00E4, sonst unveraendert, ausserhalb der BMP ein
+     * Platzhalter. Die Faltung des Umlauts dient nur den Woertern der BSNR; LANR und IK haben keinen Umlaut im Wort,
+     * ein Lauf mit U+00C4 oder U+00E4 gleicht vor wie nach der Faltung keinem ihrer Woerter.
+     */
     private static char vergleichszeichen(int cp) {
         if (cp >= 'A' && cp <= 'Z') {
             return (char) (cp + ('a' - 'A'));
+        }
+        if (cp == AE_GROSS) {
+            return AE_KLEIN;
         }
         return cp > 0xFFFF ? PLATZHALTER : (char) cp;
     }
@@ -624,7 +654,7 @@ final class KvNumberScanner {
          * Zeichen stehen, ein LF danach wird nicht noch einmal gezaehlt. Jedes andere Zeichen loescht ihn.
          */
         private boolean crOffen;
-        /** Position des Kontextworts eines nachgestellten Kompositums (nur KVNR), sonst -1. */
+        /** Position des Kontextworts eines nachgestellten Kompositums (KVNR und BSNR), sonst -1. */
         private int kompositumWeiter = -1;
 
         /** Offene Segmente als Tripel (Start, Ende, Ziffernzahl). */
@@ -1293,17 +1323,18 @@ final class KvNumberScanner {
         }
 
         /**
-         * Nur Buchstabenform (KVNR): Steht hinter dem Lauf, der bei {@code ende} endet, unmittelbar (ein
-         * Abkuerzungspunkt ist erlaubt) ein {@code -} und unmittelbar danach ein Kontextwort der Art (genau dieser
-         * Lauf) oder ein Vorwort mit Nachsatzwort ({@code Patienten-KVNR}, {@code Pat.-KVNR},
-         * {@code eGK-Versichertennummer}), zaehlt das Wort davor nicht als Fuellwort, solange Segmente offen sind;
+         * Nur Arten mit {@code nachgestelltesKompositum()} (KVNR und BSNR): Steht hinter dem Lauf, der bei
+         * {@code ende} endet, unmittelbar (ein Abkuerzungspunkt ist erlaubt) ein {@code -} und unmittelbar danach
+         * ein Kontextwort der Art (genau dieser Lauf) oder ein Vorwort mit Nachsatzwort ({@code Patienten-KVNR},
+         * {@code Pat.-KVNR}, {@code eGK-Versichertennummer}; bei der BSNR {@code Praxis-BSNR}), zaehlt das Wort davor
+         * nicht als Fuellwort, solange Segmente offen sind;
          * {@link #kompositumWeiter} merkt die Position des Kontextworts. Der Vorgriff liest den Punkt, den Strich und
          * hoechstens {@code MAX_KONTEXTWORT + 1} Buchstaben, danach das Nachsatzwort (hoechstens sechs Buchstaben),
          * und nur, wenn Segmente offen sind; der Durchlauf springt danach hinter den Strich, jedes Zeichen wird also
          * nur eine feste Zahl von Malen gelesen.
          */
         private boolean kompositumVorKontextwort(int ende) {
-            if (!art.buchstabenform() || offenAnzahl == 0) {
+            if (!art.nachgestelltesKompositum() || offenAnzahl == 0) {
                 return false;
             }
             int j = ende;
@@ -1317,7 +1348,8 @@ final class KvNumberScanner {
             char[] wort = new char[MAX_KONTEXTWORT];
             int len = 0;
             int k = j;
-            while (k < n && istAsciiBuchstabe(text.charAt(k))) {
+            while (k < n && (istAsciiBuchstabe(text.charAt(k)) || text.charAt(k) == AE_KLEIN
+                    || text.charAt(k) == AE_GROSS)) {
                 if (len == MAX_KONTEXTWORT) {
                     return false;
                 }

@@ -5,6 +5,8 @@ import static de.skillshield.core.SynthetischeKvNummern.BSNR_BEKANNT;
 import static de.skillshield.core.SynthetischeKvNummern.BSNR_BEKANNT_ZWEI;
 import static de.skillshield.core.SynthetischeKvNummern.BSNR_MARKER;
 import static de.skillshield.core.SynthetischeKvNummern.BSNR_NULL;
+import static de.skillshield.core.SynthetischeKvNummern.BSNR_SONDER_35_SCHLUESSEL;
+import static de.skillshield.core.SynthetischeKvNummern.BSNR_SONDER_75_SCHLUESSEL;
 import static de.skillshield.core.SynthetischeKvNummern.BSNR_UNBEKANNT;
 import static de.skillshield.core.SynthetischeKvNummern.BSNR_ZEHN_ZIFFERN;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -111,6 +113,89 @@ class BsnrSynthetischWaechterTest {
         // das Praefix 00 allein genuegt (wie bei LANR und IK), auch ohne Nullblock
         assertTrue(BSNR_UNBEKANNT.startsWith("00") && !BSNR_UNBEKANNT.startsWith("0".repeat(5), 2));
         BsnrSynthetischWaechter.assertBsnrSynthetisch("BSNR " + BSNR_UNBEKANNT);
+    }
+
+    @Test
+    void sonderkennungMitSchluessel_istDieDritteZulaessigeForm_auchMitTrennern() {
+        for (String nummer : List.of(BSNR_SONDER_35_SCHLUESSEL, BSNR_SONDER_75_SCHLUESSEL)) {
+            assertTrue(BsnrSynthetischWaechter.istSonderkennungMitSchluessel(nummer));
+            BsnrSynthetischWaechter.Befund b = BsnrSynthetischWaechter.pruefe("BSNR " + nummer);
+            assertTrue(b.neunerfolgen() == 1 && b.verstoesse() == 0, "Verstoesse " + b.verstoesse());
+            BsnrSynthetischWaechter.assertBsnrSynthetisch("BSNR " + nummer + ", Rueckruf");
+            for (char trenner : new char[] {' ', NBSP, '-', '.', '/'}) {
+                String gruppiert = nummer.substring(0, 2) + trenner + nummer.substring(2, 4) + trenner
+                        + nummer.substring(4);
+                BsnrSynthetischWaechter.assertBsnrSynthetisch("BSNR " + gruppiert);
+            }
+        }
+    }
+
+    @Test
+    void sonderkennungMitSchluessel_knappDaneben_schlaegtAn() {
+        String basis = BSNR_SONDER_35_SCHLUESSEL;
+        List<String> daneben = new ArrayList<>();
+        // anderes Praefix, auch das benachbarte
+        daneben.add(mitZiffer(basis, 1, '6'));
+        daneben.add(mitZiffer(basis, 0, '4'));
+        daneben.add(BSNR_SONDER_75_SCHLUESSEL.substring(0, 1) + "6" + BSNR_SONDER_75_SCHLUESSEL.substring(2));
+        // Schluessel ausserhalb der Anlage 1 (04, 05 und 35 stehen nicht in der Liste)
+        daneben.add(mitZiffer(basis, 3, '4'));
+        daneben.add(mitZiffer(basis, 3, '5'));
+        daneben.add(basis.substring(0, 2) + basis.substring(0, 2) + basis.substring(4));
+        // Nullblock unvollstaendig, an jeder der fuenf Stellen einzeln
+        for (int stelle = 4; stelle < 9; stelle++) {
+            daneben.add(mitZiffer(basis, stelle, '3'));
+            daneben.add(mitZiffer(BSNR_SONDER_75_SCHLUESSEL, stelle, '3'));
+        }
+        for (String text : daneben) {
+            assertFalse(BsnrSynthetischWaechter.istSonderkennungMitSchluessel(text), "Form ist zulaessig");
+            assertTrue(wirft("BSNR " + text), "Waechter schlaegt nicht an");
+        }
+        // Laenge und Zeichen
+        assertFalse(BsnrSynthetischWaechter.istSonderkennungMitSchluessel(basis + "0"));
+        assertFalse(BsnrSynthetischWaechter.istSonderkennungMitSchluessel(basis.substring(1)));
+        assertFalse(BsnrSynthetischWaechter.istSonderkennungMitSchluessel(""));
+        assertFalse(BsnrSynthetischWaechter.istSonderkennungMitSchluessel(mitZiffer(basis, 5, 'x')));
+    }
+
+    @Test
+    void sonderkennungMitSchluessel_nachLanrOderIkVerfahrenGueltig_wirdAbgelehnt() {
+        int gesucht = 0;
+        int zugelassen = 0;
+        for (int praefix : new int[] {35, 75}) {
+            for (int schluessel = 0; schluessel < 100; schluessel++) {
+                String folge = praefix + (schluessel < 10 ? "0" : "") + schluessel + "00000";
+                boolean pruefzifferGueltig = SynthetischeKvNummern.lanrGueltigReferenz(folge)
+                        || SynthetischeKvNummern.ikGueltigReferenz(folge);
+                if (!BsnrTestHilfen.schluesselReferenz(schluessel)) {
+                    continue;
+                }
+                if (pruefzifferGueltig) {
+                    gesucht++;
+                    assertFalse(BsnrSynthetischWaechter.istSonderkennungMitSchluessel(folge),
+                            "LANR- oder IK-gueltige Folge zugelassen");
+                    assertTrue(wirft("BSNR " + folge), "Waechter schlaegt nicht an");
+                } else {
+                    zugelassen++;
+                    assertTrue(BsnrSynthetischWaechter.istSonderkennungMitSchluessel(folge));
+                }
+            }
+        }
+        assertTrue(gesucht > 0, "Keine LANR- oder IK-gueltige Form gefunden, Test ohne Aussage");
+        assertTrue(zugelassen > 0, "Keine zugelassene Form uebrig");
+        assertTrue(BsnrSynthetischWaechter.istSonderkennungMitSchluessel(BSNR_SONDER_35_SCHLUESSEL));
+        assertTrue(BsnrSynthetischWaechter.istSonderkennungMitSchluessel(BSNR_SONDER_75_SCHLUESSEL));
+    }
+
+    @Test
+    void sonderkennungMitSchluessel_hinterEinzelnemGrossbuchstaben_bleibtDurchDieKvnrRegelGeprueft() {
+        for (String nummer : List.of(BSNR_SONDER_35_SCHLUESSEL, BSNR_SONDER_75_SCHLUESSEL)) {
+            for (char buchstabe = 'A'; buchstabe <= 'Z'; buchstabe++) {
+                int letzteZiffer = nummer.charAt(8) - '0';
+                boolean gueltig = KvnrBsnrHilfen.kvnrPruefziffer(buchstabe, nummer.substring(0, 8)) == letzteZiffer;
+                assertTrue(BsnrSynthetischWaechter.pruefe("X " + buchstabe + nummer).kvnrFormen() == (gueltig ? 1 : 0));
+            }
+        }
     }
 
     @Test

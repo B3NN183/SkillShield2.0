@@ -180,6 +180,70 @@ class KvFensterTest {
         nachLangerFolge(new IkRecognizer(), KvStandTrenner.ik(), "IKNR", IK_GUELTIG, "IK");
     }
 
+    // ------------------------------------------------------------------ Umlaut-Faltung (T-13)
+
+    /** Wie {@code gleichWieStand}, der Text geht vorher durch den Waechter fuer synthetische Teil-2-Texte. */
+    private static void umlautGleich(Recognizer neu, Recognizer alt, String text, String fall) {
+        BsnrSynthetischWaechter.assertBsnrSynthetisch(text);
+        gleichWieStand(neu, alt, text, fall);
+    }
+
+    /** Die Faltung von U+00C4 zu U+00E4 (T-13) darf kein Ergebnis fuer LANR und IK aendern. */
+    private static void umlautLaeufe(Recognizer neu, Recognizer alt, String[] enden, String nummer, String name) {
+        char[] umlaute = {KvnrBsnrHilfen.AE_KLEIN, KvnrBsnrHilfen.AE_GROSS};
+        for (char umlaut : umlaute) {
+            for (String ende : enden) {
+                for (int laenge = MIN_LAUF; laenge <= MAX_LAUF; laenge++) {
+                    int vorne = laenge - ende.length() - 1;
+                    if (vorne < 0) {
+                        continue;
+                    }
+                    String fall = name + " Umlaut Lauf " + laenge + " " + ende.length();
+                    String vorn = wiederholt(FUELL, vorne) + umlaut + ende;
+                    String mitte = ende.substring(0, 1) + umlaut + ende.substring(1);
+                    String hinten = wiederholt(FUELL, vorne) + ende + umlaut;
+                    String getrennt = wiederholt(FUELL, vorne) + umlaut + ZWSP + ende;
+                    for (String lauf : new String[] {vorn, mitte, hinten, getrennt, umlaut + ende}) {
+                        umlautGleich(neu, alt, lauf + " " + nummer, fall + " ohne");
+                        umlautGleich(neu, alt, lauf + ": " + nummer, fall + " Doppelpunkt");
+                        umlautGleich(neu, alt, nummer + " (" + lauf + ")", fall + " nachgestellt");
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    void lanrLaeufeMitUmlautGleichWieStand() {
+        umlautLaeufe(new LanrRecognizer(), KvStandTrenner.lanr(), ENDEN_LANR, LANR_GUELTIG, "LANR");
+    }
+
+    @Test
+    void ikLaeufeMitUmlautGleichWieStand() {
+        umlautLaeufe(new IkRecognizer(), KvStandTrenner.ik(), ENDEN_IK, IK_GUELTIG, "IK");
+    }
+
+    @Test
+    void lanrUndIkMitUmlautImKontextwortOderAlsEinzelbuchstabeGleichWieStand() {
+        String[] woerter = {"L" + KvnrBsnrHilfen.AE_GROSS + "NR", "L" + KvnrBsnrHilfen.AE_KLEIN + "NR",
+            "I" + KvnrBsnrHilfen.AE_GROSS, "Arztnummer" + KvnrBsnrHilfen.AE_GROSS,
+            KvnrBsnrHilfen.AE_GROSS + "rztnummer", "Arzt" + KvnrBsnrHilfen.AE_GROSS + " Nr."};
+        for (String wort : woerter) {
+            umlautGleich(new LanrRecognizer(), KvStandTrenner.lanr(), wort + " " + LANR_GUELTIG, "LANR Wort");
+            umlautGleich(new IkRecognizer(), KvStandTrenner.ik(), wort + " " + IK_GUELTIG, "IK Wort");
+        }
+        char[] umlaute = {KvnrBsnrHilfen.AE_KLEIN, KvnrBsnrHilfen.AE_GROSS};
+        for (char umlaut : umlaute) {
+            String lanr = gesperrt("LANR", " ") + " " + umlaut + " " + LANR_GUELTIG;
+            String sperr = "L " + umlaut + " N R " + LANR_GUELTIG;
+            String ik = "I K " + umlaut + " " + IK_GUELTIG;
+            umlautGleich(new LanrRecognizer(), KvStandTrenner.lanr(), lanr, "LANR Sperr");
+            umlautGleich(new LanrRecognizer(), KvStandTrenner.lanr(), sperr, "LANR Sperr Umlaut");
+            umlautGleich(new IkRecognizer(), KvStandTrenner.ik(), ik, "IK Sperr Umlaut");
+            assertEquals(0, new LanrRecognizer().detect(sperr).size(), "Umlaut ersetzt keinen Buchstaben");
+        }
+    }
+
     // ------------------------------------------------------------------ Wortlaengen (T-3, a)
 
     @Test

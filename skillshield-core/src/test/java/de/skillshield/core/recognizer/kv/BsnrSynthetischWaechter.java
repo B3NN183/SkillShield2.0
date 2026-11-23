@@ -2,6 +2,8 @@ package de.skillshield.core.recognizer.kv;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import de.skillshield.core.SynthetischeKvNummern;
+
 /**
  * Laufzeit-Waechter fuer synthetische BSNR in Testtexten (Feature kvnr-bsnr-erkennung, T-12, Anforderung A-6,
  * Nachtrag zu Teil 2 Punkt 1 und 5). Er liegt in einer eigenen Klasse, weil {@link KvnrBsnrHilfen} eingefroren ist.
@@ -10,7 +12,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <ol>
  *   <li><b>Neunerfolgen.</b> Jede Folge aus ganzen Ziffernbloecken mit zusammen genau neun Ziffern (Bloecke durch genau
  *       einen Trenner verbunden) hat entweder das Praefix {@code 00} oder die Ziffern {@code 00000} an den Stellen 3
- *       bis 7 (BSNR nach A-6). Vollbreite Ziffern (U+FF10 bis U+FF19) zaehlen als Ziffern.</li>
+ *       bis 7 (BSNR nach A-6) oder ist eine Sonderkennung mit Schluessel (Praefix 35 oder 75, Schluessel der Anlage 1
+ *       an Stelle 3 und 4, Stellen 5 bis 9 gleich {@code 00000}). Vollbreite Ziffern (U+FF10 bis U+FF19) zaehlen als
+ *       Ziffern.</li>
  *   <li><b>Keine ungewollte KVNR-Form.</b> Die enge KVNR-Form nach E-3 ({@link KvnrBsnrHilfen#kvnrFormEngTreffer}:
  *       Grossbuchstabe mit Wortgrenze davor, genau neun Ziffern, Wortgrenze dahinter, gueltige Pruefziffer) kommt im
  *       Teil-2-Text nicht vor, ausser der Aufrufer nennt die Zahl der beabsichtigten Formen. Steht eine BSNR-Testnummer
@@ -27,6 +31,8 @@ public final class BsnrSynthetischWaechter {
     private static final int NULLBLOCK_VON = 2;
     private static final int NULLBLOCK_BIS = 7;
     private static final String NULLBLOCK = "00000";
+    private static final int SONDER_35 = 35;
+    private static final int SONDER_75 = 75;
     private static final char VOLLBREIT_NULL = (char) 0xFF10;
     private static final char VOLLBREIT_NEUN = (char) 0xFF19;
 
@@ -34,7 +40,8 @@ public final class BsnrSynthetischWaechter {
      * Ergebnis einer Pruefung.
      *
      * @param neunerfolgen Zahl der gefundenen Neunerfolgen (ganze Bloecke, zusammen genau neun Ziffern)
-     * @param verstoesse   davon die Zahl ohne Praefix {@code 00} und ohne {@code 00000} an Stelle 3 bis 7
+     * @param verstoesse   davon die Zahl ohne Praefix {@code 00}, ohne {@code 00000} an Stelle 3 bis 7 und ohne
+     *                     Sonderkennung mit Schluessel
      * @param kvnrFormen   Zahl der Treffer der engen KVNR-Form im Text
      */
     public record Befund(int neunerfolgen, int verstoesse, int kvnrFormen) {
@@ -75,10 +82,30 @@ public final class BsnrSynthetischWaechter {
             }
             neunerfolgen++;
             String mitte = neun.substring(NULLBLOCK_VON, NULLBLOCK_BIS);
-            boolean erlaubt = neun.startsWith(PRAEFIX) || mitte.equals(NULLBLOCK);
+            boolean erlaubt = neun.startsWith(PRAEFIX) || mitte.equals(NULLBLOCK)
+                    || istSonderkennungMitSchluessel(neun);
             verstoesse += erlaubt ? 0 : 1;
         }
         return new Befund(neunerfolgen, verstoesse, KvnrBsnrHilfen.kvnrFormEngTreffer(text).size());
+    }
+
+    /**
+     * Dritte zulaessige Form (Sonderkennung, Paragraph 6 Absatz 3): Praefix 35 oder 75, an Stelle 3 und 4 ein
+     * Schluessel der Anlage 1 (nach {@link BsnrTestHilfen#schluesselReferenz}), an Stelle 5 bis 9 {@code 00000}.
+     * Zusaetzlich muss die Folge nach dem LANR- und nach dem IK-Verfahren ungueltig sein (Referenzen aus
+     * {@link SynthetischeKvNummern}), damit sie keinen Fund dieser Arten ausloest. Nur neun ASCII-Ziffern; jede
+     * andere Folge ist {@code false}.
+     */
+    public static boolean istSonderkennungMitSchluessel(String neunZiffern) {
+        if (neunZiffern.length() != NEUN || !neunZiffern.chars().allMatch(c -> c >= '0' && c <= '9')) {
+            return false;
+        }
+        int praefix = Integer.parseInt(neunZiffern.substring(0, 2));
+        int schluessel = Integer.parseInt(neunZiffern.substring(2, 4));
+        return (praefix == SONDER_35 || praefix == SONDER_75) && BsnrTestHilfen.schluesselReferenz(schluessel)
+                && neunZiffern.substring(4).equals(NULLBLOCK)
+                && !SynthetischeKvNummern.lanrGueltigReferenz(neunZiffern)
+                && !SynthetischeKvNummern.ikGueltigReferenz(neunZiffern);
     }
 
     /**
@@ -119,8 +146,8 @@ public final class BsnrSynthetischWaechter {
      */
     public static void assertBsnrSynthetisch(String text, int erlaubteKvnrFormen) {
         Befund b = pruefe(text);
-        assertTrue(b.verstoesse() == 0, "Neunerfolge ohne Praefix 00 und ohne 00000 an Stelle 3 bis 7 im Testtext: "
-                + b.verstoesse());
+        assertTrue(b.verstoesse() == 0, "Neunerfolge ohne Praefix 00, ohne 00000 an Stelle 3 bis 7 und ohne"
+                + " Sonderkennung mit Schluessel im Testtext: " + b.verstoesse());
         assertTrue(b.kvnrFormen() == erlaubteKvnrFormen, "Ungewollte KVNR-Form im Teil-2-Testtext: gefunden "
                 + b.kvnrFormen() + ", erlaubt " + erlaubteKvnrFormen);
     }
