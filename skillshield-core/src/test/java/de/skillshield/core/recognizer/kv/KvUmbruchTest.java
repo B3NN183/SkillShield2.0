@@ -308,12 +308,13 @@ class KvUmbruchTest {
     }
 
     @Test
-    void zusaetzlicheFundeGegenDenEingefrorenenStand_nurInTextenMitCrUnsichtbarLf() {
+    void zusaetzlicheFundeGegenDenEingefrorenenStand_nurInTextenMitCrUnsichtbarLfOderMitWeitKontextwort() {
         List<String> bausteine = bausteine();
         Random zufall = new Random(31_415_926);
         int ohneFolge = 0;
         int mitFolge = 0;
         int mitFolgeAbweichend = 0;
+        int weitKontextwort = 0;
         for (int t = 0; t < 40_000; t++) {
             StringBuilder b = new StringBuilder();
             int teile = 3 + zufall.nextInt(10);
@@ -333,13 +334,23 @@ class KvUmbruchTest {
                 boolean gleich = neu.equals(a.standLuecken.detect(text));
                 if (folge) {
                     mitFolgeAbweichend += gleich ? 0 : 1;
+                } else if (vonFehlalarmPruefungAusgenommen(a, text)) {
+                    weitKontextwort++;
+                    assertEquals(0, fehlalarmZaehlung(a, text, neu, a.standLuecken.detect(text))[0],
+                            a.name + " unerklaerter Fund mit Weit-Kontextwort, Textnummer " + t);
+                    assertTrue(!verletztBestandsschutzOhneAusnahme(a.standLuecken.detect(text), neu),
+                            a.name + " Bestandsschutz verletzt, Textnummer " + t);
                 } else {
                     assertTrue(gleich, a.name + " Abweichung ohne CR UZ+ LF, Textnummer " + t);
                 }
             }
         }
         // Gemessen (fester Seed): 20 720 Texte ohne und 19 280 Texte mit der Folge; bei 1 063 Paaren (Text, Art)
-        // mit der Folge weicht die Fundliste ab. Die Mindestzahlen liegen bewusst darunter.
+        // mit der Folge weicht die Fundliste ab. Die Mindestzahlen liegen bewusst darunter. Paare (Text, Art) ohne
+        // die Folge, aber mit erweitertem Weit-Kontextwort der Art (Teil 2, D-2/D-3) werden nicht auf Gleichheit
+        // geprueft, sondern auf "kein unerklaerter Fund" und strengen Bestandsschutz; ihre Zahl ist ein exakter
+        // Messwert (fester Seed) und haelt die Ausnahme eng.
+        assertEquals(2, weitKontextwort, "Paare mit erweitertem Weit-Kontextwort: " + weitKontextwort);
         assertTrue(ohneFolge >= 5_000, "Texte ohne die Folge: " + ohneFolge);
         assertTrue(mitFolge >= 5_000, "Texte mit der Folge: " + mitFolge);
         assertTrue(mitFolgeAbweichend >= 200, "Texte mit Folge und anderer Fundliste: " + mitFolgeAbweichend);

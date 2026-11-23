@@ -48,6 +48,20 @@ import java.util.Set;
  * haengen oder einen eigenen, die Folge beendenden Lauf bilden, kann kein eingestreutes unsichtbares Zeichen eine
  * neue Luecke oeffnen.
  *
+ * <p><b>Erweiterte Schreibweise (Weit-Folge, D-2 bis D-4).</b> Weit-Luecke zwischen zwei Einzelbuchstaben: (a) ein
+ * Sperr-Trenner; (b) zwei oder drei Leerraumzeichen der Sperrschrift (Leerzeichen, U+00A0, U+2009, U+202F), beliebig
+ * gemischt; (c) ein {@code .} und ein bis drei dieser Leerraumzeichen; (d) genau ein Tab. (b) bis (d) heissen
+ * erweitert. Laeufe nur aus unsichtbaren Zeichen innerhalb einer Luecke sind durchsichtig (sie zaehlen nicht zu den
+ * drei Leerraumzeichen); ein unsichtbares Zeichen zwischen zwei Buchstaben ohne Luecke bildet einen Lauf mit zwei
+ * Buchstaben und ist keine Luecke (Grenze 14a). Weit-Folge: maximale Folge von Einzelbuchstaben, je durch eine
+ * Weit-Luecke verbunden; eine Luecke hinter dem letzten Buchstaben gehoert nicht zum Vergleich. Weit-Kontextwort: eine
+ * Weit-Folge mit mindestens einer erweiterten Luecke und vier bis 23 Buchstaben, deren gefaltete Buchstaben genau
+ * einem Eintrag von {@link KvArt#kontextwoerter()} gleichen (nie das Zwei-Buchstaben-Wort: {@code I. K.}, {@code I  K}
+ * und {@code I<Tab>K} bleiben ohne Wirkung). Eine Weit-Folge ohne erweiterte Luecke ist die strenge Sperrfolge und
+ * bleibt beim Sperr-Verfolger. Nicht zulaessig (die Folge endet): Zeilenumbruch, {@code ,}, {@code ;}, {@code :},
+ * {@code /}, {@code _}, vier oder mehr Leerraumzeichen, zwei Tabs, Tab mit Leerzeichen, Leerzeichen vor dem Punkt,
+ * zwei Punkte, {@code -} oder U+2013 mit Leerraum und jedes andere Zeichen.
+ *
  * <p><b>Ziffernketten.</b> Eine Kette besteht aus Ziffernbloecken, die durch je genau einen Gruppentrenner
  * verbunden sind, dem wieder eine Ziffer folgt. Zwei Trenner hintereinander oder ein Trenner am Ende beenden die
  * Kette. Ab dem Kettenanfang werden Praefixe aus ganzen Bloecken betrachtet: Gibt es ein Praefix mit genau neun
@@ -94,6 +108,14 @@ import java.util.Set;
  * ({@code L A N R-Nummer}) im direkten Kontext liegt. Das Abbild wird bei jedem Laufanfang ohne laufende Folge neu
  * gespeichert. Ein normales Kontextwort setzt Deckel 1,0 und {@code nurDirekt = false} ({@code I K IK N}:
  * 0,92).</li>
+ * <li>Weit-Kontextwort (Ereignis am Ende der Weit-Folge, vor der Verarbeitung des beendenden Zeichens bzw. Laufs; der
+ * Weit-Verfolger laeuft neben dem Sperr-Verfolger und schreibt nur hier in den Zustand): Nur wenn kein Kontext
+ * {@code aktiv} ist (D-7), werden die zu Beginn der Folge offenen Segmente (eigenes Abbild aus sechs Werten) wie beim
+ * gesperrten Kontextwort wiederhergestellt und ausgewertet (nachgestellter Kontext, Komma-Regel); dann
+ * {@code aktiv = direkt = true}, {@code woerter = umbrueche = 0}, Deckel {@link #CONFIDENCE_SPERRSCHRIFT} (0,80 in
+ * jedem Zustand, nachgestellt mit Komma 0,60). Bei laufendem Kontext geschieht nichts. Alle Zwischenzustaende des
+ * Weit-Verfolgers sind wirkungslos: Auf einem Text ohne Weit-Kontextwort ist die Fundliste die des Sperr-Verfolgers
+ * allein. Die Buchstaben der Folge werden unveraendert je als Fuellwort verarbeitet.</li>
  * <li>Segment bei {@code aktiv}: wird ausgegeben; danach {@code direkt = false}, {@code woerter = umbrueche = 0}
  * (Aufzaehlung, auch zeilenweise). Segment ohne {@code aktiv}: wird offen (siehe unten).</li>
  * <li>Fuellwort (Wort, Ziffernblock ohne Segment, Nachsatzwort ausserhalb von {@code direkt}): {@code woerter++},
@@ -137,7 +159,8 @@ import java.util.Set;
  * (bei {@code direkt}; sonst {@link #CONFIDENCE_KONTEXT_ENTFERNT}, auch fuer nachgestellten Kontext; mit einem
  * {@code ,} oder {@code ;} vor dem nachgestellten Kontextwort hoechstens {@link #CONFIDENCE_KOMMA_NACHGESTELLT},
  * Quelle unveraendert; mit gesperrtem Kontextwort ab drei Buchstaben hoechstens
- * {@link #CONFIDENCE_SPERRSCHRIFT}, in jedem Zustand; mit gesperrtem Kontextwort aus zwei Buchstaben ({@code I K})
+ * {@link #CONFIDENCE_SPERRSCHRIFT}, in jedem Zustand (ebenso mit einem Weit-Kontextwort, ab vier Buchstaben mit
+ * erweiterten Trennern); mit gesperrtem Kontextwort aus zwei Buchstaben ({@code I K})
  * hoechstens {@link #CONFIDENCE_SPERRSCHRIFT_ZWEI}, auch bei gueltiger Pruefziffer; die Quelle folgt weiter nur
  * der Pruefziffer). Ungueltige
  * Pruefziffer: {@link #CONFIDENCE_PRUEFZIFFER_UNGUELTIG}. Sechs bis zwoelf Ziffern ausser neun:
@@ -149,7 +172,8 @@ import java.util.Set;
  * vor dem nachgestellten Kontextwort) und Grenze 14 (gesperrte Schreibweise) des Vorgaengers, jeweils in den Grenzen
  * der Regeln D-1 bis D-5, dazu 14h ({@code IK: Praxis I K Nr N}). Verbleibend: 12R ({@code und} und {@code /} vor dem
  * nachgestellten Kontextwort), 14a (Teilgruppen wie {@code LA NR}), 14b (gesperrtes Vor- und Nachsatzwort), 14c
- * (Initialen mit Punkt und Leerzeichen, Tab, Zeilenumbruch, zwei Trenner), 14d (unmittelbar wiederholte Sperrschrift
+ * (Initialen mit Punkt und Leerzeichen, Tab, Zeilenumbruch, zwei Trenner; seit kv-trenner-und-umbruch bis auf den
+ * Rest 14cR geschlossen, siehe unten), 14d (unmittelbar wiederholte Sperrschrift
  * ist eine Folge), 14e (Einzelbuchstabe direkt vor oder hinter der Folge), 14f ({@code I K} ohne Fuellwoerter,
  * Aufzaehlung, Umbruch, nachgestellten Kontext), 14g (0,50 statt 0,80 fuer eine von {@code I K} und einem
  * nachgestellten Kontextwort erschlossene Nummer; die Position bleibt abgedeckt), die Restformen nach 14h
@@ -162,7 +186,15 @@ import java.util.Set;
  * unsichtbare Zeichen, LF zaehlen als ein Zeilenumbruch, D-1). Rest 15R, je als Test
  * {@code bekannteGrenze15Rest...}: CR, Leerraum und LF, CR, ein Buchstabe oder Kombinationszeichen und LF, CR, ein
  * unsichtbares Zeichen und CR, und jede Kombination mit U+0085, U+2028 oder U+2029 zaehlen weiter als zwei
- * Zeilenumbrueche. Grenze 14c bleibt offen (Teil 2 dieses Features ist noch nicht umgesetzt).
+ * Zeilenumbrueche. Geschlossen (Teil 2, T-6): Grenze 14c (Initialen mit Punkt und Leerzeichen, mehrere Leerzeichen
+ * und Tab zwischen den Buchstaben eines gesperrten Kontextworts ab vier Buchstaben, D-2 bis D-4), bis auf den Rest
+ * 14cR, je als Test {@code bekannteGrenze14cRest...}: das Zwei-Buchstaben-Wort mit erweiterten Trennern ({@code I. K.},
+ * {@code I  K}, {@code I<Tab>K}) ohne Fund, ebenso vier und mehr Leerraumzeichen, zwei Tabs, Tab mit Leerraum, Punkt
+ * mit Tab, Leerraum vor dem Punkt, zwei Punkte, {@code -} oder U+2013 mit Leerraum, Zeilenumbruch, {@code ,},
+ * {@code ;}, {@code :}, {@code /}, {@code _} und andere Unicode-Leerraeume (U+2002, U+3000) als Luecke. Bekannte
+ * Folge 14cF: Initialen oder Einzelbuchstaben, die zusammengelesen genau ein Kontextwort ab vier Buchstaben ergeben
+ * ({@code Prof. L. A. N. R. Beispiel, Rechnung N}), erschliessen eine folgende Zahl. Das Weit-Kontextwort wirkt nur
+ * ohne laufenden Kontext (D-7); die Regel fuer den laufenden Kontext folgt (T-7).
  *
  * <p><b>Linearitaet.</b> Ein Durchlauf, keine Rekursion, kein regulaerer Ausdruck, kein Zuruecksetzen der
  * Leseposition der Hauptschleife. Jeder Lauf wird in einem Zug gelesen. Dabei fuehrt der Durchlauf nur ein Fenster
@@ -180,9 +212,17 @@ import java.util.Set;
  * 13-mal beruehrt. Der Zeilenanfang-Merker ({@code zeilenanfang}) wird vorwaerts mitgefuehrt, nicht rueckwaerts
  * gesucht. Der Merker {@code crOffen} (CR UZ+ LF als ein Umbruch) ist ein einzelnes Flag, wird je Zeichen in
  * konstanter Zeit gesetzt oder geloescht und braucht weder Vorgriff noch Rueckkehr; {@code CR} gefolgt von einer
- * Million unsichtbarer Zeichen ist ein einziger Lauf. Der Sperr-Verfolger macht je Zeichen ausserhalb eines Laufs
- * und je Lauf konstante Arbeit und setzt die Leseposition nie zurueck: Er fuehrt einen Puffer fester Groesse
- * (23 Buchstaben) plus Zaehler (laengere Folgen koennen keinem Kontextwort gleichen) und das Abbild der
+ * Million unsichtbarer Zeichen ist ein einziger Lauf. Der Weit-Verfolger (erweiterte Trenner) macht je Zeichen
+ * ausserhalb eines Laufs und je Lauf ebenfalls konstante Arbeit und setzt die Leseposition nie zurueck: Er fuehrt einen
+ * Puffer fester Groesse (23 Buchstaben) plus Zaehler, hoechstens drei Leerraumzeichen je Luecke (danach endet die
+ * Folge, weitere Leerzeichen kosten je Zeichen konstante Zeit), das Abbild der offenen Segmente (sechs Werte) und
+ * vergleicht einmal je Folgenende hoechstens 23 Zeichen mit acht Eintraegen. Der Vorgriff {@code vorausArt} (Lauf
+ * hinter einer Luecke bis zum zweiten Buchstaben oder Laufende) ist fuer beide Verfolger gemeinsam und wird je
+ * Laufanfang hoechstens einmal ausgefuehrt, nur wenn der Weit-Verfolger in einer Luecke steht; da ein Lauf mit mehreren
+ * Buchstaben jede Folge beendet, trifft er nie denselben Lauf wie der Nachsatz-Vorgriff. Der Sperr-Verfolger macht
+ * je Zeichen ausserhalb eines Laufs und je Lauf konstante Arbeit und setzt die Leseposition nie zurueck: Er fuehrt
+ * einen Puffer fester Groesse (23 Buchstaben) plus Zaehler (laengere Folgen koennen keinem Kontextwort gleichen)
+ * und das Abbild der
  * offenen Segmente (sechs Werte, Wiederherstellen O(1)); der
  * Vergleich mit den Kontextwoertern geschieht einmal je Folgenende mit hoechstens 23 Zeichen und acht Eintraegen.
  * Jedes offene Segment wird hoechstens einmal ausgegeben, weil das Ereignis die Folge leert. Der Vorgriff auf
@@ -234,6 +274,22 @@ final class KvNumberScanner {
     private static final int SPERR_KEINE = 0;
     private static final int SPERR_BUCHSTABE = 1;
     private static final int SPERR_TRENNER = 2;
+    /** D-3: erweiterte Trenner gelten erst ab vier Buchstaben. */
+    private static final int MIN_WEIT_BUCHSTABEN = 4;
+    /** D-2 (b), (c): hoechstens drei Leerraumzeichen der Sperrschrift je Luecke. */
+    private static final int MAX_WEIT_LEERRAUM = 3;
+    // Zustaende des Weit-Verfolgers
+    private static final int WEIT_KEINE = 0;
+    private static final int WEIT_BUCHSTABE = 1;
+    private static final int WEIT_PUNKT = 2;
+    private static final int WEIT_PUNKT_LEER = 3;
+    private static final int WEIT_LEER = 4;
+    private static final int WEIT_STRICH = 5;
+    private static final int WEIT_TAB = 6;
+    // Ergebnis des gemeinsamen Vorgriffs
+    private static final int VORAUS_ANDERS = 0;
+    private static final int VORAUS_EINZEL = 1;
+    private static final int VORAUS_UNSICHTBAR = 2;
     private static final String NR = "nr";
     private static final String NUMMER = "nummer";
     private static final String UND = "und";
@@ -304,6 +360,11 @@ final class KvNumberScanner {
     private static boolean istSperrTrenner(int cp) {
         return cp == ' ' || cp == NBSP || cp == SCHMALES_LEERZEICHEN || cp == SCHMALES_NBSP || cp == '.' || cp == '-'
                 || cp == GESCHUETZTER_BINDESTRICH || cp == HALBGEVIERTSTRICH;
+    }
+
+    /** Leerraumzeichen der Sperrschrift (WS4): Leerzeichen, NBSP, U+2009, U+202F. */
+    private static boolean istSperrLeerraum(int cp) {
+        return cp == ' ' || cp == NBSP || cp == SCHMALES_LEERZEICHEN || cp == SCHMALES_NBSP;
     }
 
     private static boolean istNachsatzTrenner(char c) {
@@ -400,6 +461,24 @@ final class KvNumberScanner {
         private boolean sperrOffenKlammerVorKomma;
         private boolean sperrOffenUnd;
 
+        // Weit-Verfolger (erweiterte Trenner, D-2 bis D-7): schreibt nur in weitEnde() in Bestandszustand
+        private int weitZustand = WEIT_KEINE;
+        /** Leerraumzeichen der laufenden Luecke, 0 bis 3. */
+        private int weitLeer;
+        /** Mindestens eine Luecke nach D-2 (b), (c) oder (d). */
+        private boolean weitErweitert;
+        /** Gefaltete Buchstaben der laufenden Weit-Folge, nur die ersten {@code MAX_KONTEXTWORT}. */
+        private final char[] weitZeichen = new char[MAX_KONTEXTWORT];
+        /** Zahl der Einzelbuchstaben der Weit-Folge (zaehlt ueber den Puffer hinaus weiter). */
+        private int weitLaenge;
+        /** Abbild der offenen Segmente samt Luecken-Merkern zu Beginn der Weit-Folge. */
+        private int weitOffenAnzahl;
+        private int weitOffenKlammern;
+        private int weitOffenKomma;
+        private boolean weitOffenSchraeg;
+        private boolean weitOffenKlammerVorKomma;
+        private boolean weitOffenUnd;
+
         /** Ende des letzten Laufs und Zahl seiner Buchstaben (0, wenn ohne Buchstaben), fuer den Abkuerzungspunkt. */
         private int laufEnde = -1;
         private int laufBuchstaben;
@@ -447,6 +526,7 @@ final class KvNumberScanner {
                 }
                 crOffen = false;
                 sperrSchritt(cp);
+                weitSchritt(cp);
                 if (istZiffer(c)) {
                     i = ziffernkette(i);
                 } else if (c == '.') {
@@ -472,6 +552,7 @@ final class KvNumberScanner {
                 }
             }
             sperrEnde();
+            weitEnde();
         }
 
         // ------------------------------------------------------------------ Ereignisse
@@ -647,21 +728,142 @@ final class KvNumberScanner {
          * Nachsatzwort wirkt.
          */
         private int laufMitVerfolger(int start) {
-            if (sperrZustand == SPERR_TRENNER && einzelbuchstabeVoraus(start)) {
-                int ende = lauf(start);
+            boolean luecke = weitInLuecke();
+            int voraus = luecke ? vorausArt(start) : VORAUS_ANDERS; // hoechstens einmal je Laufanfang
+            boolean sperrWeiter = sperrZustand == SPERR_TRENNER && voraus == VORAUS_EINZEL;
+            boolean weitWeiter = luecke && voraus != VORAUS_ANDERS;
+            int lueckeZustand = weitZustand;
+            int lueckeLeer = weitLeer;
+            if (!sperrWeiter) {
+                sperrEnde(); // Bestand zuerst
+            }
+            if (!weitWeiter) {
+                weitEnde();
+            }
+            if (!sperrWeiter) {
+                abbildSpeichern();
+            }
+            if (!weitWeiter) {
+                weitAbbildSpeichern();
+            }
+            int ende = lauf(start);
+            if (sperrWeiter) {
                 sperrAnhaengen();
                 sperrZustand = SPERR_BUCHSTABE;
-                return ende;
-            }
-            sperrEnde();
-            abbildSpeichern();
-            int ende = lauf(start);
-            if (laufBuchstaben == 1) {
+            } else if (laufBuchstaben == 1) {
                 sperrLaenge = 0;
                 sperrAnhaengen();
                 sperrZustand = SPERR_BUCHSTABE;
             }
+            if (weitWeiter) {
+                if (voraus == VORAUS_EINZEL) {
+                    weitErweitert |= lueckeZustand == WEIT_PUNKT_LEER || lueckeZustand == WEIT_TAB
+                            || (lueckeZustand == WEIT_LEER && lueckeLeer >= 2);
+                    weitAnhaengen();
+                }
+            } else if (laufBuchstaben == 1) {
+                weitLaenge = 0;
+                weitErweitert = false;
+                weitAnhaengen();
+            }
             return ende;
+        }
+
+        private boolean weitInLuecke() {
+            return weitZustand != WEIT_KEINE && weitZustand != WEIT_BUCHSTABE;
+        }
+
+        /** Haengt den Buchstaben des soeben gelesenen Einzelbuchstaben-Laufs an die Weit-Folge an. */
+        private void weitAnhaengen() {
+            if (weitLaenge < MAX_KONTEXTWORT) {
+                weitZeichen[weitLaenge] = fenster[0];
+            }
+            weitLaenge++;
+            weitZustand = WEIT_BUCHSTABE;
+            weitLeer = 0;
+        }
+
+        /** Zeichen ausserhalb eines Laufs, nach {@link #sperrSchritt(int)} und vor der Bestandsverarbeitung. */
+        private void weitSchritt(int cp) {
+            switch (weitZustand) {
+                case WEIT_BUCHSTABE -> {
+                    if (istSperrLeerraum(cp)) {
+                        weitZustand = WEIT_LEER;
+                        weitLeer = 1;
+                    } else if (cp == '.') {
+                        weitZustand = WEIT_PUNKT;
+                    } else if (cp == '-' || cp == GESCHUETZTER_BINDESTRICH || cp == HALBGEVIERTSTRICH) {
+                        weitZustand = WEIT_STRICH;
+                    } else if (cp == '\t') {
+                        weitZustand = WEIT_TAB;
+                    } else {
+                        weitEnde();
+                    }
+                }
+                case WEIT_PUNKT -> {
+                    if (istSperrLeerraum(cp)) {
+                        weitZustand = WEIT_PUNKT_LEER;
+                        weitLeer = 1;
+                    } else {
+                        weitEnde();
+                    }
+                }
+                case WEIT_PUNKT_LEER, WEIT_LEER -> {
+                    if (istSperrLeerraum(cp) && weitLeer < MAX_WEIT_LEERRAUM) {
+                        weitLeer++;
+                    } else {
+                        weitEnde();
+                    }
+                }
+                case WEIT_STRICH, WEIT_TAB -> weitEnde();
+                default -> {
+                    // keine Folge: nichts zu tun
+                }
+            }
+        }
+
+        /**
+         * Die Weit-Folge ist zu Ende. Nur hier schreibt der Weit-Verfolger in den Bestandszustand: Hat die Folge
+         * mindestens eine erweiterte Luecke, vier bis 23 Buchstaben und gleicht sie einem Kontextwort der Art, beginnt
+         * (ohne laufenden Kontext) ein Kontext wie bei einem gesperrten Kontextwort ab drei Buchstaben.
+         */
+        private void weitEnde() {
+            int laenge = weitLaenge;
+            boolean verfolgt = weitZustand != WEIT_KEINE;
+            boolean erweitert = weitErweitert;
+            weitZustand = WEIT_KEINE;
+            weitLaenge = 0;
+            weitLeer = 0;
+            weitErweitert = false;
+            if (!verfolgt || !erweitert || laenge < MIN_WEIT_BUCHSTABEN || laenge > MAX_KONTEXTWORT
+                    || !kontextLaenge[laenge] || !istKontextwort(weitZeichen, laenge)) {
+                return;
+            }
+            if (aktiv) {
+                return; // D-7: bei laufendem Kontext wirkt die erweiterte Sperrschrift nicht
+            }
+            weitAbbildWiederherstellen();
+            offenNachgestelltAusgeben();
+            kontextBeginnen(CONFIDENCE_SPERRSCHRIFT, false);
+        }
+
+        /** Merkt die offenen Segmente samt Luecken-Merkern (sechs Werte) zu Beginn einer moeglichen Weit-Folge. */
+        private void weitAbbildSpeichern() {
+            weitOffenAnzahl = offenAnzahl;
+            weitOffenKlammern = offenKlammern;
+            weitOffenKomma = offenKomma;
+            weitOffenSchraeg = offenSchraeg;
+            weitOffenKlammerVorKomma = offenKlammerVorKomma;
+            weitOffenUnd = offenUnd;
+        }
+
+        private void weitAbbildWiederherstellen() {
+            offenAnzahl = weitOffenAnzahl;
+            offenKlammern = weitOffenKlammern;
+            offenKomma = weitOffenKomma;
+            offenSchraeg = weitOffenSchraeg;
+            offenKlammerVorKomma = weitOffenKlammerVorKomma;
+            offenUnd = weitOffenUnd;
         }
 
         /** Haengt den Buchstaben des soeben gelesenen Einzelbuchstaben-Laufs an die Folge an. */
@@ -682,10 +884,12 @@ final class KvNumberScanner {
         }
 
         /**
-         * Besteht der Lauf ab {@code p} aus genau einem Buchstaben ({@link Character#isLetter(int)}), eventuell mit
-         * unsichtbaren Zeichen? Liest hoechstens bis zum zweiten Buchstaben oder zum Laufende, aendert nichts.
+         * Gemeinsamer Vorgriff beider Verfolger auf den Lauf ab {@code p}: {@code VORAUS_EINZEL} (genau ein Buchstabe
+         * im Sinne von {@link Character#isLetter(int)}, eventuell mit unsichtbaren Zeichen), {@code VORAUS_UNSICHTBAR}
+         * (nur unsichtbare Zeichen) oder {@code VORAUS_ANDERS}. Liest hoechstens bis zum zweiten Buchstaben oder zum
+         * Laufende, aendert nichts.
          */
-        private boolean einzelbuchstabeVoraus(int p) {
+        private int vorausArt(int p) {
             int anzahl = 0;
             boolean buchstabe = false;
             int j = p;
@@ -697,13 +901,16 @@ final class KvNumberScanner {
                     }
                     anzahl++;
                     if (anzahl > 1) {
-                        return false;
+                        return VORAUS_ANDERS;
                     }
                     buchstabe = Character.isLetter(cp);
                 }
                 j += Character.charCount(cp);
             }
-            return anzahl == 1 && buchstabe;
+            if (anzahl == 0) {
+                return VORAUS_UNSICHTBAR;
+            }
+            return buchstabe ? VORAUS_EINZEL : VORAUS_ANDERS;
         }
 
         /** Die Sperrfolge ist zu Ende: Ist sie ein Kontextwort ab zwei Buchstaben, beginnt hier ein Kontext. */
@@ -713,7 +920,7 @@ final class KvNumberScanner {
             sperrZustand = SPERR_KEINE;
             sperrLaenge = 0;
             if (!verfolgt || laenge < MIN_SPERR_BUCHSTABEN || laenge > MAX_KONTEXTWORT
-                    || !kontextLaenge[laenge] || !istKontextwort(laenge)) {
+                    || !kontextLaenge[laenge] || !istKontextwort(sperrZeichen, laenge)) {
                 return;
             }
             if (aktiv) {
@@ -765,10 +972,10 @@ final class KvNumberScanner {
             offenUnd = sperrOffenUnd;
         }
 
-        /** Gleicht {@code sperrZeichen[0, laenge)} einem Kontextwort der Art? */
-        private boolean istKontextwort(int laenge) {
+        /** Gleicht {@code zeichen[0, laenge)} einem Kontextwort der Art? */
+        private boolean istKontextwort(char[] zeichen, int laenge) {
             for (String w : art.kontextwoerter()) {
-                if (gleich(w, sperrZeichen, 0, laenge)) {
+                if (gleich(w, zeichen, 0, laenge)) {
                     return true;
                 }
             }

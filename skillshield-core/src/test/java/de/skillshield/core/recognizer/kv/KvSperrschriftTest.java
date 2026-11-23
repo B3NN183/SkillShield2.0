@@ -204,24 +204,33 @@ class KvSperrschriftTest {
     // ------------------------------------------------------------------ 3.2.4 Grenzfaelle (ab drei Buchstaben)
 
     @Test
-    void grenzfall_kein_zweiTrennerKeinTrennerOderAndererTrenner() {
+    void grenzfall_zweiLeerzeichenTabOderPunktLeerzeichenAlsTrenner_fundMit080() {
+        // Teil 2 (AK-7 bis AK-9): zwei Leerzeichen, ein Tab und ". " sind Trenner der Sperrschrift.
         for (Art a : ARTEN) {
             String w = wort(a);
-            assertKein(a, sperr(w, "  ") + " " + a.gueltig);
-            assertKein(a, sperr(w, "\t") + " " + a.gueltig);
+            sperrFund(a, sperr(w, "  ") + " ", a.gueltig, "");
+            sperrFund(a, sperr(w, "\t") + " ", a.gueltig, "");
+            sperrFund(a, sperr(w, ". ") + " ", a.gueltig, "");
+        }
+    }
+
+    @Test
+    void grenzfall_kein_keinTrennerOderAndererTrenner() {
+        for (Art a : ARTEN) {
+            String w = wort(a);
             assertKein(a, sperr(w, ",") + " " + a.gueltig);
             assertKein(a, sperr(w, "/") + " " + a.gueltig);
             assertKein(a, sperr(w, "_") + " " + a.gueltig);
-            assertKein(a, sperr(w, ". ") + " " + a.gueltig);
             assertKein(a, sperr(w, "\n") + " " + a.gueltig);
             assertKein(a, sperr(w, ":") + " " + a.gueltig);
         }
     }
 
     @Test
-    void grenzfall_einZweiterTrennerInDerMitte_beendetDieFolge() {
-        assertKein(LANR_ART, "L A  N R " + LANR_ART.gueltig);
-        assertKein(LANR_ART, "L A\tN R " + LANR_ART.gueltig);
+    void grenzfall_einAndererTrennerInDerMitte_giltImWeitenVerfolger_fundMit080() {
+        // Teil 2 (AK-10): zwei Leerzeichen bzw. ein Tab zwischen den Buchstaben sind Trenner, die Folge reicht weiter.
+        sperrFund(LANR_ART, "L A  N R ", LANR_ART.gueltig, "");
+        sperrFund(LANR_ART, "L A\tN R ", LANR_ART.gueltig, "");
     }
 
     @Test
@@ -500,10 +509,14 @@ class KvSperrschriftTest {
     }
 
     @Test
-    void ak12_durchsichtigerLaufZwischenZweiTrennern_keinFund() {
-        assertKein(LANR_ART, "L " + ZWSP + " A N R " + LANR_ART.gueltig);
-        assertKein(LANR_ART, "L A " + ZWSP + " N R " + LANR_ART.gueltig);
-        assertKein(IK_ART, "I K N " + ZWSP + " R " + IK_ART.gueltig);
+    void ak12_durchsichtigerLaufZwischenZweiTrennern_istWeitLuecke_fundMit080() {
+        // Teil 2 (AK-20, D-2 b): das unsichtbare Zeichen zwischen zwei Leerzeichen ist eine Luecke, kein Abbruch;
+        // die Vier-Buchstaben-Folge bleibt damit ein Fund 0,80, bei LANR wie bei IK.
+        sperrFund(LANR_ART, "L " + ZWSP + " A N R ", LANR_ART.gueltig, "");
+        sperrFund(LANR_ART, "L A " + ZWSP + " N R ", LANR_ART.gueltig, "");
+        sperrFund(IK_ART, "I K N " + ZWSP + " R ", IK_ART.gueltig, "");
+        // Gegenprobe (D-4): nur zwei Buchstaben vor der Nummer, kein Fund.
+        assertKein(IK_ART, "I " + ZWSP + " K " + IK_ART.gueltig);
     }
 
     @Test
@@ -1214,16 +1227,14 @@ class KvSperrschriftTest {
     // ------------------------------------------------------------------ T-7b: weitere bekannte Grenzen (Plan Kap. 11)
 
     @Test
-    void bekannteGrenze14c_initialenMitPunktUndLeerzeichenTabUmbruchZweiTrenner_keineSperrschrift() {
+    void bekannteGrenze14cRest_zweiBuchstabenUndZeilenumbruch_keinFund() {
+        // Umgestellt in T-6 (Feature kv-trenner-und-umbruch, D-2, D-3): Punkt mit Leerzeichen, Tab und zwei Leerzeichen
+        // zwischen den Buchstaben eines Wortes ab vier Buchstaben sind jetzt ein Fund (0,80); diese Faelle stehen in
+        // KvTrennerTest (ak7, ak8, ak9). Hier bleiben Zeilenumbruch und das Zwei-Buchstaben-Wort ohne Fund.
         for (Art a : ARTEN) {
             String w = wort(a);
-            // Initialenform "L. A. N. R.": Punkt und Leerzeichen sind zwei Trenner
-            assertKein(a, sperr(w, ". ") + ". " + a.gueltig);
-            // Tab und Zeilenumbruch als Trenner
-            assertKein(a, sperr(w, "\t") + " " + a.gueltig);
+            // Zeilenumbruch als Trenner bleibt ohne Fund
             assertKein(a, sperr(w, "\n") + " " + a.gueltig);
-            // zwei Leerzeichen als Trenner
-            assertKein(a, sperr(w, "  ") + " " + a.gueltig);
         }
         assertKein(IK, "I. K. " + IKN);
         assertKein(IK, "I\tK " + IKN);

@@ -604,6 +604,27 @@ Keine.
     T-6 ergänzt eine neue Testmethode mit Abdeckung je KV-Typ (LANR und IK getrennt). (c) In ausgenommenen Texten
     werden Konfidenz und Quelle erklärter Zusatzfunde nicht verglichen (D-6, Deckel 0,80) → das sichern AK-21 und
     AK-24 (e) in T-7/T-8.
+9b. **Nachtrag der Hauptsitzung zu T-6 (22.11.2026, Plan Kap. 13 Hinweis 5): weitere umzustellende Bestandstests.**
+    Der Fehlalarm-Prüfstand war in T-6 Durchlauf 1 vollständig grün; sechs im Plan nicht benannte Bestandstests
+    halten aber Verhalten fest, das Teil 2 nach D-2/D-3 und Kap. 3.2.7 gewollt ändert. Sie werden in T-6 umgestellt:
+    (1) `KvStandLueckenDifferenzTest.t2_zusaetzlicheFundeNurInTextenMitCrUnsichtbarLf` und
+    (2) `KvUmbruchTest.zusaetzlicheFundeGegenDenEingefrorenenStand_nurInTextenMitCrUnsichtbarLf`: Gleichheit mit der
+    eingefrorenen Kopie gilt weiter für alle Texte ohne `CR UZ+ LF` **und ohne erweitertes Weit-Kontextwort der
+    Art** (eingefrorene Hilfe `vonFehlalarmPruefungAusgenommen`); für Texte mit erweitertem Weit-Kontextwort gilt
+    statt dessen „kein unerklärter Fund“ (`fehlalarmZaehlung`), und der Bestandsschutz ohne Ausnahme gilt überall.
+    Die Zahl der so ausgenommenen Paare wird gezählt und als exakter Messwert festgehalten.
+    (3) `KvSperrschriftTest.grenzfall_kein_zweiTrennerKeinTrennerOderAndererTrenner`: `sperr(w,"  ")`,
+    `sperr(w,"\t")`, `sperr(w,". ")` → Fund 0,80 (AK-7 bis AK-9); die übrigen Zeilen bleiben „kein Fund“.
+    (4) `KvSperrschriftTest.grenzfall_einZweiterTrennerInDerMitte_beendetDieFolge`: `L A  N R`, `L A<Tab>N R` → Fund
+    0,80 (AK-10). (5) `KvSperrschriftTest.ak12_durchsichtigerLaufZwischenZweiTrennern_keinFund`: der LANR-Fall
+    (unsichtbares Zeichen zwischen zwei Leerzeichen = Lücke nach D-2 (b)) → Fund 0,80 (AK-20). **Korrektur
+    (T-6 Durchlauf 2):** Der IK-Fall `I K N` + Leerzeichen + ZWSP + Leerzeichen + `R N` ist genauso eine Lücke nach
+    D-2 (b) in der Vier-Buchstaben-Folge `iknr` und damit ebenfalls Fund 0,80; „der IK-Fall bleibt“ war ein Versehen
+    der Hauptsitzung.
+    (6) Korpusfall `bekannteGrenze14c-tab` → Fund (AK-9). Testnamen werden passend umbenannt. Außerdem gebilligt:
+    die Umstellung von `ak28c`, `ak28d` und `ak28e_…_D` in `KvKontextLueckenEigenschaftTest` über `pruefeMitWeit`
+    (Erwartung „kein Fund“ entfällt nur, wenn die unabhängige Referenz im Text ein erweitertes Weit-Kontextwort der
+    Art findet; Zähler mit Mindestzahl). Keine andere Bestandserwartung wird geändert.
 10. **Abbruchkriterium Teil 2 (D-8) – gilt in T-6 bis T-10:** Meldet einer der Fehlalarm-Prüfungen
     (`pruefeKeineZusaetzlichenFunde` in `scan`, `KvTrennerFehlalarmTest` AK-15/AK-16, Scannerebene in
     `KvStandLueckenDifferenzTest`) einen zusätzlichen Fund, dann

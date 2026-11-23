@@ -1067,7 +1067,7 @@ class RoundtripKorpusTest {
         f.add(kein("kl-sperr-gegenprobe-einzelbuchstabe-davor", "A L A N R " + LANR_GUELTIG));
         f.add(kein("kl-sperr-gegenprobe-buchstabe-dahinter", "L A N R X " + LANR_GUELTIG));
         f.add(kein("kl-sperr-gegenprobe-ein-buchstabe-weniger", "L A N " + LANR_GUELTIG));
-        f.add(kein("kl-sperr-gegenprobe-zwei-trenner", "L  A N R " + LANR_GUELTIG));
+        f.add(ein("kl-sperr-zwei-trenner-weit-fund", "L  A N R ", LANR_GUELTIG, "LANR", ""));
         f.add(kein("kl-sperr-gegenprobe-unterstrich", "L_A N R " + LANR_GUELTIG));
         f.add(kein("kl-sperr-gegenprobe-zeilenumbruch-leerzeile", "L A N R\n\n" + LANR_GUELTIG));
         f.add(kein("kl-sperr-gegenprobe-vier-fuellwoerter", "L A N R der Praxis von Frau Beispiel " + LANR_GUELTIG));
@@ -1077,8 +1077,8 @@ class RoundtripKorpusTest {
         // 14b: das Nachsatzwort "Nr" ist gesperrt geschrieben und bricht die Sperrfolge; trotzdem Fund (LANR direkt)
         f.add(ein("bekannteGrenze14b-nachsatz-gesperrt-trotzdemFund", "L A N R - N r ", LANR_GUELTIG, "LANR", ""));
         f.add(kein("bekannteGrenze14b-arzt-nr-gesperrt", "A r z t - N r " + LANR_GUELTIG));
-        f.add(kein("bekannteGrenze14c-initialen-lanr", "L. A. N. R. " + LANR_GUELTIG));
-        f.add(kein("bekannteGrenze14c-tab", "L\tA\tN\tR " + LANR_GUELTIG));
+        f.add(ein("bekannteGrenze14cGeschlossen-initialen-lanr", "L. A. N. R. ", LANR_GUELTIG, "LANR", ""));
+        f.add(ein("bekannteGrenze14cGeschlossen-tab", "L\tA\tN\tR ", LANR_GUELTIG, "LANR", ""));
         f.add(kein("bekannteGrenze14d-wiederholt", "L A N R L A N R " + LANR_GUELTIG));
         f.add(kein("bekannteGrenze14e-herr-a-ik", "Herr A I K " + IK_GUELTIG));
         f.add(kein("bekannteGrenze14e-x-y-ik", "X Y I K " + IK_GUELTIG));

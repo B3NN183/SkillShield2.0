@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import de.skillshield.core.RoundtripFuzzTest.Fall;
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.model.FindingType;
+import de.skillshield.core.recognizer.Recognizer;
 import de.skillshield.core.recognizer.TextScanner;
 import de.skillshield.core.recognizer.general.EmailRecognizer;
 import de.skillshield.core.recognizer.general.Ipv4Recognizer;
@@ -169,17 +170,57 @@ class KvStandLueckenDifferenzTest {
     }
 
     /**
-     * T-2 (Teil 1 wirkt nur auf CR UZ+ LF): Auf jedem Text ohne diese Folge sind die Fundlisten des Produkts und der
-     * eingefrorenen Kopie gleich (zusaetzliche Funde gibt es nur mit der Folge).
+     * Paare (Text, Art) ohne {@code CR UZ+ LF}: {Paare ohne erweitertes Weit-Kontextwort mit abweichender Fundliste,
+     * Paare mit erweitertem Weit-Kontextwort der Art, davon mit verletztem strengem Bestandsschutz}. Fuer die Paare
+     * mit Weit-Kontextwort gilt zusaetzlich "kein unerklaerter Fund" ({@link KvTestHilfen#scan} prueft ihn mit dem
+     * Fehlalarm-Pruefstand und bricht sonst ab).
+     */
+    private static int[] ungleichOhneErklaerung(List<String> texte) {
+        int[] zaehler = new int[3];
+        for (String text : texte) {
+            if (enthaeltCrUnsichtbarLf(text)) {
+                continue;
+            }
+            for (KvTestHilfen.Art a : KvTestHilfen.ARTEN) {
+                List<Finding> neu = a.erkenner.detect(text);
+                List<Finding> alt = a.standLuecken.detect(text);
+                if (KvTestHilfen.hatErweitertesWeitKontextwort(KvTestHilfen.weitFolgenReferenz(text), a)) {
+                    zaehler[1]++;
+                    KvTestHilfen.scan(a, text);
+                    zaehler[2] += KvTestHilfen.verletztBestandsschutzOhneAusnahme(alt, neu) ? 1 : 0;
+                } else if (!neu.equals(alt)) {
+                    zaehler[0]++;
+                }
+            }
+        }
+        return zaehler;
+    }
+
+    /**
+     * T-2 (Teil 1 wirkt nur auf CR UZ+ LF) mit Teil 2 (Plan 9b): Auf jedem Text ohne diese Folge und ohne erweitertes
+     * Weit-Kontextwort der Art sind die Fundlisten des Produkts und der eingefrorenen Kopie gleich. Paare (Text, Art)
+     * mit erweitertem Weit-Kontextwort (Teil 2, D-2/D-3) sind davon ausgenommen und werden stattdessen auf "kein
+     * unerklaerter Fund" und strengen Bestandsschutz geprueft; ihre Zahl je Textmenge ist ein exakter Messwert (fester
+     * Seed, Kopie und Generatoren sind eingefroren) und haelt die Ausnahme eng.
      */
     @Test
-    void t2_zusaetzlicheFundeNurInTextenMitCrUnsichtbarLf() {
-        assertEquals(0, ungleicheTexte(teil1())[0], "Teil 1: Abweichung ohne die Folge");
-        assertEquals(0, ungleicheTexte(teil1b())[0], "Teil 1b: Abweichung ohne die Folge");
-        assertEquals(0, ungleicheTexte(TEIL_1C)[0], "Teil 1c: Abweichung ohne die Folge");
-        assertEquals(0, ungleicheTexte(TEIL_1D)[0], "Teil 1d: Abweichung ohne die Folge");
-        assertEquals(0, ungleicheTexte(KvDifferenzTest.korpus())[0], "Korpus: Abweichung ohne die Folge");
-        assertEquals(0, ungleicheTexte(GENERATOREN)[0], "Generatoren: Abweichung ohne die Folge");
+    void t2_zusaetzlicheFundeNurInTextenMitCrUnsichtbarLfOderMitErweitertemWeitKontextwort() {
+        List<List<String>> mengen = List.of(teil1(), teil1b(), TEIL_1C, TEIL_1D, KvDifferenzTest.korpus(), GENERATOREN);
+        String[] namen = {"Teil 1", "Teil 1b", "Teil 1c", "Teil 1d", "Korpus", "Generatoren"};
+        // Messwerte je Textmenge (gleiche Reihenfolge wie "namen"): Zahl der Paare (Text, Art) ohne CR UZ+ LF mit
+        // erweitertem Weit-Kontextwort der Art (Zaehler z[i][1] aus ungleichOhneErklaerung), fester Seed.
+        int[] weitKontextwort = {0, 0, 72, 0, 3, 294};
+        int[][] z = new int[namen.length][];
+        StringBuilder alle = new StringBuilder();
+        for (int i = 0; i < namen.length; i++) {
+            z[i] = ungleichOhneErklaerung(mengen.get(i));
+            alle.append(namen[i]).append(" ").append(z[i][1]).append("; ");
+        }
+        for (int i = 0; i < namen.length; i++) {
+            assertEquals(0, z[i][0], namen[i] + ": Abweichung ohne die Folge und ohne Weit-Kontextwort");
+            assertEquals(0, z[i][2], namen[i] + ": Bestandsschutz verletzt");
+            assertEquals(weitKontextwort[i], z[i][1], namen[i] + ": Paare mit Weit-Kontextwort; " + alle);
+        }
     }
 
     /**
@@ -656,5 +697,164 @@ class KvStandLueckenDifferenzTest {
     void selbsttest_zeichenkonstanten() {
         assertEquals(0x200E, KvTestHilfen.LRM);
         assertEquals(0x2002, KvTestHilfen.EN_SPACE);
+    }
+
+    // ------------------------------------------------------------------ T-6: Abdeckung je KV-Typ (Plan 9a, Luecke b)
+
+    private static boolean[] abdeckungTyp(int laenge, List<Finding> funde, FindingType typ) {
+        return abdeckung(laenge, funde.stream().filter(f -> f.type() == typ).toList());
+    }
+
+    /**
+     * Zahl der Positionen, die {@code neu} von einem Fund des Typs {@code typ} abdeckt, die die Kopie weder auf dem
+     * Originaltext noch auf der Wort-Vergleichsform beider Arten mit demselben Typ abdeckt: Eine neu von Typ X
+     * abgedeckte Position muss die Kopie auf der Vergleichsform mit Typ X abdecken (LANR und IK getrennt).
+     */
+    private static int neuUnerklaertJeTyp(TextScanner neu, String text, FindingType typ) {
+        boolean[] jetzt = abdeckungTyp(text.length(), neu.scan(text), typ);
+        boolean[] alt = abdeckungTyp(text.length(), ALT.scan(text), typ);
+        KvTestHilfen.Vergleichsform vf = KvTestHilfen.wortVergleichsform(text, KvTestHilfen.LANR_ART,
+                KvTestHilfen.IK_ART);
+        boolean[] erklaert = abdeckungTyp(text.length(), vf.aufOriginal(ALT.scan(vf.text())), typ);
+        int zahl = 0;
+        for (int i = 0; i < text.length(); i++) {
+            zahl += jetzt[i] && !alt[i] && !erklaert[i] ? 1 : 0;
+        }
+        return zahl;
+    }
+
+    /** Zahl der Positionen, die {@code neu} von Typ {@code typ} abdeckt und die Kopie nicht (ohne Erklaerung). */
+    private static int neuAbgedecktJeTyp(TextScanner neu, String text, FindingType typ) {
+        boolean[] jetzt = abdeckungTyp(text.length(), neu.scan(text), typ);
+        boolean[] alt = abdeckungTyp(text.length(), ALT.scan(text), typ);
+        int zahl = 0;
+        for (int i = 0; i < text.length(); i++) {
+            zahl += jetzt[i] && !alt[i] ? 1 : 0;
+        }
+        return zahl;
+    }
+
+    /**
+     * Je Textmenge, Texte ohne {@code CR UZ+ LF}: {geprueft, Texte mit unerklaert neu abgedeckter LANR-Position,
+     * dasselbe fuer IK, Texte mit neu abgedeckter LANR-Position, dasselbe fuer IK}.
+     */
+    private static int[] jeKvTyp(TextScanner neu, List<String> texte) {
+        int[] z = new int[5];
+        FindingType[] typen = {FindingType.LANR, FindingType.IK};
+        for (String text : texte) {
+            if (enthaeltCrUnsichtbarLf(text)) {
+                continue;
+            }
+            z[0]++;
+            for (int k = 0; k < typen.length; k++) {
+                z[1 + k] += neuUnerklaertJeTyp(neu, text, typen[k]) > 0 ? 1 : 0;
+                z[3 + k] += neuAbgedecktJeTyp(neu, text, typen[k]) > 0 ? 1 : 0;
+            }
+        }
+        return z;
+    }
+
+    private static List<String> t6Texte(String[] formen, String[] nummern) {
+        List<String> texte = new ArrayList<>();
+        for (String form : formen) {
+            for (String nummer : nummern) {
+                texte.add(form + nummer);
+            }
+        }
+        return texte;
+    }
+
+    private static final String[] T6_LANR_FORMEN = {"L. A. N. R. ", "L. A. N. R.: ", "l. a. n. r. ", "L. A. N. R ",
+        "L.  A.  N.  R. ", "L  A  N  R ", "L   A   N   R ", "L\tA\tN\tR\t", "L. A N  R ", "A. R. Z. T. N. R. ",
+        "A  R  Z  T  N  U  M  M  E  R ", "L. A. N. R. N. R. "};
+    private static final String[] T6_IK_FORMEN = {"I. K. N. R. ", "I  K  N  R ", "I\tK\tN\tR\t",
+        "I. K. N. U. M. M. E. R. ", "I  K  N  U  M  M  E  R ", "i. k. n. r. ", "I.  K.  N.  R. ", "I. K N  R "};
+
+    /**
+     * Abdeckung je KV-Typ (Plan 9a, Restluecke (b)): Der Scanner deckt nur Positionen neu ab, die die Kopie auf der
+     * Wort-Vergleichsform mit demselben Typ abdeckt; LANR und IK werden getrennt geprueft, auch mit der Nummer der
+     * jeweils anderen Art hinter dem Kontextwort (der Typ folgt dem Kontextwort, nicht der Nummer). Mindestzahlen: auf
+     * den festen Texten hat jeder Text einen Zugewinn des richtigen Typs; auf den Textmengen mit mehr als 30 % Abstand
+     * zu den Messwerten (Texte mit LANR- bzw. IK-Zugewinn: Teil 1c 53 / 0, Korpus 3 / 0, Generatoren 102 / 49, sonst 0;
+     * Untergrenzen in {@link #MIN_ZUGEWINN_LANR} und {@link #MIN_ZUGEWINN_IK}, gleiche Reihenfolge wie die Mengen).
+     */
+    @Test
+    void t6_differenz_scannerebene_jeKvTyp_neuAbgedeckteHatDenTypDerWortVergleichsform() {
+        String[] namen = {"Teil 1", "Teil 1b", "Teil 1c", "Teil 1d", "Korpus", "Generatoren"};
+        List<List<String>> mengen = List.of(teil1(), teil1b(), TEIL_1C, TEIL_1D, KvDifferenzTest.korpus(), GENERATOREN);
+        int[][] ergebnis = new int[namen.length][];
+        StringBuilder alle = new StringBuilder();
+        for (int i = 0; i < namen.length; i++) {
+            ergebnis[i] = jeKvTyp(NEU, mengen.get(i));
+            alle.append(namen[i]).append(": geprueft ").append(ergebnis[i][0]).append(", Zugewinn LANR ")
+                    .append(ergebnis[i][3]).append(", IK ").append(ergebnis[i][4]).append("; ");
+        }
+        for (int i = 0; i < namen.length; i++) {
+            assertEquals(0, ergebnis[i][1], namen[i] + ": unerklaert neu abgedeckte LANR-Position; " + alle);
+            assertEquals(0, ergebnis[i][2], namen[i] + ": unerklaert neu abgedeckte IK-Position; " + alle);
+            assertTrue(ergebnis[i][3] >= MIN_ZUGEWINN_LANR[i], namen[i] + ": zu wenig LANR-Zugewinn; " + alle);
+            assertTrue(ergebnis[i][4] >= MIN_ZUGEWINN_IK[i], namen[i] + ": zu wenig IK-Zugewinn; " + alle);
+        }
+        String[] beide = {LANR_GUELTIG, IK_GUELTIG};
+        List<String> lanr = t6Texte(T6_LANR_FORMEN, beide);
+        List<String> ik = t6Texte(T6_IK_FORMEN, beide);
+        int[] zl = jeKvTyp(NEU, lanr);
+        assertEquals(lanr.size(), zl[0], "feste LANR-Texte geprueft");
+        assertEquals(0, zl[1] + zl[2], "feste LANR-Texte: unerklaerte Position");
+        assertEquals(lanr.size(), zl[3], "feste LANR-Texte: jeder hat einen LANR-Zugewinn");
+        assertEquals(0, zl[4], "feste LANR-Texte: kein IK-Zugewinn");
+        int[] zi = jeKvTyp(NEU, ik);
+        assertEquals(ik.size(), zi[0], "feste IK-Texte geprueft");
+        assertEquals(0, zi[1] + zi[2], "feste IK-Texte: unerklaerte Position");
+        assertEquals(ik.size(), zi[4], "feste IK-Texte: jeder hat einen IK-Zugewinn");
+        assertEquals(0, zi[3], "feste IK-Texte: kein LANR-Zugewinn");
+    }
+
+    private static final int[] MIN_ZUGEWINN_LANR = {0, 0, 35, 0, 2, 70};
+    private static final int[] MIN_ZUGEWINN_IK = {0, 0, 0, 0, 0, 34};
+
+    /** Ein Scanner, dessen Erkenner einer Art die Funde der anderen Art (Vergleichsform) mit falschem Typ liefert. */
+    private static TextScanner scannerMitVertauschtemTyp(boolean ikAlsLanr) {
+        KvTestHilfen.Art quelle = ikAlsLanr ? KvTestHilfen.IK_ART : KvTestHilfen.LANR_ART;
+        FindingType typ = ikAlsLanr ? FindingType.LANR : FindingType.IK;
+        Recognizer vertauscht = text -> {
+            KvTestHilfen.Vergleichsform vf = KvTestHilfen.wortVergleichsform(text, KvTestHilfen.LANR_ART,
+                    KvTestHilfen.IK_ART);
+            List<Finding> funde = new ArrayList<>();
+            for (Finding f : vf.aufOriginal(quelle.standLuecken.detect(vf.text()))) {
+                funde.add(new Finding(typ, f.originalValue(), f.start(), f.end(), f.confidence(), f.source()));
+            }
+            return funde;
+        };
+        return new TextScanner(List.of(new EmailRecognizer(), new Ipv4Recognizer(), new UrlRecognizer(),
+                new PathRecognizer(), ikAlsLanr ? vertauscht : KvStandLuecken.lanr(),
+                ikAlsLanr ? KvStandLuecken.ik() : vertauscht));
+    }
+
+    /**
+     * Selbsttest zu {@link #neuUnerklaertJeTyp}: Ein LANR-Fund hinter {@code I. K. N. R. <IK>} (der Typ folgt dem
+     * Kontextwort, hier IK) und ein IK-Fund hinter {@code L. A. N. R. <LANR>} werden gemeldet; ein korrektes Teil 2 und
+     * das Produkt nie. Die Abdeckung insgesamt waere gleich (nur der Typ ist falsch).
+     */
+    @Test
+    void t6_selbsttest_scannerebene_jeKvTyp_falscherTypWirdGemeldet() {
+        String ikText = "I. K. N. R. " + IK_GUELTIG;
+        String lanrText = "L. A. N. R. " + LANR_GUELTIG;
+        TextScanner ikAlsLanr = scannerMitVertauschtemTyp(true);
+        TextScanner lanrAlsIk = scannerMitVertauschtemTyp(false);
+        assertTrue(neuUnerklaertJeTyp(ikAlsLanr, ikText, FindingType.LANR) > 0, "LANR-Fund hinter I. K. N. R. ");
+        assertEquals(0, neuUnerklaertJeTyp(ikAlsLanr, ikText, FindingType.IK), "kein IK-Fund im Fehlerscanner");
+        assertTrue(neuUnerklaertJeTyp(lanrAlsIk, lanrText, FindingType.IK) > 0, "IK-Fund hinter L. A. N. R. ");
+        assertEquals(0, neuUnerklaertJeTyp(lanrAlsIk, lanrText, FindingType.LANR), "kein LANR-Fund im Fehlerscanner");
+        assertEquals(0, verloreneTexte(ikAlsLanr, List.of(ikText)), "die Abdeckung insgesamt geht nicht verloren");
+        for (String text : List.of(ikText, lanrText)) {
+            for (FindingType typ : new FindingType[] {FindingType.LANR, FindingType.IK}) {
+                assertEquals(0, neuUnerklaertJeTyp(NEU, text, typ), "Produkt: unerklaerte Position " + typ);
+                assertEquals(0, neuUnerklaertJeTyp(scannerRichtig(), text, typ), "korrektes Teil 2 " + typ);
+            }
+        }
+        assertTrue(neuAbgedecktJeTyp(NEU, ikText, FindingType.IK) > 0, "Produkt deckt die IK-Nummer neu ab");
+        assertTrue(neuAbgedecktJeTyp(NEU, lanrText, FindingType.LANR) > 0, "Produkt deckt die LANR-Nummer neu ab");
+        assertEquals(0, neuAbgedecktJeTyp(NEU, ikText, FindingType.LANR), "Produkt: kein LANR-Zugewinn bei IK");
     }
 }

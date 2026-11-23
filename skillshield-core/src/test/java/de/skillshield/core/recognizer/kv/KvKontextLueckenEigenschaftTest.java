@@ -908,6 +908,22 @@ public class KvKontextLueckenEigenschaftTest {
         assertEquals(ist, art.erkenner.detect(text), ort + " Determinismus");
     }
 
+    /**
+     * Wie {@link #pruefe}. Ist die Erwartung "kein Fund" und findet die Referenz im Text ein Weit-Kontextwort der Art
+     * mit erweiterter Luecke (Grenze 14c, seit kv-trenner-und-umbruch T-6 geschlossen), entfaellt die Erwartung: Der
+     * Text laeuft nur durch {@code scan} (Bestandsschutz, Fehlalarm-Pruefstand) und wird unter {@code zaehler}
+     * gezaehlt.
+     */
+    private static void pruefeMitWeit(Art art, String text, List<Erw> erwartet, String ort, Statistik st,
+            String zaehler) {
+        if (erwartet.isEmpty() && hatErweitertesWeitKontextwort(weitFolgenReferenz(text), art)) {
+            scan(art, text);
+            st.zaehle(zaehler);
+            return;
+        }
+        pruefe(art, text, erwartet, ort);
+    }
+
     private static String ort(long seed, int iteration) {
         return "Seed " + seed + " Iteration " + iteration;
     }
@@ -1013,7 +1029,7 @@ public class KvKontextLueckenEigenschaftTest {
                 assertEquals(0, sperrKontextwoerterReferenz(text, art).size(), ort + " Generator " + art.name);
             }
             for (Art art : ARTEN) {
-                pruefe(art, text, List.of(), ort + " " + art.name);
+                pruefeMitWeit(art, text, List.of(), ort + " " + art.name, st, "c.weitKontextwort");
             }
         }
         st.mindestens("c.neuGezogen", 200);
@@ -1022,6 +1038,7 @@ public class KvKontextLueckenEigenschaftTest {
         st.mindestens("c.nummer", 500);
         st.mindestens("c.rauschkette", 200);
         st.mindestens("c.mitUnsichtbaren", 150);
+        st.mindestens("c.weitKontextwort", 1);
         for (int m = 0; m < 8; m++) {
             st.mindestens("c.gezogen.muster." + m, 200);
         }
@@ -1037,7 +1054,7 @@ public class KvKontextLueckenEigenschaftTest {
             String ort = ort(SEED_D, it);
             Art art = artVon(it);
             Bauer b = bauD(r, it, st);
-            pruefe(art, b.sb.toString(), b.erwartet, ort);
+            pruefeMitWeit(art, b.sb.toString(), b.erwartet, ort, st, "d.weitKontextwort");
         }
         for (int id = 0; id < 9 + 3 + 18; id++) {
             st.mindestens("d.muster." + id, 40);
@@ -1050,6 +1067,7 @@ public class KvKontextLueckenEigenschaftTest {
         }
         st.mindestens("d.kw.gesperrt", 100);
         st.mindestens("d.kw.normal", 300);
+        st.mindestens("d.weitKontextwort", 1);
     }
 
     // ------------------------------------------------------------------ (e) Invarianz gegen unsichtbare Zeichen
@@ -1163,7 +1181,11 @@ public class KvKontextLueckenEigenschaftTest {
                 st.zaehle("e.textMitZwischenCrLf");
             }
             // gleiche Funde wie im ungestoerten Text (Position verschoben); dessen Fundliste ist die Konstruktion
-            pruefe(art, g.text(), verschiebe(b.erwartet, g.positionen()), ort);
+            if (modus == 'd') {
+                pruefeMitWeit(art, g.text(), verschiebe(b.erwartet, g.positionen()), ort, st, "e.weitKontextwort");
+            } else {
+                pruefe(art, g.text(), verschiebe(b.erwartet, g.positionen()), ort);
+            }
             st.z.merge("e.funde", b.erwartet.size(), Integer::sum);
         }
         st.mindestens("e.eingestreut", TEXTE);
@@ -1178,6 +1200,9 @@ public class KvKontextLueckenEigenschaftTest {
         }
         if (modus != 'd') {
             st.mindestens("e.funde", 1_000);
+        }
+        if (modus == 'd') {
+            st.mindestens("e.weitKontextwort", 1);
         }
     }
 
