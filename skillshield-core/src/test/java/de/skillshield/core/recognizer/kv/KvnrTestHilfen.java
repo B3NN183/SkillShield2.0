@@ -1,5 +1,6 @@
 package de.skillshield.core.recognizer.kv;
 
+import static de.skillshield.core.recognizer.kv.KvTestHilfen.NBSP;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -22,12 +23,32 @@ final class KvnrTestHilfen {
     static final double PZ_UNGUELTIG = 0.50;
     static final double FORM = 0.40;
 
+    /** Gruppentrenner einer Nummer (D-1): Leerzeichen, geschuetztes Leerzeichen, Bindestrich, Punkt, Schraegstrich. */
+    static final String[] TRENNER = {" ", String.valueOf(NBSP), "-", ".", "/"};
+    /** Feste Zerlegungen der neun Ziffern in Gruppen. */
+    static final int[][] GRUPPEN = {{3, 3, 3}, {4, 5}, {1, 8}, {5, 4}, {2, 7}, {2, 2, 5}};
+
     private static final KvnrRecognizer ERKENNER = new KvnrRecognizer();
     private static final int NEUN = 9;
     private static final int MIN_ZIFFERN = 6;
     private static final int MAX_ZIFFERN = 12;
 
     private KvnrTestHilfen() {
+    }
+
+    /** Die Ziffern in Gruppen der angegebenen Groessen, je zwei Gruppen durch {@code trenner} verbunden. */
+    static String gruppiert(String ziffern, int[] gruppen, String trenner) {
+        StringBuilder sb = new StringBuilder();
+        int pos = 0;
+        for (int i = 0; i < gruppen.length; i++) {
+            if (i > 0) {
+                sb.append(trenner);
+            }
+            sb.append(ziffern, pos, pos + gruppen[i]);
+            pos += gruppen[i];
+        }
+        assertEquals(ziffern.length(), pos, "Gruppen ergeben nicht alle Ziffern");
+        return sb.toString();
     }
 
     /**
@@ -66,8 +87,8 @@ final class KvnrTestHilfen {
     /**
      * Scant mit dem {@link KvnrRecognizer}. Vorher muss der Text den Laufzeit-Waechter
      * {@link KvnrSynthetischWaechter#assertKvnrSynthetisch} bestehen; danach gelten die Invarianten: Typ KVNR,
-     * Teilstring, sortiert, ueberlappungsfrei, Quelle und Konfidenz passend zur Nummer des Fundes (Konfidenz hoechstens
-     * die des direkten Kontexts).
+     * Teilstring, sortiert, ueberlappungsfrei, Quelle und Konfidenz passend zur Nummer des Fundes (Konfidenz
+     * hoechstens die des direkten Kontexts).
      *
      * <p><b>Warnhinweis:</b> Der Laufzeit-Waechter wertet jeden einzelnen Buchstaben, einen optionalen Trenner und
      * neun Ziffern als KVNR-Form, also auch den Endbuchstaben eines Kontextworts vor einer reinen LANR-, IK- oder

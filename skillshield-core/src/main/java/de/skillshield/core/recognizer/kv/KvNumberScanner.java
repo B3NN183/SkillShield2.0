@@ -83,7 +83,15 @@ import java.util.Set;
  * (3) Das Vorwort {@code kv} mit Nachsatzwort ({@code KV-Nr.}, {@code KV-Nummer}, {@code KV Nr.}) beginnt einen
  * Kontext mit dem Merker {@code nurBuchstabenform}: Eine Ziffernfolge ohne Buchstaben ist dort bei {@code aktiv}
  * ein Fuellwort, und beim nachgestellten Kontext werden nur offene Segmente mit einem Buchstaben am Anfang ausgegeben
- * (Grenze G-K7). Neun Ziffern mit Buchstaben und gueltiger Pruefziffer ({@link KvnrPruefziffer}) haben bei direktem
+ * (Grenze G-K7). (4) Nachgestelltes Kompositum (Nachtrag 2 zu T-5): Steht hinter offenen Segmenten ein Wort, auf das
+ * unmittelbar (ein Abkuerzungspunkt ist erlaubt) ein {@code -} und unmittelbar danach ein Kontextwort der Art oder ein
+ * Vorwort mit {@code Nr.}/{@code Nummer} folgt ({@code Patienten-KVNR}, {@code Pat.-KVNR},
+ * {@code eGK-Versichertennummer}), ist das Wort kein Fuellwort und leert die offenen Segmente nicht; sie werden beim
+ * Kontextwort wie beim einfachen nachgestellten Kontextwort ausgewertet (Klammer oder ohne 0,80, hinter einem Komma
+ * oder Semikolon 0,60). Zwei Woerter ({@code des Patienten-KVNR}), ein Strich mit Leerraum und ein Wort davor, das
+ * nicht zu einem Kontextwort fuehrt ({@code Patienten-VKNR}), bleiben "Wort dazwischen: kein Fund". Die
+ * vorangestellte Form ({@code Pat.-KVNR: N}) und LANR und IK sind unveraendert. Neun Ziffern mit Buchstaben und
+ * gueltiger Pruefziffer ({@link KvnrPruefziffer}) haben bei direktem
  * Kontext 0,95, sonst gelten die Stufen von LANR und IK (0,80, Komma 0,60, gesperrt hoechstens 0,80); ungueltige
  * Pruefziffer 0,50 ({@code kvnr-pruefziffer-ungueltig}); Buchstabe mit 6 bis 12 Ziffern ausser neun und jede reine
  * Ziffernfolge von 6 bis 12 Ziffern (auch neun) 0,40 ({@code kvnr-form-abweichend}). Der Fundbereich beginnt beim
@@ -249,31 +257,39 @@ import java.util.Set;
  * der Buchstaben seit dem Kontextwort (hoechstens sechs) erkannt, ohne Vorausschau. Hinter einem Vorwort am Ende
  * eines Laufs wird der Anfang des folgenden Laufs fuer das Nachsatzwort einmal vorausgelesen (hoechstens sechs
  * Buchstaben, abgebrochen beim ersten Widerspruch); die Hauptschleife liest ihn danach noch einmal, jedes Zeichen wird
- * damit hoechstens zweimal beruehrt, und da der Vorgriff nur am Ende eines Laufs mit Vorwort beginnt, ueberlappen
- * sich die Vorgriffe nicht. Die Praefixsuche einer Kette liest den ersten Block ganz und danach hoechstens 13 Ziffern
- * und 13 Trenner; da der Durchlauf mindestens hinter dem ersten Block weitergeht, wird jeder Block hoechstens
- * 13-mal beruehrt. Nur bei der KVNR liest ein Vorgriff an jedem Laufanfang den Lauf unsichtbarer Zeichen bis zum
- * ersten anderen Zeichen und einen festen Rest (Buchstabe, Trenner, Ziffer); der Lauf wird danach uebersprungen oder
- * einmal von der Hauptschleife gelesen, jedes Zeichen also hoechstens zweimal. Der Zeilenanfang-Merker
- * ({@code zeilenanfang}) wird vorwaerts mitgefuehrt, nicht rueckwaerts gesucht. Der Merker {@code crOffen}
- * (CR UZ+ LF als ein Umbruch) ist ein einzelnes Flag, wird je Zeichen in konstanter Zeit gesetzt oder
- * geloescht und braucht weder Vorgriff noch Rueckkehr; {@code CR} gefolgt von einer Million unsichtbarer Zeichen
- * ist ein einziger Lauf. Der Weit-Verfolger (erweiterte Trenner) macht je Zeichen
- * ausserhalb eines Laufs und je Lauf ebenfalls konstante Arbeit und setzt die Leseposition nie zurueck: Er fuehrt einen
- * Puffer fester Groesse (27 Buchstaben) plus Zaehler, hoechstens drei Leerraumzeichen je Luecke (danach endet die
- * Folge, weitere Leerzeichen kosten je Zeichen konstante Zeit), das Abbild der offenen Segmente (sechs Werte) und
- * vergleicht einmal je Folgenende hoechstens 27 Zeichen mit acht Eintraegen. Der Vorgriff {@code vorausArt} (Lauf
- * hinter einer Luecke bis zum zweiten Buchstaben oder Laufende) ist fuer beide Verfolger gemeinsam und wird je
- * Laufanfang hoechstens einmal ausgefuehrt, nur wenn der Weit-Verfolger in einer Luecke steht; da ein Lauf mit mehreren
- * Buchstaben jede Folge beendet, trifft er nie denselben Lauf wie der Nachsatz-Vorgriff. Der Sperr-Verfolger macht
- * je Zeichen ausserhalb eines Laufs und je Lauf konstante Arbeit und setzt die Leseposition nie zurueck: Er fuehrt
- * einen Puffer fester Groesse (27 Buchstaben) plus Zaehler (laengere Folgen koennen keinem Kontextwort gleichen)
+ * damit nur eine feste Zahl von Durchgaengen beruehrt, und da der Vorgriff nur am Ende eines Laufs mit Vorwort
+ * beginnt, ueberlappen sich die Vorgriffe nicht. Die Praefixsuche einer Kette liest den ersten Block ganz und
+ * danach hoechstens 13 Ziffern und 13 Trenner; da der Durchlauf mindestens hinter dem ersten Block weitergeht,
+ * wird jeder Block hoechstens 13-mal beruehrt. Nur bei der KVNR liest ein Vorgriff an jedem Laufanfang den Lauf
+ * unsichtbarer Zeichen bis zum ersten anderen Zeichen und einen festen Rest (Buchstabe, Trenner, Ziffer); der Lauf
+ * wird danach uebersprungen oder einmal von der Hauptschleife gelesen; die Zahl der Durchgaenge je Zeichen ist fest
+ * und unabhaengig von der Textlaenge (hoechstens vier: {@code buchstabenAnfang}, {@code nachsatzFolgt},
+ * {@code vorausArt}, Lauf). Der Vorgriff auf ein nachgestelltes Kompositum ({@code kompositumVorKontextwort}) laeuft
+ * nur bei der KVNR, nur bei offenen Segmenten und je Wort hoechstens einmal; er liest einen Punkt, einen Strich und
+ * hoechstens 28 Buchstaben (danach das Nachsatzwort mit hoechstens sechs), springt bei einem Treffer hinter den Strich
+ * und leert danach die offenen Segmente nicht, bei keinem Treffer leert das Wort sie wie bisher; ein Treffer beginnt
+ * unmittelbar danach den Kontext (leert sie), sodass der Vorgriff nie zweimal auf dieselben Zeichen folgt.
+ * Der Zeilenanfang-Merker ({@code zeilenanfang}) wird vorwaerts mitgefuehrt, nicht
+ * rueckwaerts gesucht. Der Merker {@code crOffen} (CR UZ+ LF als ein Umbruch) ist ein einzelnes Flag, wird je
+ * Zeichen in konstanter Zeit gesetzt oder geloescht und braucht weder Vorgriff noch Rueckkehr; {@code CR} gefolgt
+ * von einer Million unsichtbarer Zeichen ist ein einziger Lauf. Der Weit-Verfolger (erweiterte Trenner) macht je
+ * Zeichen ausserhalb eines Laufs und je Lauf ebenfalls konstante Arbeit und setzt die Leseposition nie zurueck: Er
+ * fuehrt einen Puffer fester Groesse (27 Buchstaben) plus Zaehler, hoechstens drei Leerraumzeichen je Luecke (danach
+ * endet die Folge, weitere Leerzeichen kosten je Zeichen konstante Zeit), das Abbild der offenen Segmente (sechs
+ * Werte) und vergleicht einmal je Folgenende hoechstens 27 Zeichen mit acht Eintraegen. Der Vorgriff
+ * {@code vorausArt} (Lauf hinter einer Luecke bis zum zweiten Buchstaben oder Laufende) ist fuer beide Verfolger
+ * gemeinsam und wird je Laufanfang hoechstens einmal ausgefuehrt, nur wenn der Weit-Verfolger in einer Luecke steht;
+ * da ein Lauf mit mehreren Buchstaben jede Folge beendet, trifft er nie denselben Lauf wie der Nachsatz-Vorgriff.
+ * Der Sperr-Verfolger macht je Zeichen ausserhalb eines Laufs und je Lauf konstante Arbeit und setzt die
+ * Leseposition nie zurueck: Er fuehrt einen Puffer fester Groesse (27 Buchstaben) plus Zaehler (laengere Folgen
+ * koennen keinem Kontextwort gleichen)
  * und das Abbild der offenen Segmente (sechs Werte, Wiederherstellen O(1)); der Vergleich mit den
  * Kontextwoertern geschieht einmal je Folgenende mit hoechstens 27 Zeichen und acht Eintraegen.
  * Jedes offene Segment wird hoechstens einmal ausgegeben, weil das Ereignis die Folge leert. Der Vorgriff auf
  * Einzelbuchstabe liest nur den einen Lauf hinter einem Sperr-Trenner (bis zum zweiten Buchstaben oder Laufende) und
  * beginnt nie im Lauf des Nachsatz-Vorgriffs (dieser betrifft den Lauf hinter einem Vorwort-Lauf mit mehreren
- * Buchstaben, also ohne laufende Sperrfolge); jedes Zeichen wird damit hoechstens zweimal gelesen. Die Zustandsmerker
+ * Buchstaben, also ohne laufende Sperrfolge); jedes Zeichen wird damit in einer festen,
+ * von der Textlaenge unabhaengigen Zahl von Durchgaengen gelesen. Die Zustandsmerker
  * aendern sich je Ereignis in konstanter Zeit; die Folge der offenen Segmente waechst um drei Zahlen je Segment und
  * wird hoechstens einmal ausgegeben oder verworfen. Gesamtaufwand O(n), Zusatzspeicher O(1)
  * plus Fundliste plus Folge der offenen Segmente. Belegt ist das fuer alle Verfolger, den Merker {@code crOffen}
@@ -511,6 +527,8 @@ final class KvNumberScanner {
          * Zeichen stehen, ein LF danach wird nicht noch einmal gezaehlt. Jedes andere Zeichen loescht ihn.
          */
         private boolean crOffen;
+        /** Position des Kontextworts eines nachgestellten Kompositums (nur KVNR), sonst -1. */
+        private int kompositumWeiter = -1;
 
         /** Offene Segmente als Tripel (Start, Ende, Ziffernzahl). */
         private int[] offenDaten = new int[12];
@@ -607,6 +625,9 @@ final class KvNumberScanner {
                     i = laufMitVerfolger(i);
                     if (buchstaben > 0) {
                         crOffen = false; // ein Buchstabe oder Kombinationszeichen: kein CR UZ+ LF mehr (D-1)
+                    }
+                    if (kompositumWeiter >= 0) {
+                        i = kompositumUeberspringen(i);
                     }
                     continue;
                 }
@@ -1158,10 +1179,69 @@ final class KvNumberScanner {
                 }
             } else if (istUnd() && offenAnzahl > 0 && offenKlammern == 0 && !offenUnd) {
                 offenUnd = true;
+            } else if (kompositumVorKontextwort(p)) {
+                // Wort eines nachgestellten Kompositums: kein Fuellwort, die offenen Segmente bleiben stehen
+                return p;
             } else {
                 fuellwort();
             }
             return p;
+        }
+
+        /**
+         * Nur Buchstabenform (KVNR): Steht hinter dem Lauf, der bei {@code ende} endet, unmittelbar (ein
+         * Abkuerzungspunkt ist erlaubt) ein {@code -} und unmittelbar danach ein Kontextwort der Art (genau dieser
+         * Lauf) oder ein Vorwort mit Nachsatzwort ({@code Patienten-KVNR}, {@code Pat.-KVNR},
+         * {@code eGK-Versichertennummer}), zaehlt das Wort davor nicht als Fuellwort, solange Segmente offen sind;
+         * {@link #kompositumWeiter} merkt die Position des Kontextworts. Der Vorgriff liest den Punkt, den Strich und
+         * hoechstens {@code MAX_KONTEXTWORT + 1} Buchstaben, danach das Nachsatzwort (hoechstens sechs Buchstaben),
+         * und nur, wenn Segmente offen sind; der Durchlauf springt danach hinter den Strich, jedes Zeichen wird also
+         * nur eine feste Zahl von Malen gelesen.
+         */
+        private boolean kompositumVorKontextwort(int ende) {
+            if (!art.buchstabenform() || offenAnzahl == 0) {
+                return false;
+            }
+            int j = ende;
+            if (j < n && text.charAt(j) == '.') {
+                j++;
+            }
+            if (j >= n || text.charAt(j) != '-') {
+                return false;
+            }
+            j++;
+            char[] wort = new char[MAX_KONTEXTWORT];
+            int len = 0;
+            int k = j;
+            while (k < n && istAsciiBuchstabe(text.charAt(k))) {
+                if (len == MAX_KONTEXTWORT) {
+                    return false;
+                }
+                wort[len++] = vergleichszeichen(text.charAt(k));
+                k++;
+            }
+            if (len == 0 || (k < n && istBuchstabe(text.codePointAt(k)))) {
+                return false;
+            }
+            boolean kontext = kontextLaenge[len] && istKontextwort(wort, len)
+                    || vorwortLaenge[len] && art.vorwoerter().contains(new String(wort, 0, len)) && nachsatzFolgt(k);
+            if (kontext) {
+                kompositumWeiter = j;
+            }
+            return kontext;
+        }
+
+        /** Springt hinter den Punkt und den Strich des Kompositums; die Verfolger sehen sie wie sonst auch. */
+        private int kompositumUeberspringen(int von) {
+            int bis = kompositumWeiter;
+            kompositumWeiter = -1;
+            for (int p = von; p < bis; p++) {
+                sperrSchritt(text.charAt(p));
+                weitSchritt(text.charAt(p));
+            }
+            crOffen = false;
+            zeilenanfang = false;
+            return bis;
         }
 
         /** Ist das Vorwort am Ende des Fensters (Laenge {@code laenge}) eines aus {@code nurBuchstabenVorwoerter}? */
@@ -1351,7 +1431,8 @@ final class KvNumberScanner {
          * Zeichen und dann genau einem ASCII-Buchstaben mit folgender Ziffer oder Trenner und Ziffer besteht (Anfang
          * einer Nummer in Buchstabenform), sonst -1. Der Vorgriff liest nur den Lauf unsichtbarer Zeichen und einen
          * festen Rest und beginnt nur an einem Laufanfang: Der Lauf wird danach entweder uebersprungen oder einmal von
-         * {@link #laufMitVerfolger(int)} gelesen, jedes Zeichen also hoechstens zweimal.
+         * {@link #laufMitVerfolger(int)} gelesen; die Zahl der Durchgaenge je Zeichen ist fest und von der
+         * Textlaenge unabhaengig.
          *
          * <p>G-K5: Steht die Sperrfolge im Zustand "Trenner" und ergibt sie mit diesem Buchstaben ein Kontextwort
          * der Art, und folgt auf den Buchstaben ein Trenner ({@code K V N R 1234...}), ist er der letzte Buchstabe

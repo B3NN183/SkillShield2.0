@@ -631,6 +631,75 @@ class KvnrRecognizerTest {
         assertEquals(anzahl, ist, "Fundzahl");
     }
 
+    // ------------------------------------------------------------------ Umbruch (CR) mit unsichtbaren Zeichen
+
+    /** Wie ohne {@code uz}, nur um dessen Laenge laenger: gleiche Fundzahl und Konfidenz, Start verschoben. */
+    private static void assertWieOhneUnsichtbare(String vor, String uz, String wert, String nach) {
+        List<Finding> mit = scanKvnr(vor + uz + wert + nach);
+        List<Finding> ohne = scanKvnr(vor + wert + nach);
+        assertEquals(ohne.size(), mit.size(), "Fundzahl weicht von der Variante ohne unsichtbare Zeichen ab");
+        for (int i = 0; i < ohne.size(); i++) {
+            assertEquals(ohne.get(i).confidence(), mit.get(i).confidence(), "Konfidenz");
+            assertEquals(ohne.get(i).start() + uz.length(), mit.get(i).start(), "Start");
+            assertTrue(ohne.get(i).originalValue().equals(mit.get(i).originalValue()), "Originalwert");
+        }
+    }
+
+    @Test
+    void umbruchCrDannUnsichtbaresZeichenDannDirektDerBuchstabe_ohneLf_einUmbruchEinFund() {
+        for (String uz : unsichtbareFolgen()) {
+            for (String vor : List.of("KVNR:\r", "KVNR\r", "Versichertennummer: \r", "KV-Nr.\r", "K V N R\r",
+                    "eGK-Nummer:\r")) {
+                assertFund(vor + uz, G, "", 0.80, ConfidenceLevel.WAHRSCHEINLICH, QUELLE);
+                assertWieOhneUnsichtbare(vor, uz, G, ", Rest");
+            }
+        }
+    }
+
+    @Test
+    void umbruchCrUnsichtbaresZeichenLfDannKvnr_einUmbruchEinFund_wieOhneUnsichtbareZeichen() {
+        for (String uz : unsichtbareFolgen()) {
+            for (String vor : List.of("KVNR:\r", "KVNR\r", "Versichertennummer: \r", "KV-Nr.\r", "K V N R\r")) {
+                assertFund(vor + uz + "\n", G, "", 0.80, ConfidenceLevel.WAHRSCHEINLICH, QUELLE);
+                assertFund(vor + uz + "\n" + uz, G, ".", 0.80, ConfidenceLevel.WAHRSCHEINLICH, QUELLE);
+                assertWieOhneUnsichtbare(vor, uz + "\n", G, " Rest");
+            }
+        }
+    }
+
+    @Test
+    void umbruchMitUnsichtbarenZeichen_zweiUmbrueche_keinFund_wieOhneUnsichtbareZeichen() {
+        for (String uz : unsichtbareFolgen()) {
+            assertKeinFund("KVNR:\r" + uz + "\n\r" + uz + U);
+            assertKeinFund("KVNR:\r" + uz + "\n\n" + U);
+            assertKeinFund("KVNR:\r\n\r" + uz + U);
+            assertKeinFund("KVNR:\n" + uz + "\n" + uz + U);
+            assertKeinFund("KVNR:\r" + uz + "\r" + uz + U);
+        }
+        assertKeinFund("KVNR:\r\r" + U);
+    }
+
+    @Test
+    void umbruchMitUnsichtbarenZeichen_ungueltigeNummer_fraglichFuenfzig() {
+        for (String uz : unsichtbareFolgen()) {
+            assertFraglichPruefziffer("KVNR:\r" + uz, U, "");
+            assertFraglichPruefziffer("KVNR:\r" + uz + "\n", U, "");
+        }
+    }
+
+    @Test
+    void unsichtbaresZeichenDirektAmKontextwort_ohneSichtbarenTrenner_grenzeKontextwortDirektAmBuchstaben() {
+        // Das Kontextwort, das unsichtbare Zeichen und der Buchstabe bilden einen Lauf: kein Kontextwort.
+        for (char uz : UNSICHTBAR) {
+            assertKeinFund("KVNR" + uz + U);
+            assertKeinFund("Versichertennummer" + uz + U);
+        }
+        // Mit Trenner zwischen Kontextwort und unsichtbarem Zeichen ist es dagegen kein Hindernis.
+        for (char uz : UNSICHTBAR) {
+            assertSicher("KVNR " + uz, G, "");
+        }
+    }
+
     // ------------------------------------------------------------------ G-K5: gesperrtes Kontextwort, ein Trenner
 
     @Test

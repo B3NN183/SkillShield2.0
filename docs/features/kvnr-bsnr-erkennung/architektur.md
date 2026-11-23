@@ -1001,3 +1001,39 @@ Begründung Kap. 1 und R-4).
      Trenner (`KVNR` unmittelbar gefolgt von Buchstabe und Ziffern); Trenner außerhalb D-1 zwischen Buchstabe und
      Ziffern (Tab, zwei Leerzeichen, Doppelpunkt mit Leerzeichen, `_`, `,`, Halbgeviertstrich, Zeilenumbruch) →
      höchstens ein Fund 0,40 über die Ziffern, hinter `KV-Nr.` kein Fund.
+- **Nachtrag zu T-5 (Entscheidung der Hauptsitzung):** Nachgestelltes Kontextwort mit Wort davor
+  (`<KVNR> (Patienten-KVNR)`, auch hinter Komma oder Semikolon) ergibt keinen Fund über das nachgestellte
+  Kontextwort; das ist dieselbe Regel wie bei LANR/IK („Wort dazwischen: kein Fund") und bleibt unverändert, weil
+  eine Lockerung nur für die KVNR die gemeinsame Regel aufspalten würde. Die gültige KVNR-Form wird in diesem Fall
+  durch Teil 1b (ohne Kontextwort, 0,60) geschützt; entfällt 1b nach D-5, bleibt es eine dokumentierte Grenze.
+  T-8 hält die Form als Test `bekannteGrenze…` fest (Test aus T-5 genügt, wenn er so benannt bzw. dort verwiesen
+  wird).
+- **Nachtrag 2 zu T-5 (security-Befund „mittel"; ersetzt den Nachtrag zu T-5 davor):** Die Begründung des ersten
+  Nachtrags war falsch: Teil 1b schützt nur die geschlossene, großgeschriebene, gültige KVNR-Form (G-K1), nicht die
+  gruppierte oder kleingeschriebene und keine Nummer mit falscher Prüfziffer. Entscheidung („möglichst viel
+  schützen", Patientendaten):
+  1. **Nachgestelltes Kompositum wird Kontextwort – nur für die KVNR (`art.buchstabenform()`):** Steht hinter einer
+     offenen Nummer ein Wort, auf das unmittelbar ein Bindestrich und unmittelbar danach ein Kontextwort aus D-2
+     (bzw. ein D-2-Vorwort mit `Nr.`/`Nummer`) folgt – `Patienten-KVNR`, `Pat.-KVNR`, `eGK-Versichertennummer` –,
+     dann zählt das Ganze als ein nachgestelltes Kontextwort. Das Wort davor ist kein Füllwort und leert die offenen
+     Nummern nicht. Es gelten dieselben Stufen wie beim einfachen nachgestellten Kontextwort (Klammer oder ohne:
+     0,80; hinter Komma oder Semikolon: 0,60). Genau ein Wort vor dem Bindestrich (Buchstaben, optional ein
+     Abkürzungspunkt direkt vor dem Bindestrich); zwei Wörter (`des Patienten-KVNR`) bleiben „Wort dazwischen: kein
+     Fund". Der Vorgriff ist auf die Fenstergröße begrenzt (linear). Für LANR und IK ändert sich nichts (volle
+     Gleichheit mit der eingefrorenen Kopie bleibt Pflicht); BSNR entscheidet T-13 entsprechend.
+  2. Lässt sich Punkt 1 nicht klar abgeschirmt und ohne Nebenwirkung auf die vorangestellte Form umsetzen, hält der
+     engineer an; dann wird die Form als G-K-Eintrag in Kap. 11 mit Test `bekannteGrenze…` (gültige geschlossene,
+     gruppierte und kleingeschriebene Form) dokumentiert.
+  3. **G-K4 ergänzt:** Zwei Buchstaben direkt an gruppierten Ziffern (`AB` + Zifferngruppen ohne Trenner dazwischen)
+     liegen außerhalb D-1; es kann ein Teilfund 0,40 über die Gruppen nach der ersten entstehen, der erste Block
+     samt Buchstaben bleibt stehen. Tests halten das als `bekannteGrenze…` fest, ohne den Klartextrest als Soll für
+     künftige Erweiterungen festzuschreiben (geprüft wird: kein Fund enthält einen Buchstaben; die Fundzahl und der
+     Bereich des tatsächlichen Verhaltens stehen im Test, der Kommentar nennt es ausdrücklich eine Grenze).
+- **Nachtrag 3 zu T-5 (für T-8, bekannte Grenzen):** T-8 hält zusätzlich als Tests `bekannteGrenze…` fest und nimmt
+  in Kap. 11 bzw. das Javadoc auf: (a) nachgestelltes Kontextwort – einfach oder Kompositum – in der **nächsten
+  Zeile** hinter der Nummer (`<Nummer>` + Zeilenumbruch + `KVNR` bzw. `Patienten-KVNR`) → kein Fund über das
+  nachgestellte Kontextwort; das ist die Regel der Vorgänger (ein Zeilenumbruch leert die offenen Nummern) und gilt
+  für alle Arten gleich; (b) die in T-5 als Test festgehaltenen Restgrenzen des Kompositums (unsichtbares Zeichen
+  hinter dem Strich, andere Striche U+2010/U+2011/U+2013, Leerraum am Strich, doppelte Zeichen, Variantenwähler
+  hinter dem Kontextwort). Die geschlossene, großgeschriebene, gültige Form wird in diesen Stellungen durch Teil 1b
+  geschützt, die übrigen Schreibweisen nicht.
