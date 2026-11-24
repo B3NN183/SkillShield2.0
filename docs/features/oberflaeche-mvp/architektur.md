@@ -788,3 +788,42 @@ Der Text von Kap. 10 bleibt unverändert; die Wächter in ui und app sind wie fo
   Zeichenketten. Der Testdaten-Wächter erkennt keine zusammengesetzten Zeichenketten, keine anderen Trenner, kein
   IPv6 und keine Namen, Geburtsdaten oder Adressen. Die Positivliste erfasst keine Build-Plugins und Extensions.
   Diese Restlücken deckt die Prüfung durch reviewer und security ab.
+
+---
+
+## Nachtrag 2 zu T-1 (Quelltext-Wächter nachgeschärft, vor T-2)
+
+Ergänzung zu Kap. 10 und zum Nachtrag zu T-1; beide Wächter (ui und app) sind gleich verschärft:
+
+- **Normalisierung vor dem Abgleich:** Leerraum und Kommentar-Einschübe um Punkt und `::` entfallen
+  (`\s*(\.|::)\s*` wird zu `.`), Leerraum wird zusammengezogen und vor `(` entfernt. `Files::write`, `System .out`,
+  `System/**/.err` schlagen damit an. Geprüft wird der Quelltext in zwei Fassungen, einmal mit Kommentartext
+  (konservativ: Kommentartext darf anschlagen) und einmal ohne alle Kommentare (damit Einschübe wie `System.//x`
+  nichts verdecken); es zählt der höhere Treffer. Die Ausnahme der Startklasse (`System.err`, genau einmal) gilt
+  unverändert und auch bei Leerraum- oder Kommentar-Schreibweise.
+- **Zusätzlich verboten:** `import static java.lang.System.*`, `import static java.nio.file.Files.*`,
+  `import static java.lang.Runtime.*`, `System.console`, `getMethod(`, `loadClass(`, `System.load`,
+  `createImageOutputStream`, `PrinterJob`.
+- **Selbsttests:** Umgehungsschreibweisen (Methodenreferenz, Leerraum, Block- und Zeilenkommentar-Einschübe,
+  Zeilenumbruch), Sternchen-Importe, Normalisierung, Ausnahme mit Einschub, harmloser Text.
+- **Verbleibende Grenzen:** Bewusste Verschleierung und zusammengesetzte Zeichenketten (Reflection mit gebautem
+  Klassennamen) werden nicht erkannt. Einzelne statische Importe (`import static java.nio.file.Files.write`) werden
+  über das Wort in der Importzeile erkannt. Diese Restlücken deckt die Prüfung durch reviewer und security ab.
+
+---
+
+## Nachtrag 3 zu T-1 (Quelltext-Wächter, ehrliche Einordnung, während T-2)
+
+Ergänzung zum Nachtrag 2; beide Wächter (ui und app) sind gleich geändert:
+
+- **Zustandsautomat statt Kommentar-Regex:** Die Fassung "ohne Kommentare" entsteht aus einem Automaten (Code,
+  Zeilenkommentar, Blockkommentar, Zeichenkette, Zeichen, Textblock, mit Escape-Behandlung). Ein `//` oder `/*` in
+  einem Literal verdeckt keine Stelle mehr (`String u = "//"; Object o = System/*x*/.out;` schlägt an, auch ein
+  zweites `System.err` neben der Ausnahme der Startklasse). Die rohe, nur normalisierte Fassung wird weiter
+  konservativ mitgeprüft.
+- **Liste:** `new PrintWriter(` und `new PrintStream(` heißen jetzt `PrintWriter(` und `PrintStream(` (trifft auch
+  voll qualifizierte Namen), `Files.newOutputStream` heißt `newOutputStream`; neu sind `getField(`,
+  `getDeclaredField`, `Formatter(` und `createNewFile`. Selbsttests für jede dieser Formen.
+- **Einordnung:** Der Wächter ist ein Sicherheitsnetz gegen Versehen, kein Beweis. Restlücken: alles, was nicht auf
+  der Liste steht; Reflection mit zusammengesetzten Zeichenketten; Aufrufe über Hilfsklassen fremder Bibliotheken.
+  Diese Lücken deckt die Prüfung durch reviewer und security ab.

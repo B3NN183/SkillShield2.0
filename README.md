@@ -101,8 +101,16 @@ Tag war (jünger als 4 Stunden); geprüft wurde also gegen den lokalen Stand die
   keine Maven-Extensions. SkillShield-Module sind einzeln aufgezählt, JUnit nur mit Scope `test`, FlatLaf nur in
   der festen Version 3.6.1.
 - **Quelltext-Wächter**: sucht verbotene Zeichenfolgen als Teilstring (auch in Kommentaren) und löst
-  Unicode-Escapes vor dem Abgleich auf. Bewusste Verschleierung und zusammengesetzte Zeichenketten (etwa
-  Reflection mit gebautem Klassennamen) erkennt er nicht; dafür gilt die Prüfung durch reviewer und security.
+  Unicode-Escapes vor dem Abgleich auf. Leerraum und Kommentar-Einschübe um Punkt und `::` sowie vor `(` werden
+  normalisiert (`Files::write`, `System .out`, `System/**/.err` schlagen an); geprüft wird der Quelltext roh
+  (konservativ) und ohne Kommentare. Die Kommentare entfernt ein kleiner Zustandsautomat, der Zeichenketten,
+  Zeichen und Textblöcke (mit Escapes) kennt; ein `//` in einer Zeichenkette verdeckt also keine Stelle mehr.
+  Statische Sternchen-Importe aus `java.lang.System`, `java.nio.file.Files` und `java.lang.Runtime` sind verboten,
+  ebenso `System.console`, `getMethod(`, `loadClass(`, `System.load`, `createImageOutputStream`, `PrinterJob`,
+  `PrintWriter(`, `PrintStream(`, `newOutputStream`, `getField(`, `getDeclaredField`, `Formatter(` und
+  `createNewFile`. **Der Wächter ist ein Sicherheitsnetz gegen Versehen, kein Beweis.** Nicht erkannt werden alles,
+  was nicht auf der Liste steht, Reflection mit zusammengesetzten Zeichenketten und Aufrufe über Hilfsklassen
+  fremder Bibliotheken; dafür gilt die Prüfung durch reviewer und security.
 - **Testdaten-Wächter**: prüft `src/test/java` und `src/test/resources` auf Ziffernketten ab neun Ziffern (auch mit
   Leerzeichen, Punkt, Bindestrich, Schrägstrich, Unterstrich gruppiert), fremde E-Mail-Domains und IPv4-Adressen.
   Nicht erkannt werden zusammengesetzte Zeichenketten, andere Trenner, IPv6-Adressen sowie Namen, Geburtsdaten und
