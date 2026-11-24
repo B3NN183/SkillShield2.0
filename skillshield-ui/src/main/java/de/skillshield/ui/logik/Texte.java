@@ -61,6 +61,16 @@ public final class Texte {
     public static final String KEINE_PLATZHALTER = "Die Antwort enthält keine Platzhalter.";
     /** Sperrgrund für "Rückübersetzten Text kopieren" bei leerem Ergebnis (AK-39). */
     public static final String ERGEBNIS_LEER = "Das Ergebnis ist leer.";
+    /**
+     * Meldung nach dem Zurücksetzen und Text der Rückfrage beim Beenden, wenn die Zwischenablage nicht geleert werden
+     * konnte (V-2). Fester Text, nie der Inhalt der Zwischenablage.
+     */
+    public static final String ZWISCHENABLAGE_NICHT_GELEERT =
+            "Die Zwischenablage konnte nicht geleert werden. Sie kann noch Text aus SkillShield enthalten.";
+    /** Antwort der Rückfrage {@link Rueckfrage#ZWISCHENABLAGE_NICHT_GELEERT} (Standard). */
+    public static final String ERNEUT_VERSUCHEN = "Erneut versuchen";
+    /** Antwort der Rückfrage {@link Rueckfrage#ZWISCHENABLAGE_NICHT_GELEERT}: beenden, ohne zu leeren. */
+    public static final String TROTZDEM_BEENDEN = "Trotzdem beenden";
     /** Grund in der Liste "Nicht zurückübersetzt": wohlgeformt, aber nicht in der Zuordnung. */
     public static final String GRUND_UNBEKANNT = "unbekannt";
     /** Grund in der Liste "Nicht zurückübersetzt": beschädigter Platzhalter. */

@@ -32,14 +32,14 @@ import java.util.function.Function;
  * und bewertet nichts selbst (AK-53). Meldungen entstehen nur aus {@link Texte} und Zahlen; {@link #toString()}
  * enthält nie Text.
  *
- * <p>Stand T-4: Scan, Auswahl, Live-Ergebnis, manuelles Hinzufügen, Kopieren, Rückübersetzung, Statusleiste und
- * Bedienzustand. Zurücksetzen, Beenden und die Rückfragen dazu folgen in T-5. Die aktive Zuordnung (für die
+ * <p>Stand T-5: Scan, Auswahl, Live-Ergebnis, manuelles Hinzufügen, Kopieren, Rückübersetzung, Statusleiste,
+ * Bedienzustand sowie Zurücksetzen und Beenden mit ihren Rückfragen. Die aktive Zuordnung (für die
  * Statusleiste und Rückfragen) folgt dem Live-Ergebnis, bis aus Bereich 3 kopiert wird; dann ist sie auf das kopierte
  * Ergebnis eingefroren (Abweichung A-2, Kap. 3.5), bis neu gescannt wird. Zurückübersetzt wird nur mit einer
  * eingefrorenen Zuordnung (S-2), also nur die Antwort zum zuletzt kopierten Text.
  *
  * <p>Invariante von {@code zuletztKopierteZuordnung}: Sie überlebt einen neuen Scan und wird nur für den Hinweis
- * "Platzhalter geändert" verglichen, nie zur Rückübersetzung benutzt; Zurücksetzen und Beenden (T-5) verwerfen sie.
+ * "Platzhalter geändert" verglichen, nie zur Rückübersetzung benutzt; Zurücksetzen und Beenden verwerfen sie.
  */
 public final class Sitzung {
 
@@ -142,7 +142,7 @@ public final class Sitzung {
         if (eingabe.length() > MAX_ZEICHEN) {
             return ablehnen(Texte.zuLang(MAX_ZEICHEN));
         }
-        if (zuordnung != null && zuordnung.size() >= 1 && !dialoge.bestaetigt(Rueckfrage.NEUER_SCAN)) {
+        if (hatZuordnungMitPlatzhalter() && !dialoge.bestaetigt(Rueckfrage.NEUER_SCAN)) {
             return Optional.empty();
         }
         if (zustand == ScanZustand.GUELTIG && !eingabe.equals(text)) {
@@ -195,6 +195,9 @@ public final class Sitzung {
         live = neuesLive;
         zuordnung = neuesLive.zuordnung();
         zuordnungEingefroren = false;
+        // Das Ergebnis der Rückübersetzung gehört zur alten Zuordnung und hält Originalwerte: Es wird mit ihr
+        // verworfen, damit es nach einem neuen Scan nicht mehr als "Ergebnis kopieren" bedienbar ist (T-5).
+        rueckuebersetzung = null;
         laufenderAuftrag = null;
         zustand = ScanZustand.GUELTIG;
         meldung = neueMeldung;
@@ -462,15 +465,84 @@ public final class Sitzung {
         }
     }
 
+    // ------------------------------------------------------------------ Lebenszyklus (T-5)
+
     /**
-     * Zwischenablage-Regel (D-6, AK-34), von Zurücksetzen und Beenden (T-5) aufgerufen: Enthält die Zwischenablage
-     * noch genau den zuletzt vom Programm kopierten Text, wird sie geleert, sonst bleibt sie unberührt. Ist sie
-     * nicht lesbar, gesperrt oder enthält keinen Text, geschieht nichts, ohne Meldung (G-8); der Vergleichstext
-     * bleibt dann für einen späteren Versuch erhalten. Nach dem Leeren oder wenn der Inhalt ein anderer ist, wird
-     * der Vergleichstext verworfen. Umgesetzt in {@link ZwischenablageRegel}.
+     * "Zurücksetzen" (AK-42): Bei bestehender Zuordnung mit mindestens einem Platzhalter wird vorher mit
+     * {@link Rueckfrage#ZURUECKSETZEN} gefragt (Standard "Abbrechen"); bei "Abbrechen" ändert sich nichts. Dann gilt
+     * die Zwischenablage-Regel für das Zurücksetzen (nur nachweislich eigener Inhalt wird geleert, kein Dialog), und
+     * der gesamte Zustand mit allem Klartext wird verworfen: Die Sitzung ist wie neu erzeugt (Statusmeldung
+     * {@link Texte#BEREIT}). Konnte die Zwischenablage nicht geleert werden, bleibt nur der Vergleichstext der Regel
+     * für einen späteren Versuch erhalten, und die Meldung ist {@link Texte#ZWISCHENABLAGE_NICHT_GELEERT}. Während
+     * eines Scans ist die Funktion gesperrt und tut nichts.
+     *
+     * @return {@code true}, wenn zurückgesetzt wurde; die Ansicht leert dann ihre Felder
      */
-    void eigenenZwischenablageInhaltLeeren() {
-        zwischenablage.eigenenInhaltLeeren();
+    public boolean zuruecksetzenAnfordern() {
+        if (zustand == ScanZustand.LAEUFT) {
+            return false;
+        }
+        if (hatZuordnungMitPlatzhalter() && !dialoge.bestaetigt(Rueckfrage.ZURUECKSETZEN)) {
+            return false;
+        }
+        boolean geleert = eigenenZwischenablageInhaltLeeren();
+        verwerfeAlles();
+        meldung = geleert ? Texte.BEREIT : Texte.ZWISCHENABLAGE_NICHT_GELEERT;
+        informieren();
+        return true;
+    }
+
+    /**
+     * Der einzige Einstieg zum Beenden (AK-43, Schaltfläche, Fenster schließen und Alt+F4 laufen alle hierher), in
+     * fester Reihenfolge: (1) Rückfrage {@link Rueckfrage#BEENDEN} bei bestehender Zuordnung mit mindestens einem
+     * Platzhalter (Standard "Abbrechen"; dann {@code false}, nichts ändert sich); (2) Zwischenablage-Regel für das
+     * Beenden (V-2: geleert wird alles, was nicht nachweislich fremd ist); scheitert das Leeren, folgt die Rückfrage
+     * {@link Rueckfrage#ZWISCHENABLAGE_NICHT_GELEERT}: "Erneut versuchen" wiederholt (unbegrenzt oft), "Trotzdem
+     * beenden" fährt fort; (3) aller Klartext der Sitzung wird verworfen. Die Methode beendet nichts selbst.
+     *
+     * @return {@code true}, wenn das Programm beendet werden darf
+     */
+    public boolean beendenAnfordern() {
+        if (hatZuordnungMitPlatzhalter() && !dialoge.bestaetigt(Rueckfrage.BEENDEN)) {
+            return false;
+        }
+        while (!zwischenablage.beimBeendenLeeren()) {
+            if (!dialoge.erneutVersuchen(Rueckfrage.ZWISCHENABLAGE_NICHT_GELEERT)) {
+                zwischenablage.vergleichstextVerwerfen();
+                break;
+            }
+        }
+        verwerfeAlles();
+        informieren();
+        return true;
+    }
+
+    private boolean hatZuordnungMitPlatzhalter() {
+        return zuordnung != null && zuordnung.size() >= 1;
+    }
+
+    /**
+     * Verwirft allen Klartext und stellt den Startzustand her: Funde, Text, Live-Ergebnis, aktive und zuletzt
+     * kopierte Zuordnung (Originalwerte), Rückübersetzung. Ein laufender Scan gilt als überholt, sein Rückruf wird
+     * ignoriert. Der Vergleichstext der Zwischenablage-Regel bleibt der Regel überlassen.
+     */
+    private void verwerfeAlles() {
+        verwerfeFunde();
+        zustand = ScanZustand.KEIN_SCAN;
+        vorherigerZustand = ScanZustand.KEIN_SCAN;
+        generation++;
+        laufenderAuftrag = null;
+        zuordnung = null;
+        zuordnungEingefroren = false;
+        zuletztKopierteZuordnung = null;
+        antwortLeer = true;
+        rueckuebersetzung = null;
+        meldung = Texte.BEREIT;
+    }
+
+    /** Zwischenablage-Regel für das Zurücksetzen, siehe {@link ZwischenablageRegel#eigenenInhaltLeeren()}. */
+    boolean eigenenZwischenablageInhaltLeeren() {
+        return zwischenablage.eigenenInhaltLeeren();
     }
 
     /** Legt Text ab und merkt ihn; scheitert das, melden Statusleiste und Dialog es ohne Textinhalt. */

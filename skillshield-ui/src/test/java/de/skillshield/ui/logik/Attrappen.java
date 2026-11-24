@@ -1,6 +1,7 @@
 package de.skillshield.ui.logik;
 
 import de.skillshield.core.SynthetischeKvNummern;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -30,11 +31,25 @@ final class Attrappen {
         final List<Rueckfrage> fragen = new ArrayList<>();
         final List<String> fehler = new ArrayList<>();
         boolean antwort;
+        /** Rueckfragen "Erneut versuchen / Trotzdem beenden" (V-2). */
+        final List<Rueckfrage> erneutFragen = new ArrayList<>();
+        /** Antworten darauf in der Reihenfolge der Fragen ({@code true} = erneut versuchen); danach "Trotzdem". */
+        final ArrayDeque<Boolean> erneutAntworten = new ArrayDeque<>();
+        /** Wird bei jeder solchen Frage vor der Antwort ausgefuehrt (z. B. um die Zwischenablage freizugeben). */
+        Runnable beiErneutFrage = () -> { };
 
         @Override
         public boolean bestaetigt(Rueckfrage frage) {
             fragen.add(frage);
             return antwort;
+        }
+
+        @Override
+        public boolean erneutVersuchen(Rueckfrage frage) {
+            erneutFragen.add(frage);
+            beiErneutFrage.run();
+            Boolean antwortDarauf = erneutAntworten.poll();
+            return antwortDarauf != null && antwortDarauf;
         }
 
         @Override
@@ -53,6 +68,8 @@ final class Attrappen {
         boolean gesperrt;
         /** Wie die echte AWT bei gesperrter Ablage: Lesen und Ablegen klappen, nur das Leeren scheitert. */
         boolean nurLeerenGesperrt;
+        /** Der Inhalt ist nicht lesbar ("unbekannt", V-2), Ablegen und Leeren klappen aber. */
+        boolean nichtLesbar;
         /** Aktueller Inhalt; {@code null}, wenn leer. */
         String inhalt;
         final List<String> gesetzt = new ArrayList<>();
@@ -71,7 +88,7 @@ final class Attrappen {
         @Override
         public Optional<String> leseText() {
             zugriffe++;
-            return gesperrt ? Optional.empty() : Optional.ofNullable(inhalt);
+            return gesperrt || nichtLesbar ? Optional.empty() : Optional.ofNullable(inhalt);
         }
 
         @Override

@@ -1069,3 +1069,142 @@ Klassenkommentar von `Sitzung`: Invariante von `zuletztKopierteZuordnung` ergän
   Leeren-Regel fremden Inhalt leeren (Datenverlust beim Anwender, kein Leck).
 - **H-3 (für den Anwendertext in T-8):** Der Hinweis `PLATZHALTER_GEAENDERT` vergleicht nur mit der unmittelbar
   vorigen Kopie (nicht transitiv). Die Regel bleibt: nur die Antwort zum zuletzt kopierten Text zurückübersetzen.
+
+---
+
+## Nachtrag zu T-5 (Umsetzungsstand, Vorab-Aufträge V-1 bis V-3)
+
+Ergänzt die Nachträge zu T-4 (deren Text bleibt unverändert). `anforderung.md` bleibt unverändert.
+
+### Lebenszyklus (`Sitzung`)
+
+- **`beendenAnfordern()` ist der einzige Einstieg zum Beenden** (Schaltfläche, Fenster schließen, Alt+F4 verdrahten
+  T-6/T-8 auf genau diese Methode). Feste Reihenfolge: (1) Rückfrage `Rueckfrage.BEENDEN`, wenn eine Zuordnung mit
+  mindestens einem Platzhalter besteht (Standard "Abbrechen"; bei "Abbrechen" Rückgabe `false`, nichts ändert sich,
+  die Zwischenablage wird nicht angefasst); (2) Zwischenablage-Regel für das Beenden (V-2, unten); (3) alle
+  Klartextzustände verwerfen; Rückgabe `true` = darf beendet werden. Die Methode beendet selbst nichts. Auch während
+  eines Scans aufrufbar; der laufende Auftrag gilt danach als überholt, sein Rückruf wird ignoriert.
+- **`zuruecksetzenAnfordern()`:** Rückfrage `Rueckfrage.ZURUECKSETZEN` bei Zuordnung mit ≥ 1 Platzhalter; während
+  eines Scans gesperrt (`false`, nichts geschieht). Danach Zwischenablage-Regel für das Zurücksetzen (nur
+  nachweislich eigener Inhalt, kein Dialog) und Verwerfen allen Klartextes; Rückgabe `true`, die Ansicht leert ihre
+  Felder. Die Sitzung ist danach wie neu erzeugt (Test vergleicht alle Sichten und `toString()` mit einer neuen
+  Sitzung; Reflexionstest für die privaten Felder); nur die Statusmeldung weicht ab, wenn das Leeren scheiterte.
+- **Verworfen werden** (`verwerfeAlles`): Funde, Text, Auswahl, Live-Ergebnis (Text für die KI), aktive und
+  eingefrorene Zuordnung, `zuletztKopierteZuordnung` (Originalwerte, S-3/H-4), Rückübersetzungsergebnis,
+  Antwort-Zustand, laufender Auftrag. Der Vergleichstext der Zwischenablage-Regel bleibt nur beim Zurücksetzen mit
+  gescheitertem Leeren erhalten (für einen späteren Versuch); beim Beenden wird er auch bei "Trotzdem beenden"
+  verworfen. Ein Rest bleibt unvermeidlich: Der Adapter merkt den abgelegten Text nach "Trotzdem beenden" weiter, bis
+  der Prozess endet.
+- **Neuer Scan und Rückübersetzungsergebnis (Hinweis des reviewers aus T-4):** `scanAbgeschlossen` verwirft das
+  Ergebnis der Rückübersetzung zusammen mit der alten Zuordnung. Begründung: Es enthält Originalwerte des alten Scans
+  und wäre sonst nach dem neuen Scan noch mit "Rückübersetzten Text kopieren" kopierbar, obwohl die Zuordnung nach
+  D-5 mit dem Scan endet. Verworfen wird erst beim erfolgreichen Abschluss: Ein abgebrochener Scan (Rückfrage mit
+  "Abbrechen") oder ein gescheiterter Scan lässt alles unverändert (AK-50). Die Ansicht (T-6) zeigt das Ergebnis aus
+  `rueckuebersetzung()`; das Feld ist danach leer, "Ergebnis kopieren" gesperrt (`ERST_ZURUECKUEBERSETZEN`). Der
+  vorhandene Test `SitzungRueckuebersetzenRegelTest` wurde entsprechend angepasst (er erwartete das alte Ergebnis).
+
+### V-2 Zwischenablage-Regel beim Beenden (Entscheidung der Hauptsitzung)
+
+- **Anlass:** Im Zustand "unsicher und nicht Besitzer" (fremdes Schreiben während des eigenen Ablegens, danach ein
+  vollständig gescheitertes Ablegen) liefert `leseText()` dauerhaft leer, obwohl der interne Stand eigenen Klartext
+  trägt; die bisherige Regel hätte nie geleert.
+- **Regel beim Beenden** (`ZwischenablageRegel.beimBeendenLeeren()`): Hat das Programm in dieser Sitzung etwas
+  abgelegt (gemerkter Vergleichstext) und ist der Inhalt **nicht nachweislich fremd** (gleich dem gemerkten Text
+  oder unbekannt/nicht lesbar), wird geleert. Nur bei lesbarem, abweichendem Inhalt bleibt er unberührt. Wurde nie
+  etwas abgelegt, gibt es keinen Zugriff auf die Zwischenablage. Schutz geht vor: Ein nicht lesbarer fremder Inhalt
+  (z. B. ein Bild) kann dabei mitgeleert werden; dieser Datenverlust beim Anwender wird bewusst in Kauf genommen.
+- **Scheitert das Leeren** (nach den drei Versuchen des Adapters aus G-8), beendet sich das Programm nicht still:
+  `Rueckfrage.ZWISCHENABLAGE_NICHT_GELEERT` mit dem festen Text **"Die Zwischenablage konnte nicht geleert werden.
+  Sie kann noch Text aus SkillShield enthalten."** und den Antworten **"Erneut versuchen"** (Standard)
+  und **"Trotzdem beenden"** (`Texte.ERNEUT_VERSUCHEN`, `Texte.TROTZDEM_BEENDEN`). Die Zahl der erneuten Versuche ist
+  nicht begrenzt. Neue Schnittstellenmethode `Dialoge.erneutVersuchen(Rueckfrage)`: `true` = erneut versuchen,
+  `false` nur bei ausdrücklichem "Trotzdem beenden"; schließt der Anwender den Dialog anders (Esc, Fenster-Schließen),
+  gilt "Erneut versuchen" (T-6: `SwingDialoge` mit `showOptionDialog` und diesen beiden Optionen, Standard
+  "Erneut versuchen"; Rückgabe ≠ "Trotzdem beenden" ergibt `true`).
+- **Bewusste Erweiterung gegenüber G-8/OF-3 ("kein Dialog") und A-3 (nur "Ja"/"Abbrechen"):** Dieser eine Dialog
+  hat andere Schaltflächen und erscheint nur beim Beenden mit nicht leerbarer Zwischenablage. Er enthält keinen
+  Inhalt. AK-34 ("beendet trotzdem ohne Fehlermeldung") ist an dieser Stelle bewusst enger gefasst: Das Beenden
+  braucht dann eine Entscheidung des Anwenders.
+- **Beim Zurücksetzen bleibt die bisherige Regel** (`eigenenInhaltLeeren()`: nur nachweislich eigener Inhalt, kein
+  Dialog, Vergleichstext bleibt bei gescheitertem Leeren). Neu ist nur die Statusmeldung: Blieb der Vergleichstext
+  erhalten (Leeren gescheitert oder Inhalt nicht lesbar), steht dort `Texte.ZWISCHENABLAGE_NICHT_GELEERT` statt
+  "Bereit".
+
+### V-1 `AwtZwischenablage`: ein `Besitz` je Versuch
+
+Jeder Ablegeversuch (auch jeder Wiederholungsversuch bei Sperre) bekommt seinen eigenen `Besitz`; der des jüngsten
+Versuchs ist der aktuelle. Ein Besitzverlust, der einen gescheiterten Versuch trifft (z. B. fremdes Kopieren in der
+Wartezeit), markiert den späteren erfolgreichen nicht mehr als verloren. Test: `AwtZwischenablageTest`
+(`einVerlustWaehrendDerWiederholung...`).
+
+### V-3 Korrektur zu H-5 (Nachtrag 3 zu T-4)
+
+Der Satz "nie abgelegter Text steht dann nicht mehr im internen Stand" gilt **nur für Besitzverluste über die
+AWT-Meldung bei fremdem Kopieren** (`lostOwnership` an den Adapter). Ruft anderer Code im selben Prozess
+`Clipboard.setContents` auf (z. B. der Swing-`TransferHandler` bei Strg+C in einem Textfeld), ersetzt das den Inhalt,
+ohne dass `Sitzung` oder Adapter es erfahren: Der gemerkte Text und die Regel wissen davon nichts.
+
+**Vormerkung für T-6 (verbindlich):** **Alle** Kopier- und Ausschneidewege der Textfelder müssen über die `Sitzung`
+bzw. den Adapter laufen, nie am Adapter vorbei: Strg+C/X, Strg+Einfg, Umschalt+Entf, die Tasten COPY/CUT, das
+Kontextmenü, `TransferHandler.exportToClipboard` und Ziehen (Drag). Die Textfelder bekommen dafür einen
+`TransferHandler`, dessen `exportToClipboard` und `getSourceActions` nicht die Standardimplementierung (die direkt
+auf die System-Zwischenablage schreibt) benutzen; Test in `TextaktionenTest`, dass kein Weg ein `setContents` am
+Adapter vorbei auslöst.
+
+### Vormerkungen für T-6 bis T-8
+
+- **T-6:** `SwingDialoge.erneutVersuchen` (siehe oben); Ansicht liest nach jeder Benachrichtigung `rueckuebersetzung()`
+  (nach neuem Scan, Zurücksetzen und Beenden leer); `zuruecksetzenAnfordern() == true` → Felder leeren (Eingabe,
+  KI-Antwort); Schaltfläche "Beenden" ruft ein `Runnable`, das `beendenAnfordern()` aufruft.
+- **T-8:** `HauptFenster` (`DO_NOTHING_ON_CLOSE`, Schließen und Alt+F4) und die Schaltfläche nehmen denselben Weg;
+  `Thread.setDefaultUncaughtExceptionHandler(new Fehlerbehandlung(...))` installieren (Klasse und Test liegen vor).
+  Anwendertext (README): Beim Beenden wird die Zwischenablage auch dann geleert, wenn ihr Inhalt nicht lesbar ist
+  (ein dort liegendes Bild kann mitverloren gehen).
+
+## Nachtrag 2 zu T-5 (Durchlauf 2 nach FAIL von reviewer, Hinweisen von security)
+
+Ergänzt den „Nachtrag zu T-5“ (dessen Text bleibt unverändert). `anforderung.md` bleibt unverändert.
+
+- **R-1 Reflexionstest über alle Felder:** `SitzungLebenszyklusTest` vergleicht nach Zurücksetzen, Beenden und Beenden
+  bei laufendem Scan jedes nicht statische Feld von `Sitzung` (`getDeclaredFields()`, `boolean[]` über
+  `Arrays.toString`) mit dem einer neuen Sitzung. Ausgenommen ist nur die benannte, je Feld begründete Liste
+  `AUSNAHMEN` (`scanner`, `zwischenablage`, `dialoge`, `pseudonymizer`, `restore`, `beobachter`, `generation`,
+  `meldung`); `meldung` wird getrennt geprüft (`Texte.BEREIT`). Ein neues Feld bricht den Test, bis es eingeordnet
+  ist; ein Selbsttest stellt sicher, dass die Liste nur existierende Felder nennt.
+- **S-1 Richtigstellung zu „nur der Vergleichstext bleibt“ (Nachtrag zu T-5, Verworfen werden):** Nach dem
+  Zurücksetzen mit gescheitertem Leeren hält nicht nur der Vergleichstext der Regel den Text, sondern auch der Adapter
+  (`AwtZwischenablage.abgelegterText`, derselbe Text, solange das Programm Besitzer ist) und der AWT-interne
+  Zwischenablagestand. Das ist kein zusätzliches Leck: Es ist genau der Text, der noch in der Zwischenablage liegt.
+- **S-2 `KlartextFreiheitOberflaecheTest`:** sammelt bei Ausnahmen zusätzlich `Fehlerbehandlung.meldung(e)` und
+  schließt Aufrufe von `Sitzung` ein, die im Programm in den zentralen Handler liefen; neuer Durchlauf mit „Trotzdem
+  beenden“; die KI-Antwort enthält gültige, im Mapping unbekannte Token mit frei gewähltem Typnamen (`[[Name_1]]`,
+  `[[FreiGewaehlt_7]]`; Typname `[A-Za-z][A-Za-z0-9]{0,31}`, also ohne Unterstrich). Der Test weist je eine
+  Listenzeile mit „unbekannt“ zu beiden Token nach und dass keine Listenzeile einen Marker aus Eingabe oder Fundwerten
+  trägt. `[[Frei_Gewaehlt_7]]` ist wegen des Unterstrichs im Typnamen kein Token und wird nie gelistet (ebenfalls
+  geprüft).
+- **Hinweis des reviewers:** `Sitzung.eigenenZwischenablageInhaltLeeren()` bleibt (Tests nutzen sie), das doppelte
+  Javadoc ist auf einen Verweis auf `ZwischenablageRegel.eigenenInhaltLeeren()` gekürzt.
+
+### Verbindliche Vormerkungen von security (keine Codeänderung in T-5)
+
+- **T-6 (zwingend, durch Proben belegt):** Kein `setContents` am Adapter vorbei. Ein Swing-Kopieren im selben Prozess
+  über den Standard-`TransferHandler` hebelt die Leeren-Regel aus (Klartext bleibt nach dem Beenden liegen, ohne
+  Dialog). Alle Kopier-, Ausschneide- und Ziehwege aller Textkomponenten und der Tabelle laufen über `Sitzung` bzw.
+  Adapter. Dazu ein Test mit einer Zwischenablage, die beim Ablegen scheitert, und ein Test, der über den
+  Komponentenbaum belegt, dass keine Komponente mehr einen Standard-Kopierweg besitzt.
+- **T-6 (HTML in Swing):** Text, der mit `<html>` beginnt, wird in `JLabel`, Tabellenzellen
+  (`DefaultTableCellRenderer`), `JList`, Tooltips und `JOptionPane` als HTML gedeutet; `<img src=...>` löst einen
+  Netzzugriff aus. Auf allen Komponenten und Renderern, die Anwender- oder KI-Inhalt zeigen (Fundtabelle, manuell
+  markierter Text, Listenzeilen „Nicht zurückübersetzt“, Tooltips): `putClientProperty("html.disable", Boolean.TRUE)`.
+  Kein `JEditorPane`/`JTextPane` mit `text/html`. Test mit `<html><img src=...>`-Eingabe.
+- **T-6 (`SwingDialoge.erneutVersuchen`):** darf bei einer Ausnahme oder ohne Anwenderaktion nie `true` liefern (sonst
+  Endlosschleife ohne Bedienmöglichkeit); bei Ausnahme werfen. `Rueckfrage.ZWISCHENABLAGE_NICHT_GELEERT` nie über
+  `bestaetigt()` stellen. Standard-Schaltfläche „Erneut versuchen“.
+- **T-8:** Nach `beendenAnfordern() == true` den Prozess wirklich beenden (nicht nur `dispose`), damit kein Prozess mit
+  laufendem Scan-Auftrag weiterlebt. Fenster schließen und Alt+F4 nur über `DO_NOTHING_ON_CLOSE` + `windowClosing` zur
+  Logik. `System.exit` steht nicht auf der Verbotsliste des Wächters (zu prüfen); falls doch, engste begründete
+  Ausnahme für die Startklasse.
+- **T-8 (Anwendertext und Grenzen):** Abmelden, Herunterfahren und Prozess-Abbruch über den Task-Manager umgehen die
+  Leeren-Regel. Beim Beenden kann ein nicht lesbarer fremder Inhalt (z. B. ein Bild) mitgeleert werden; beim
+  Zurücksetzen kann „nicht geleert“ auch gemeldet werden, wenn der Anwender die Zwischenablage selbst geleert hat oder
+  ein Bild darin liegt. Optional zu prüfen: Shutdown-Hook mit Leeren ohne Dialog als Best-Effort.

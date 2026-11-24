@@ -60,18 +60,20 @@ class SitzungRueckuebersetzenRegelTest {
     }
 
     @Test
-    void einAufrufImGesperrtenZustandLaesstEinfruehresErgebnisUnveraendert() {
+    void einAufrufImGesperrtenZustandAendertNichtsUndDasErgebnisDesAltenScansIstVerworfen() {
         scannen(sitzung, DREI_MAILS);
         sitzung.fuerKiKopieren();
         sitzung.zurueckuebersetzen("[[EMAIL_1]]");
-        Rueckuebersetzung ergebnis = sitzung.rueckuebersetzung().orElseThrow();
+        assertTrue(sitzung.rueckuebersetzung().isPresent());
         dialoge.antwort = true;
         scannen(sitzung, TEXT_B);
+        // T-5: Das Ergebnis gehoert zur alten Zuordnung und wird mit dem neuen Scan verworfen.
+        assertTrue(sitzung.rueckuebersetzung().isEmpty());
         Statusleiste vorher = sitzung.statusleiste();
 
         sitzung.zurueckuebersetzen("[[EMAIL_2]]");
 
-        assertEquals(ergebnis, sitzung.rueckuebersetzung().orElseThrow());
+        assertTrue(sitzung.rueckuebersetzung().isEmpty());
         assertEquals(vorher, sitzung.statusleiste());
     }
 

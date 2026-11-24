@@ -134,14 +134,10 @@ public final class AwtZwischenablage implements Zwischenablage {
      * @param merken der Text, der bei Erfolg gemerkt wird; {@code null} beim Leeren
      */
     private boolean ablegen(Transferable inhalt, String merken) {
-        Besitz neuerBesitz = new Besitz();
+        Besitz erfolgreicherBesitz = versuchen(inhalt);
         synchronized (sperre) {
-            aktuellerBesitz = neuerBesitz;
-        }
-        boolean abgelegt = versuchen(inhalt, neuerBesitz);
-        synchronized (sperre) {
-            if (abgelegt) {
-                if (!neuerBesitz.verloren) {
+            if (erfolgreicherBesitz != null) {
+                if (!erfolgreicherBesitz.verloren) {
                     besitzer = true;
                     abgelegterText = merken;
                 }
@@ -151,23 +147,34 @@ public final class AwtZwischenablage implements Zwischenablage {
                 unsicher = true;
             }
         }
-        return abgelegt;
+        return erfolgreicherBesitz != null;
     }
 
-    private boolean versuchen(Transferable inhalt, ClipboardOwner neuerBesitz) {
+    /**
+     * Legt den Inhalt ab, bei gesperrter Zwischenablage mit Wiederholungen. Jeder Versuch hat seinen eigenen
+     * {@link Besitz} (V-1): Ein Verlust, der einen gescheiterten Versuch trifft, darf einen späteren erfolgreichen
+     * nicht als verloren kennzeichnen.
+     *
+     * @return der Besitz des erfolgreichen Versuchs; {@code null}, wenn alle Versuche gescheitert sind
+     */
+    private Besitz versuchen(Transferable inhalt) {
         for (int versuch = 1; versuch <= VERSUCHE; versuch++) {
+            Besitz besitz = new Besitz();
+            synchronized (sperre) {
+                aktuellerBesitz = besitz;
+            }
             try {
-                clipboard.setContents(inhalt, neuerBesitz);
-                return true;
+                clipboard.setContents(inhalt, besitz);
+                return besitz;
             } catch (IllegalStateException gesperrt) {
                 if (versuch == VERSUCHE || !warten()) {
-                    return false;
+                    return null;
                 }
             } catch (RuntimeException anderes) {
-                return false;
+                return null;
             }
         }
-        return false;
+        return null;
     }
 
     /** {@code false}, wenn das Warten unterbrochen wurde (das Unterbrechungszeichen bleibt gesetzt). */

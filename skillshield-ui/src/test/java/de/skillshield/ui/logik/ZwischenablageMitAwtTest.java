@@ -4,6 +4,7 @@ import static de.skillshield.ui.logik.Attrappen.DREI_MAILS;
 import static de.skillshield.ui.logik.Attrappen.scannen;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import de.skillshield.ui.logik.Attrappen.TestDialoge;
 import de.skillshield.ui.swing.AwtZwischenablage;
@@ -13,6 +14,7 @@ import java.awt.datatransfer.ClipboardOwner;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -133,6 +135,66 @@ class ZwischenablageMitAwtTest {
         clipboard.nativGesperrt = false;
         sitzung.eigenenZwischenablageInhaltLeeren();
         assertEquals(4, clipboard.leerVersuche);
+        assertEquals(0, clipboard.getAvailableDataFlavors().length);
+    }
+
+    /**
+     * V-2: Fremdes Schreiben, dann ein vollstaendig gescheitertes eigenes Ablegen: Die Zwischenablage gilt als
+     * unsicher und nicht mehr als eigene ("unbekannt"), obwohl der Java-interne Stand eigenen Klartext traegt.
+     */
+    private void unsicherUndNichtBesitzer() throws Exception {
+        sitzung.textKopieren("Ausschnitt A");
+        clipboard.setContents(new FremderText(), null);
+        EventQueue.invokeAndWait(() -> { });
+        clipboard.nativGesperrt = true;
+        sitzung.textKopieren("Ausschnitt B");
+        assertEquals(Texte.ZWISCHENABLAGE_NICHT_VERFUEGBAR, sitzung.statusleiste().meldung());
+        clipboard.nativGesperrt = false;
+        assertEquals("Ausschnitt B", text(), "Vorbedingung: eigener Klartext steht im internen Stand");
+    }
+
+    @Test
+    void imZustandUnsicherUndNichtBesitzerLeertDasBeendenTrotzdem() throws Exception {
+        unsicherUndNichtBesitzer();
+
+        assertTrue(sitzung.beendenAnfordern());
+
+        assertEquals(0, clipboard.getAvailableDataFlavors().length, "Schutz geht vor: geleert");
+        assertEquals(List.of(), dialoge.erneutFragen);
+    }
+
+    @Test
+    void imZustandUnsicherUndNichtBesitzerLeertDasZuruecksetzenNichtAberMeldetEs() throws Exception {
+        unsicherUndNichtBesitzer();
+
+        assertTrue(sitzung.zuruecksetzenAnfordern());
+
+        assertEquals("Ausschnitt B", text());
+        assertEquals(Texte.ZWISCHENABLAGE_NICHT_GELEERT, sitzung.statusleiste().meldung());
+    }
+
+    @Test
+    void beimBeendenBleibtNachweislichFremderInhaltUnberuehrt() throws Exception {
+        sitzung.textKopieren("Ausschnitt A");
+        clipboard.setContents(new FremderText(), null);
+        EventQueue.invokeAndWait(() -> { });
+
+        assertTrue(sitzung.beendenAnfordern());
+
+        assertEquals("fremder Text", text());
+        assertEquals(List.of(), dialoge.erneutFragen);
+    }
+
+    @Test
+    void scheitertDasLeerenBeimBeendenKommtDieRueckfrageUndErneutVersuchenLeert() {
+        sitzung.textKopieren("Ausschnitt A");
+        clipboard.nativGesperrt = true;
+        dialoge.erneutAntworten.add(true);
+        dialoge.beiErneutFrage = () -> clipboard.nativGesperrt = false;
+
+        assertTrue(sitzung.beendenAnfordern());
+
+        assertEquals(List.of(Rueckfrage.ZWISCHENABLAGE_NICHT_GELEERT), dialoge.erneutFragen);
         assertEquals(0, clipboard.getAvailableDataFlavors().length);
     }
 

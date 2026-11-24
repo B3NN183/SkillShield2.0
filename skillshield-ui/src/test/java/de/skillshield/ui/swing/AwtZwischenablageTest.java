@@ -471,6 +471,51 @@ class AwtZwischenablageTest {
         assertEquals(Optional.empty(), zwischenablage.leseText());
     }
 
+    /** Wie {@link SunNah}, aber nur der naechste Zugriff scheitert (Sperre, die sich waehrend der Pause loest). */
+    private static final class EinmalGesperrt extends Clipboard {
+        volatile boolean naechsterScheitert;
+        volatile boolean dauerhaftGesperrt;
+
+        EinmalGesperrt() {
+            super("test");
+        }
+
+        @Override
+        public synchronized void setContents(Transferable contents, ClipboardOwner owner) {
+            super.setContents(contents, owner);
+            if (dauerhaftGesperrt || naechsterScheitert) {
+                naechsterScheitert = false;
+                throw new IllegalStateException();
+            }
+        }
+    }
+
+    @Test
+    void einVerlustWaehrendDerWiederholungMachtDenErfolgreichenVersuchNichtZumVerlorenen() {
+        EinmalGesperrt clipboard = new EinmalGesperrt();
+        // Waehrend der Pause kopiert ein anderes Programm; der Besitzverlust des ersten (gescheiterten)
+        // Versuchs trifft ein, bevor der zweite Versuch gelingt.
+        AwtZwischenablage zwischenablage = new AwtZwischenablage(clipboard, millis -> {
+            if (clipboard.dauerhaftGesperrt) {
+                return;
+            }
+            clipboard.setContents(new Fremd(DataFlavor.stringFlavor, "fremder Text"), null);
+            try {
+                besitzverlustAbwarten();
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        });
+        clipboard.naechsterScheitert = true;
+
+        assertTrue(zwischenablage.setzeText("eigener Text"), "zweiter Versuch gelingt");
+        clipboard.dauerhaftGesperrt = true;
+        assertFalse(zwischenablage.setzeText("gescheitert"));
+
+        // V-1: Der erfolgreiche Versuch hat einen eigenen Besitz, der nicht verloren ist.
+        assertEquals(Optional.of("eigener Text"), zwischenablage.leseText());
+    }
+
     @Test
     void derOeffentlicheKonstruktorBrauchtKeineSperreUndSchlaeftNicht() {
         Clipboard clipboard = new Clipboard("test");

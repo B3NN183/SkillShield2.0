@@ -169,6 +169,11 @@ class SitzungKopierenTest {
             }
 
             @Override
+            public boolean erneutVersuchen(Rueckfrage frage) {
+                return dialoge.erneutVersuchen(frage);
+            }
+
+            @Override
             public void fehler(String text) {
                 dialoge.fehler(text);
             }
