@@ -84,8 +84,9 @@ import org.junit.jupiter.api.Test;
  * IPv4 im Dokumentationsbereich ist; (c) sie in der Datei {@code SynthetischeKvNummern.java} steht und jede ihrer
  * neunstelligen Ziffernfolgen (Gesamtzahl neun oder Block aus neun) mit {@code 00} beginnt oder an den Stellen 3 bis 7
  * {@code 00000} hat (BSNR-Form nach A-6, Feature kvnr-bsnr-erkennung, T-12) oder die eng gefasste Sonderkennung
- * (Praefix 35 oder 75, Schluessel der Anlage 1 an Stelle 3 und 4, {@code 00000} an Stelle 5 bis 9; T-13); alle
- * anderen Folgen bleiben
+ * (Praefix 35 oder 75, Schluessel der Anlage 1 an Stelle 3 und 4, {@code 00000} an Stelle 5 bis 9; T-13; sie muss
+ * zusaetzlich nach dem LANR- und nach dem IK-Verfahren ungueltig sein, das prueft
+ * {@code BsnrSynthetischWaechter#istSonderkennungMitSchluessel} mit Selbsttest); alle anderen Folgen bleiben
  * {@code ZENTRALE_OHNE_PRAEFIX_00}); oder (d) sie in der
  * geschlossenen Ausnahmeliste {@code AUSNAHMEN_ZIFFERN} steht. Ein Eintrag gilt nur fuer genau eine benannte Datei
  * (Dateiname) und genau diese Kette; ein Eintrag, der in dieser Datei nicht mehr als Verstoss vorkommt, macht den
@@ -687,7 +688,8 @@ class TestdatenSynthetischTest {
     /**
      * Ist die neunstellige Folge eine BSNR-Form nach A-6: {@code 00000} an Stelle 3 bis 7, oder die eng gefasste
      * Sonderkennung (Praefix 35 oder 75, Schluessel der Anlage 1 an Stelle 3 und 4, {@code 00000} an Stelle 5 bis 9;
-     * Nachtrag zu T-13)?
+     * Nachtrag zu T-13); die Sonderkennung muss nach dem LANR- und nach dem IK-Verfahren ungueltig sein (das
+     * prueft {@code BsnrSynthetischWaechter#istSonderkennungMitSchluessel}; sonst entstuende ein LANR- oder IK-Fund)?
      */
     static boolean istBsnrForm(String neunerFolge) {
         return (neunerFolge.length() == 9 && neunerFolge.startsWith(BSNR_NULLBLOCK, 2))

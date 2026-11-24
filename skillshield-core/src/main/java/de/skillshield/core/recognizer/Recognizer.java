@@ -36,7 +36,7 @@ public interface Recognizer {
      * Ziffern bleibt stehen (bekannte Grenze G-K14, Einzelheiten im Javadoc des {@link TextScanner}). Standard:
      * {@code false}.
      *
-     * @return {@code true} fuer die Erkenner der neuen Arten (KVNR, spaeter BSNR)
+     * @return {@code true} fuer die Erkenner der neuen Arten (KVNR und BSNR)
      */
     default boolean nachrangig() {
         return false;

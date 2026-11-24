@@ -13,6 +13,7 @@ import de.skillshield.core.recognizer.general.EmailRecognizer;
 import de.skillshield.core.recognizer.general.Ipv4Recognizer;
 import de.skillshield.core.recognizer.general.PathRecognizer;
 import de.skillshield.core.recognizer.general.UrlRecognizer;
+import de.skillshield.core.recognizer.kv.BsnrRecognizer;
 import de.skillshield.core.recognizer.kv.IkRecognizer;
 import de.skillshield.core.recognizer.kv.KvnrRecognizer;
 import de.skillshield.core.recognizer.kv.LanrRecognizer;
@@ -356,7 +357,7 @@ class TextScannerTest {
         List<Class<?>> klassen = TextScanner.standard().recognizers().stream()
                 .<Class<?>>map(Object::getClass).toList();
         assertEquals(List.of(EmailRecognizer.class, Ipv4Recognizer.class, UrlRecognizer.class, PathRecognizer.class,
-                LanrRecognizer.class, IkRecognizer.class, KvnrRecognizer.class), klassen);
+                LanrRecognizer.class, IkRecognizer.class, KvnrRecognizer.class, BsnrRecognizer.class), klassen);
     }
 
     @Test

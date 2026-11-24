@@ -1,5 +1,7 @@
 package de.skillshield.core.recognizer;
 
+import static de.skillshield.core.SynthetischeKvNummern.BSNR_BEKANNT;
+import static de.skillshield.core.SynthetischeKvNummern.BSNR_UNBEKANNT;
 import static de.skillshield.core.SynthetischeKvNummern.IK_FORM_DOKU_IP;
 import static de.skillshield.core.SynthetischeKvNummern.IK_GUELTIG;
 import static de.skillshield.core.SynthetischeKvNummern.LANR_GUELTIG;
@@ -15,6 +17,7 @@ import de.skillshield.core.model.FindingType;
 import de.skillshield.core.pseudonymize.PseudonymizationResult;
 import de.skillshield.core.pseudonymize.Pseudonymizer;
 import de.skillshield.core.recognizer.general.PathRecognizer;
+import de.skillshield.core.recognizer.kv.BsnrSynthetischWaechter;
 import de.skillshield.core.recognizer.kv.IkRecognizer;
 import de.skillshield.core.recognizer.kv.KvTestHilfen;
 import de.skillshield.core.recognizer.kv.LanrRecognizer;
@@ -339,5 +342,42 @@ class TextScannerKvTest {
         PseudonymizationResult mit = PSEUDONYMIZER.pseudonymize(text, funde);
         assertEquals("LANR [[LANR_1]]", mit.text());
         assertRoundtrip(text, mit);
+    }
+
+    // ------------------------------------------------------------------ BSNR (kvnr-bsnr-erkennung, T-14)
+
+    @Test
+    void bsnr_pseudonymisierungMitLanrUndIkGlobaleNummerierungUndRoundtrip() {
+        String text = "BSNR " + BSNR_BEKANNT + ", LANR " + LANR_GUELTIG + ", IK " + IK_GUELTIG;
+        BsnrSynthetischWaechter.assertBsnrSynthetisch(text);
+        List<Finding> funde = scan(text);
+        assertEquals(3, funde.size());
+        assertEquals(FindingType.BSNR, funde.get(0).type());
+        assertEquals(FindingType.LANR, funde.get(1).type());
+        assertEquals(FindingType.IK, funde.get(2).type());
+        assertTrue(BSNR_BEKANNT.equals(funde.get(0).originalValue()), "BSNR-Wert");
+        PseudonymizationResult ergebnis = PSEUDONYMIZER.pseudonymize(text, funde);
+        assertTrue("BSNR [[BSNR_1]], LANR [[LANR_2]], IK [[IK_3]]".equals(ergebnis.text()), "Text mit Platzhaltern");
+        assertRoundtrip(text, ergebnis);
+    }
+
+    @Test
+    void bsnr_fraglicherFundBleibtImScanUndOhneUebergabeBleibtDerTextUnveraendert() {
+        String text = "BSNR " + BSNR_UNBEKANNT;
+        BsnrSynthetischWaechter.assertBsnrSynthetisch(text);
+        List<Finding> funde = scan(text);
+        assertEquals(1, funde.size());
+        assertEquals(FindingType.BSNR, funde.get(0).type());
+        assertEquals(ConfidenceLevel.FRAGLICH, funde.get(0).level());
+        assertTrue(text.equals(PSEUDONYMIZER.pseudonymize(text, List.of()).text()), "Text ohne Fund veraendert");
+        PseudonymizationResult mit = PSEUDONYMIZER.pseudonymize(text, funde);
+        assertTrue("BSNR [[BSNR_1]]".equals(mit.text()), "Text mit Platzhalter");
+        assertRoundtrip(text, mit);
+    }
+
+    @Test
+    void bsnr_ohneKontextwortEntstehtKeinFund_gegenprobeMitKontextwort() {
+        assertTrue(scan("Nummer " + BSNR_BEKANNT).isEmpty(), "Fund ohne Kontextwort");
+        assertEquals(1, scan("BSNR " + BSNR_BEKANNT).size());
     }
 }

@@ -7,6 +7,7 @@ import de.skillshield.core.recognizer.general.EmailRecognizer;
 import de.skillshield.core.recognizer.general.Ipv4Recognizer;
 import de.skillshield.core.recognizer.general.PathRecognizer;
 import de.skillshield.core.recognizer.general.UrlRecognizer;
+import de.skillshield.core.recognizer.kv.BsnrRecognizer;
 import de.skillshield.core.recognizer.kv.IkRecognizer;
 import de.skillshield.core.recognizer.kv.KvnrRecognizer;
 import de.skillshield.core.recognizer.kv.LanrRecognizer;
@@ -27,13 +28,15 @@ import java.util.TreeMap;
  * <p>Grundsatz "Bestand hat Vorrang" (Plan kvnr-bsnr-erkennung, Nachtrag 2 und 3 zu T-6): Funde der Typen E-Mail,
  * IP, URL und Pfad bleiben durch die neueren Arten in allen Feldern unveraendert. Vor der Konfliktaufloesung
  * schneidet der Scanner deshalb jeden Kandidaten eines nachrangigen Erkenners ({@link Recognizer#nachrangig()},
- * derzeit nur der {@code KvnrRecognizer}), der sich mit den Bestandsbereichen in mindestens einer Position
+ * derzeit der {@code KvnrRecognizer} und der {@code BsnrRecognizer}), der sich mit den Bestandsbereichen in
+ * mindestens einer Position
  * ueberschneidet, auf die Teile ausserhalb zu (Zuschneiden statt Verwerfen). Bestandsbereiche sind die Bereiche der
  * Funde dieser vier Typen im Scan ohne die nachrangigen Erkenner, also einschliesslich der dort schon mit LANR- oder
  * IK-Kandidaten zusammengelegten Funde (sonst koennte ein Restfund ueber einen LANR-/IK-Kandidaten einen
  * zusammengelegten Bestandsfund verlaengern oder abschwaechen). Jedes Reststueck wird
  * an beiden Enden auf ASCII-Buchstaben und -Ziffern gekuerzt und bleibt als Fund mit der Quelle
- * {@link Recognizer#restQuelle()} (KVNR: {@code kvnr-rest}) und hoechstens 0,80 Konfidenz, wenn es mindestens drei
+ * {@link Recognizer#restQuelle()} (KVNR: {@code kvnr-rest}, BSNR: {@code bsnr-rest}) und hoechstens 0,80
+ * Konfidenz, wenn es mindestens drei
  * Ziffern enthaelt; liegt der Kandidat ganz im Bestand, entfaellt er. Restfunde grenzen an Bestandsfunde nur an.
  * Kandidaten der uebrigen Erkenner (auch LANR und IK) werden nie veraendert; der {@link ConflictResolver} bleibt
  * unveraendert. Aufwand: zwei Aufloesungen und je Kandidat eine binaere Suche, also O(n log n) in der Zahl der
@@ -53,6 +56,14 @@ import java.util.TreeMap;
  * <p>Quellen der KVNR-Funde im Scan: {@code kvnr}, {@code kvnr-pruefziffer-ungueltig}, {@code kvnr-form-abweichend}
  * (Konfidenzen 0,95 bis 0,40 nach den Regeln im Javadoc von {@code KvnrRecognizer}) und {@code kvnr-rest} (Reststueck
  * neben einem Bestandsfund, hoechstens 0,80).
+ *
+ * <p>Quellen der BSNR-Funde im Scan: {@code bsnr}, {@code bsnr-regionalcode-unbekannt},
+ * {@code bsnr-laenge-abweichend} (Konfidenzen 0,90 bis 0,40 nach den Regeln im Javadoc von
+ * {@code BsnrRecognizer}) und {@code bsnr-rest}. Mehrere Kontextwoerter und Zahlen, die zu mehreren Arten passen
+ * (Formularfeld {@code BSNR/LANR <Nummer>/<Nummer>}, dieselbe Zahl unter LANR und BSNR): jede Art erzeugt ihre
+ * Kandidaten getrennt; ueber einer Position bleibt genau ein Fund, der Typ folgt der Konfliktregel (hoehere
+ * Konfidenz, bei Gleichstand der Typname). Ein Kontextwort einer anderen Art aendert keinen Fund der Typen E-Mail,
+ * IP, URL und Pfad.
  */
 public final class TextScanner {
 
@@ -71,14 +82,15 @@ public final class TextScanner {
     }
 
     /**
-     * Scanner mit den Standard-Erkennern in dieser Reihenfolge: E-Mail, IPv4, URL, Pfad, LANR, IK, KVNR. Die Liste
-     * ist ueber {@link #recognizers()} lesbar. Die KVNR steht am Ende; bei Konflikten entscheidet allein der
-     * {@link ConflictResolver} (nicht die Reihenfolge).
+     * Scanner mit den Standard-Erkennern in dieser Reihenfolge: E-Mail, IPv4, URL, Pfad, LANR, IK, KVNR, BSNR. Die
+     * Liste ist ueber {@link #recognizers()} lesbar. KVNR und BSNR stehen am Ende; bei Konflikten entscheidet allein
+     * der {@link ConflictResolver} (nicht die Reihenfolge). Typen mit gleichem Bereich: hoehere Konfidenz gewinnt,
+     * bei Gleichstand der Typname (BSNR vor IK vor KVNR vor LANR); Plan kvnr-bsnr-erkennung, Kapitel 2.
      */
     public static TextScanner standard() {
         return new TextScanner(List.of(new EmailRecognizer(), new Ipv4Recognizer(), new UrlRecognizer(),
                 new PathRecognizer(), new LanrRecognizer(), new IkRecognizer(),
-                new KvnrRecognizer()));
+                new KvnrRecognizer(), new BsnrRecognizer()));
     }
 
     /**

@@ -1446,3 +1446,30 @@ Tests in `KvnrGrenzenTest`, sofern nicht anders genannt. Diese Liste ergänzt un
   `BsnrSynthetischWaechter` (Regel 1, `Befund.verstoesse`, Assertion-Meldung) und in `TestdatenSynthetischTest`
   (Klassen-Javadoc, Javadoc von `istBsnrForm`) nennen. `Betriebsst.-Nr.` bleibt bekannte Grenze (T-15,
   Folgefeature-Vorschlag: Abkürzungspunkt als Nachsatz-Trenner).
+- **Nachtrag zu T-14 (Entscheidung der Hauptsitzung, 24.11.2026):** Der engineer hat korrekt angehalten: Nach der
+  Einbindung des `BsnrRecognizer` sind zwei Bestandstests in `TextScannerKvnrTest` rot, die den alten Stand der
+  Erkennerliste festhalten (kein Fund ändert sich; gemessen: 0 BSNR-Funde und 0 geänderte Fundlisten auf allen elf
+  Bestandsmengen). Zulässige Anpassung – und nur diese:
+  1. `ak21_standardEnthaeltDenKvnrErkennerAnLetzterStelleIndexSechs`: Zahl der Standard-Erkenner 7 → 8; der
+     `KvnrRecognizer` bleibt an Index 6, der `BsnrRecognizer` steht an Index 7; die Reihenfolgenprüfung wird um
+     diesen einen Eintrag ergänzt. Der Testname darf bleiben (kein Umbenennen bestehender Tests) – Javadoc
+     klarstellen.
+  2. `nachrangig_inStandardIstGenauDerKvnrErkennerNachrangigEinAnderer_nicht`: genau **zwei** nachrangige
+     Erkenner, nämlich `KvnrRecognizer` und `BsnrRecognizer`; jeder andere bleibt nicht nachrangig (weiter einzeln
+     geprüft).
+  3. Jede geänderte Stelle trägt einen Kommentar „Nachtrag zu T-14" mit dem alten Wert. Sonst wird an
+     Bestandstests nichts geändert.
+- **Vorgemerkt aus security T-14 (niedrig; in T-15 mitzunehmen):**
+  1. Wächter-Aufruf ergänzen in `TextScannerKvTest` (dritter BSNR-Test, ~380) und
+     `BsnrScannerKollisionenTest` (~302–310, von Hand übergebene Funde).
+  2. **Berichtigung zu T-15, Grenzlast:** Die Erwartung „`BSNR ` + `1 ` wiederholt → 0" trifft nicht zu (die
+     gruppierten Einsen bilden Kandidaten mit bekanntem Regionalcode; bei LANR war das schon im Bestand so).
+     T-15 misst den tatsächlichen Wert, hält ihn mit Formel exakt fest und begründet ihn im Javadoc; die
+     2-Sekunden-Grenze je Schritt gilt unverändert.
+  3. In T-15 als bekannte Grenzen dokumentieren und testen: (a) `<Kontextwort> <IPv4>/<Nummer>` – die Nummer
+     bleibt ungedeckt (bestand schon bei LANR; vgl. G-K18); (b) Rest von ein bis zwei Ziffern neben einem
+     Bestandsfund (G-K14) gilt auch für `bsnr-rest`; (c) Abkürzungen außerhalb D-8 (`Betriebsst.-Nr.`, `BS-Nr.`,
+     `BSN`, `BSt-Nr.`, `HBSNR`, Plural, Tippfehler, Trennstrich im Wort); (d) zerlegter Umlaut.
+  4. Hinweis für das UI-Feature (kein Mangel): Ein zusammengelegter Fund kann durch einen teilweise
+     überlappenden BSNR-Kandidaten von „sicher" auf „wahrscheinlich" fallen (K-4, Abdeckung wird größer;
+     gemessen 27 Positionen je 1 Mio. Texte). Ein späterer Filter nach Stufe muss das berücksichtigen.

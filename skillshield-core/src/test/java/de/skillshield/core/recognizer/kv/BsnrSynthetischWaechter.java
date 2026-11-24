@@ -13,8 +13,9 @@ import de.skillshield.core.SynthetischeKvNummern;
  *   <li><b>Neunerfolgen.</b> Jede Folge aus ganzen Ziffernbloecken mit zusammen genau neun Ziffern (Bloecke durch genau
  *       einen Trenner verbunden) hat entweder das Praefix {@code 00} oder die Ziffern {@code 00000} an den Stellen 3
  *       bis 7 (BSNR nach A-6) oder ist eine Sonderkennung mit Schluessel (Praefix 35 oder 75, Schluessel der Anlage 1
- *       an Stelle 3 und 4, Stellen 5 bis 9 gleich {@code 00000}). Vollbreite Ziffern (U+FF10 bis U+FF19) zaehlen als
- *       Ziffern.</li>
+ *       an Stelle 3 und 4, Stellen 5 bis 9 gleich {@code 00000}), diese Sonderkennung nur, wenn die Folge nach dem
+ *       LANR- und nach dem IK-Verfahren ungueltig ist (sonst entstuende ein LANR- oder IK-Fund). Vollbreite Ziffern
+ *       (U+FF10 bis U+FF19) zaehlen als Ziffern.</li>
  *   <li><b>Keine ungewollte KVNR-Form.</b> Die enge KVNR-Form nach E-3 ({@link KvnrBsnrHilfen#kvnrFormEngTreffer}:
  *       Grossbuchstabe mit Wortgrenze davor, genau neun Ziffern, Wortgrenze dahinter, gueltige Pruefziffer) kommt im
  *       Teil-2-Text nicht vor, ausser der Aufrufer nennt die Zahl der beabsichtigten Formen. Steht eine BSNR-Testnummer
@@ -41,7 +42,8 @@ public final class BsnrSynthetischWaechter {
      *
      * @param neunerfolgen Zahl der gefundenen Neunerfolgen (ganze Bloecke, zusammen genau neun Ziffern)
      * @param verstoesse   davon die Zahl ohne Praefix {@code 00}, ohne {@code 00000} an Stelle 3 bis 7 und ohne
-     *                     Sonderkennung mit Schluessel
+     *                     Sonderkennung mit Schluessel (eine Sonderkennung zaehlt nur, wenn sie nach dem LANR- und
+     *                     nach dem IK-Verfahren ungueltig ist, sonst ist sie ein Verstoss)
      * @param kvnrFormen   Zahl der Treffer der engen KVNR-Form im Text
      */
     public record Befund(int neunerfolgen, int verstoesse, int kvnrFormen) {
@@ -147,7 +149,8 @@ public final class BsnrSynthetischWaechter {
     public static void assertBsnrSynthetisch(String text, int erlaubteKvnrFormen) {
         Befund b = pruefe(text);
         assertTrue(b.verstoesse() == 0, "Neunerfolge ohne Praefix 00, ohne 00000 an Stelle 3 bis 7 und ohne"
-                + " Sonderkennung mit Schluessel im Testtext: " + b.verstoesse());
+                + " Sonderkennung mit Schluessel (nach LANR- und IK-Verfahren ungueltig) im Testtext: "
+                + b.verstoesse());
         assertTrue(b.kvnrFormen() == erlaubteKvnrFormen, "Ungewollte KVNR-Form im Teil-2-Testtext: gefunden "
                 + b.kvnrFormen() + ", erlaubt " + erlaubteKvnrFormen);
     }

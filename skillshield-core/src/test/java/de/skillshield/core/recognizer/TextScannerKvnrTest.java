@@ -22,6 +22,7 @@ import de.skillshield.core.recognizer.general.EmailRecognizer;
 import de.skillshield.core.recognizer.general.Ipv4Recognizer;
 import de.skillshield.core.recognizer.general.PathRecognizer;
 import de.skillshield.core.recognizer.general.UrlRecognizer;
+import de.skillshield.core.recognizer.kv.BsnrRecognizer;
 import de.skillshield.core.recognizer.kv.IkRecognizer;
 import de.skillshield.core.recognizer.kv.KvnrBsnrHilfen;
 import de.skillshield.core.recognizer.kv.KvnrBsnrHilfen.Abweichungen;
@@ -88,15 +89,23 @@ class TextScannerKvnrTest {
 
     // ------------------------------------------------------------------ AK-21: Einbindung
 
+    /**
+     * Der KVNR-Erkenner steht an Index 6. Seit T-14 folgt als achter Erkenner der BSNR-Erkenner an Index 7; der Name
+     * des Tests bleibt unveraendert.
+     */
     @Test
     void ak21_standardEnthaeltDenKvnrErkennerAnLetzterStelleIndexSechs() {
         List<Class<?>> klassen = TextScanner.standard().recognizers().stream()
                 .<Class<?>>map(Object::getClass).toList();
-        assertEquals(7, klassen.size(), "Zahl der Standard-Erkenner");
+        // Nachtrag zu T-14: Zahl der Standard-Erkenner 8 (alter Wert: 7)
+        assertEquals(8, klassen.size(), "Zahl der Standard-Erkenner");
+        // Nachtrag zu T-14: Liste um BsnrRecognizer ergaenzt (alt: endete mit KvnrRecognizer.class)
         assertTrue(List.of(EmailRecognizer.class, Ipv4Recognizer.class, UrlRecognizer.class, PathRecognizer.class,
-                LanrRecognizer.class, IkRecognizer.class, KvnrRecognizer.class).equals(klassen),
+                LanrRecognizer.class, IkRecognizer.class, KvnrRecognizer.class, BsnrRecognizer.class).equals(klassen),
                 "Reihenfolge der Standard-Erkenner");
         assertEquals(KvnrRecognizer.class, klassen.get(6), "Index 6");
+        // Nachtrag zu T-14: neuer Eintrag, BsnrRecognizer an Index 7
+        assertEquals(BsnrRecognizer.class, klassen.get(7), "Index 7");
     }
 
     @Test
@@ -592,12 +601,14 @@ class TextScannerKvnrTest {
     void nachrangig_inStandardIstGenauDerKvnrErkennerNachrangigEinAnderer_nicht() {
         int nachrangig = 0;
         for (Recognizer erkenner : TextScanner.standard().recognizers()) {
-            boolean istKvnr = erkenner instanceof KvnrRecognizer;
+            // Nachtrag zu T-14: auch BsnrRecognizer ist nachrangig (alt: nur instanceof KvnrRecognizer)
+            boolean istKvnr = erkenner instanceof KvnrRecognizer || erkenner instanceof BsnrRecognizer;
             assertEquals(istKvnr, erkenner.nachrangig(), "Flag nachrangig() von "
                     + erkenner.getClass().getSimpleName());
             nachrangig += erkenner.nachrangig() ? 1 : 0;
         }
-        assertEquals(1, nachrangig, "Zahl der nachrangigen Erkenner");
+        // Nachtrag zu T-14: genau zwei nachrangige Erkenner (alter Wert: 1)
+        assertEquals(2, nachrangig, "Zahl der nachrangigen Erkenner");
         Recognizer lambda = t -> List.of();
         assertFalse(lambda.nachrangig(), "Lambda-Erkenner ist nicht nachrangig");
         assertTrue(new KvnrRecognizer().restQuelle().equals(QUELLE_REST), "Rest-Quelle des KVNR-Erkenners");
