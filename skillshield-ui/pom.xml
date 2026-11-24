@@ -32,14 +32,58 @@
       <artifactId>skillshield-vault</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <!-- Synthetische KV-Nummern des Kerns (SynthetischeKvNummern) fuer die Oberflaechentests (A-1) -->
+    <dependency>
+      <groupId>de.skillshield</groupId>
+      <artifactId>skillshield-core</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <java.awt.headless>${ui.headless}</java.awt.headless>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-enforcer-plugin</artifactId>
         <executions>
+          <execution>
+            <id>positivliste</id>
+            <phase>validate</phase>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <bannedDependencies>
+                  <excludes>
+                    <exclude>*</exclude>
+                  </excludes>
+                  <includes>
+                    <include>de.skillshield:skillshield-core</include>
+                    <include>de.skillshield:skillshield-io</include>
+                    <include>de.skillshield:skillshield-vault</include>
+                    <include>org.junit.jupiter:*:*:*:test</include>
+                    <include>org.junit.platform:*:*:*:test</include>
+                    <include>org.opentest4j:*:*:*:test</include>
+                    <include>org.apiguardian:*:*:*:test</include>
+                  </includes>
+                  <searchTransitive>true</searchTransitive>
+                  <message>Positivliste verletzt (AK-52): skillshield-ui darf nur SkillShield-Module und die JUnit-Familie einbinden.</message>
+                </bannedDependencies>
+              </rules>
+            </configuration>
+          </execution>
           <execution>
             <id>modulrichtung</id>
             <phase>validate</phase>

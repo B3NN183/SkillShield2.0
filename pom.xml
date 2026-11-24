@@ -38,10 +38,20 @@
 
     <!-- Bibliotheken (JUnit 5.x-Linie, nur Test-Scope) -->
     <junit.version>5.14.4</junit.version>
+    <!-- FlatLaf (Apache License 2.0), nur Laufzeit von skillshield-app; fest gepinnt -->
+    <flatlaf.version>3.6.1</flatlaf.version>
+
+    <!-- Oberflaechentests laufen standardmaessig ohne Bildschirm; mit Bildschirm: mvn verify -Dui.headless=false -->
+    <ui.headless>true</ui.headless>
   </properties>
 
   <dependencyManagement>
     <dependencies>
+      <dependency>
+        <groupId>com.formdev</groupId>
+        <artifactId>flatlaf</artifactId>
+        <version>${flatlaf.version}</version>
+      </dependency>
       <dependency>
         <groupId>org.junit</groupId>
         <artifactId>junit-bom</artifactId>
@@ -135,7 +145,7 @@
       </plugin>
 
       <!-- OWASP-Check: bewusst OHNE executions, also nicht Teil von "mvn verify" (E-7).
-           Aufruf: mvn clean compile org.owasp:dependency-check-maven:check
+           Aufruf: mvn clean package -DskipTests org.owasp:dependency-check-maven:check
            Der NVD-API-Key kommt nur aus der Umgebungsvariable NVD_API_KEY (E-5), nie aus dem Repository. -->
       <plugin>
         <groupId>org.owasp</groupId>

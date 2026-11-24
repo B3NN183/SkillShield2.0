@@ -36,6 +36,20 @@ mvn clean verify
 Baut alle Module und führt die JUnit-5-Tests aus (jedes Modul bringt eigene Tests mit).
 Der OWASP-Dependency-Check läuft dabei **bewusst nicht** mit (kein Netzzugriff nötig).
 
+Die Tests der Module `skillshield-ui` und `skillshield-app` laufen standardmäßig **ohne Bildschirm** (headless,
+`ui.headless=true`); Tests mit echtem Fenster werden dabei als übersprungen gemeldet. Mit Bildschirm:
+`mvn verify -Dui.headless=false`.
+
+## Lizenzen von Fremdbibliotheken
+
+| Bibliothek | Version | Lizenz | Verwendung |
+|------------|---------|--------|------------|
+| FlatLaf (`com.formdev:flatlaf`) | 3.6.1 | Apache License 2.0 | Look-and-Feel der Oberfläche, nur Laufzeit von `skillshield-app` |
+| JUnit 5 | 5.14.4 | Eclipse Public License 2.0 | nur Tests |
+
+Apache 2.0 verlangt bei Weitergabe die Lizenz- und NOTICE-Datei; sie werden mit der startbaren JAR ausgeliefert
+(Umsetzung im Task „Startprogramm“).
+
 ## Module und Abhängigkeitsrichtung
 
 | Modul | darf abhängen von | verboten (Enforcer-Regel `modulrichtung`) |
@@ -55,26 +69,44 @@ Klassenpfad-Tests je Modul die Richtung.
 Aufruf (Wurzelverzeichnis):
 
 ```
-mvn clean compile org.owasp:dependency-check-maven:check
+mvn clean package -DskipTests org.owasp:dependency-check-maven:check
 ```
 
-Die Phase `compile` ist nötig: Ohne sie scheitert der Lauf im Multi-Modul-Projekt mit
-`Could not find artifact de.skillshield:skillshield-core:jar`.
+Die Phase `package` ist nötig: Ohne sie scheitert der Lauf im Multi-Modul-Projekt mit
+`Could not find artifact de.skillshield:skillshield-core:jar` bzw. (seit der Oberfläche, Test-JAR des Kerns)
+`Could not find artifact de.skillshield:skillshield-core:jar:tests`. `-DskipTests` baut die JAR-Dateien, führt aber
+keine Tests aus. Der frühere Aufruf mit `compile` genügt nicht mehr (A-6).
 
 Der Check ist nicht Teil von `mvn verify`. Er bricht ab bei Befunden ab CVSS 7 (`failBuildOnCVSS`) und bei Fehlern beim
 Aktualisieren der Datenbank (`failOnError`).
 
 ### Was der Standardlauf prüft (und was nicht)
 
-Standardmäßig werden nur Compile-/Runtime-Abhängigkeiten geprüft. Solange das Produkt keine Fremdbibliotheken
-enthält, prüft der Lauf **0 Abhängigkeiten** und ist trotzdem grün; das ist kein Nachweis für die Test-Bibliotheken.
-Diese (JUnit) werden mit zusätzlichem Parameter geprüft:
+Standardmäßig werden nur Compile-/Runtime-Abhängigkeiten geprüft. Seit der Oberfläche ist das FlatLaf 3.6.1
+(nur in `skillshield-app`), alle übrigen Module haben keine Fremdbibliothek. Die Test-Bibliotheken (JUnit) werden mit
+zusätzlichem Parameter geprüft. Build-Plugins (Maven-Plugins) prüft der Check nicht (bekannte Grenze):
 
 ```
-mvn clean compile org.owasp:dependency-check-maven:check -Dodc.skipTestScope=false
+mvn clean package -DskipTests org.owasp:dependency-check-maven:check -Dodc.skipTestScope=false
 ```
 
-Stand 22.11.2026: 8 Artefakte, 0 Befunde.
+Stand 24.11.2026 (Lauf mit `mvn -B clean package -DskipTests org.owasp:dependency-check-maven:check
+-Dodc.skipTestScope=false`): 0 Befunde. Geprüfte Artefakte je Bericht: Wurzel 7, core 7, io 8, vault 8, ui 11,
+app 12 (darunter FlatLaf 3.6.1). Das NVD-Update wurde in diesem Lauf übersprungen, weil die Datenbank vom selben
+Tag war (jünger als 4 Stunden); geprüft wurde also gegen den lokalen Stand dieser Datenbank.
+
+### Grenzen der automatischen Wächter (ui und app)
+
+- **Abhängigkeits-Positivliste** (Enforcer, Phase `validate`): erfasst nur Abhängigkeiten, keine Build-Plugins und
+  keine Maven-Extensions. SkillShield-Module sind einzeln aufgezählt, JUnit nur mit Scope `test`, FlatLaf nur in
+  der festen Version 3.6.1.
+- **Quelltext-Wächter**: sucht verbotene Zeichenfolgen als Teilstring (auch in Kommentaren) und löst
+  Unicode-Escapes vor dem Abgleich auf. Bewusste Verschleierung und zusammengesetzte Zeichenketten (etwa
+  Reflection mit gebautem Klassennamen) erkennt er nicht; dafür gilt die Prüfung durch reviewer und security.
+- **Testdaten-Wächter**: prüft `src/test/java` und `src/test/resources` auf Ziffernketten ab neun Ziffern (auch mit
+  Leerzeichen, Punkt, Bindestrich, Schrägstrich, Unterstrich gruppiert), fremde E-Mail-Domains und IPv4-Adressen.
+  Nicht erkannt werden zusammengesetzte Zeichenketten, andere Trenner, IPv6-Adressen sowie Namen, Geburtsdaten und
+  Adressen.
 
 ### NVD-API-Key
 
@@ -110,7 +142,8 @@ Von Git ignoriert.
 | `Invalid API Key, length of 0 …` | `NVD_API_KEY` nicht gesetzt oder Terminal nach `setx` nicht neu geöffnet. |
 | `Invalid API Key: xxxxx-*****-xxxxx` | Key falsch oder noch nicht aktiv (nach Beantragung einige Minuten warten). |
 | `NVD Update Failed: attempted to retrieve data from the NVD unsuccessfully five times` | NVD nicht erreichbar: Netz oder Proxy prüfen. |
-| `Could not find artifact de.skillshield:skillshield-core:jar` | Phase `compile` fehlt im Aufruf (siehe oben). |
+| `Could not find artifact de.skillshield:skillshield-core:jar` | Phase `package` fehlt im Aufruf (siehe oben). |
+| `Could not find artifact de.skillshield:skillshield-core:jar:tests` | Phase `package` fehlt im Aufruf: das Test-JAR des Kerns entsteht erst dort (siehe oben). |
 
 ### Netzziele des Checks (für Proxy-/Firewall-Freigaben)
 
@@ -131,7 +164,7 @@ Wird im Netz ein Proxy oder Spiegel gebraucht, gehört die Konfiguration in `~/.
 ## Hinweis für die Agenten (qa, security)
 
 - qa: `mvn verify` im Wurzelverzeichnis (bei Bedarf `mvn clean verify`).
-- security: `mvn clean compile org.owasp:dependency-check-maven:check`, für die Test-Bibliotheken mit
+- security: `mvn clean package -DskipTests org.owasp:dependency-check-maven:check`, für die Test-Bibliotheken mit
   `-Dodc.skipTestScope=false`. Der Key kommt aus der Umgebung (`NVD_API_KEY`) und wird nicht ausgegeben.
 - Die Erstbefüllung der Datenbank macht der Nutzer (sie überschreitet das Zeitlimit eines Agenten-Aufrufs).
 - Ein Lauf ohne Key oder Netz ist nur dann ein gültiger Nachweis, wenn das Update nicht übersprungen wurde; bei

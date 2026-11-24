@@ -767,3 +767,24 @@ der Oberfläche laufen headless. Testdaten: KV-Nummern nur aus `SynthetischeKvNu
 5. **A-6** Mögliche Änderung des OWASP-Aufrufs im README (`package -DskipTests` statt `compile`).
 6. **OF-4** Java 21 auf den Zielrechnern bleibt offen (Voraussetzung bis zum Installationspaket).
 7. **FlatLaf-Version** 3.6.1 als Vorschlag; endgültige Version nennt T-1 nach OWASP-Check.
+
+---
+
+## Nachtrag zu T-1 (Durchlauf 2, Ergänzung zu Kap. 10)
+
+Der Text von Kap. 10 bleibt unverändert; die Wächter in ui und app sind wie folgt verschärft:
+
+- **Quelltext-Wächter, zusätzlich verboten:** `ProcessBuilder`, `Runtime.getRuntime`, `.exec(`,
+  `Desktop.getDesktop`, `FileHandler`, `java.util.logging`, `System.getLogger`, `File.createTempFile`,
+  `Files.copy`, `Files.move`, `newByteChannel`, `FileChannel`, `ImageIO.write`, `new PrintWriter(`,
+  `new PrintStream(`, `newFileSystem`, `dumpStack` sowie gegen Umgehung per Reflection `Class.forName`,
+  `MethodHandles`, `getDeclaredMethod`. Unicode-Escapes werden vor dem Abgleich aufgelöst. Der Wächter läuft nur,
+  wenn `pom.xml` im Arbeitsverzeichnis liegt (sonst rot); nur ein fehlendes `src/main/java` gilt als leer.
+- **Testdaten-Wächter:** Unterstrich zählt als Trenner in Ziffernketten (Zahlliterale); zusätzlich wird
+  `src/test/resources` geprüft (fehlend = leer); gleiche `pom.xml`-Prüfung.
+- **Positivliste (Enforcer):** SkillShield-Module einzeln statt `de.skillshield:*`; JUnit-Familie nur mit Scope
+  `test`; FlatLaf nur in der festen Version aus der Property `flatlaf.version` (3.6.1).
+- **Grenzen:** Der Quelltext-Wächter erkennt keine bewusste Verschleierung und keine zusammengesetzten
+  Zeichenketten. Der Testdaten-Wächter erkennt keine zusammengesetzten Zeichenketten, keine anderen Trenner, kein
+  IPv6 und keine Namen, Geburtsdaten oder Adressen. Die Positivliste erfasst keine Build-Plugins und Extensions.
+  Diese Restlücken deckt die Prüfung durch reviewer und security ab.
