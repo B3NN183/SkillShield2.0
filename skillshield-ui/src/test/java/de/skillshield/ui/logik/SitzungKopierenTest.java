@@ -276,7 +276,7 @@ class SitzungKopierenTest {
         scannen(sitzung, DREI_MAILS);
         sitzung.anwaehlen(1, false);
 
-        sitzung.textKopieren("anna@example.org");
+        assertTrue(sitzung.textKopieren("anna@example.org"), "true: abgelegt, die Ansicht darf ausschneiden");
         sitzung.anwaehlen(1, true);
 
         assertEquals(List.of("anna@example.org"), zwischenablage.gesetzt);
@@ -288,7 +288,7 @@ class SitzungKopierenTest {
     void textKopierenBeiGesperrterZwischenablageMeldetEsUndMerktSichNichts() {
         zwischenablage.gesperrt = true;
 
-        sitzung.textKopieren("Ausschnitt");
+        assertFalse(sitzung.textKopieren("Ausschnitt"), "false: Die Ansicht schneidet dann nicht aus (T-6)");
 
         assertEquals(Texte.ZWISCHENABLAGE_NICHT_VERFUEGBAR, sitzung.statusleiste().meldung());
         assertEquals(List.of(Texte.ZWISCHENABLAGE_NICHT_VERFUEGBAR), dialoge.fehler);
@@ -301,8 +301,8 @@ class SitzungKopierenTest {
 
     @Test
     void einLeererAusschnittTutNichts() {
-        sitzung.textKopieren("");
-        sitzung.textKopieren(null);
+        assertFalse(sitzung.textKopieren(""));
+        assertFalse(sitzung.textKopieren(null));
 
         assertEquals(0, zwischenablage.zugriffe);
     }

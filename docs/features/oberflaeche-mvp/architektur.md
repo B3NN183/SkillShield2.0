@@ -1208,3 +1208,101 @@ Ergänzt den „Nachtrag zu T-5“ (dessen Text bleibt unverändert). `anforderu
   Leeren-Regel. Beim Beenden kann ein nicht lesbarer fremder Inhalt (z. B. ein Bild) mitgeleert werden; beim
   Zurücksetzen kann „nicht geleert“ auch gemeldet werden, wenn der Anwender die Zwischenablage selbst geleert hat oder
   ein Bild darin liegt. Optional zu prüfen: Shutdown-Hook mit Leeren ohne Dialog als Best-Effort.
+
+## Nachtrag zu T-6 (Umsetzungsstand Hauptpanel)
+
+Ergänzt die Nachträge zu T-5 (deren Text bleibt unverändert). `anforderung.md` bleibt unverändert. Kein Fenster, kein
+`JFrame`, keine System-Zwischenablage in T-6; `Toolkit.getSystemClipboard()` kommt im Produktivcode nirgends vor und
+gehört in die Verdrahtung von T-8 (der Adapter wird von außen hereingereicht).
+
+### Aufbau (`de.skillshield.ui.swing`)
+
+- `HauptPanel` (public) setzt je Bereich eine kleine Klasse zusammen: `EingabeBereich` (1), `FundeBereich` (2),
+  `KiTextBereich` (3), `AntwortBereich` (4), dazu Fußleiste (Zurücksetzen, Beenden) und Statusleiste. Hilfsklassen:
+  `Kontext` (jede **Aktion** der Oberfläche, also Schaltflächen, Tastenkürzel, Kopier-/Einfügewege sowie Dokument- und
+  Auswahl-Hörer, läuft über `sicher(...)`; Ausnahmen gehen über `Fehlerbehandlung` als fester Text mit Klassenname an
+  `Dialoge.fehler`, nie auf die Konsole. Nicht darüber laufen die lesenden Zugriffe der Beobachter-Aktualisierung
+  (`aktualisieren()`, Tabellenmodell) und `ScanStarter.done()`, das ein eigenes `catch` hat und `Kontext.melden` ruft),
+  `Bausteine` (Etiketten, Schaltflächen, Renderer mit
+  `html.disable`), `Textaktionen` (alle Kopier-, Ausschneide-, Einfüge- und Ziehwege), `TextBereich`, `Hinweistext`,
+  `FundTabellenModell`, `ScanStarter`, `SwingDialoge`.
+- **Abweichung vom Plan (Konstruktor):** `HauptPanel(Sitzung, Zwischenablage, Dialoge, Runnable beenden)` statt
+  `(Sitzung, Zwischenablage)`: `Dialoge` für Fehler aus Ansichtsaktionen, `beenden` für die Schaltfläche (der Runnable
+  ruft `sitzung.beendenAnfordern()` und beendet den Prozess, T-8). Paketinterner Konstruktor mit `ScanStarter` für Tests.
+  `HauptPanel.MINDESTGROESSE` (900 x 640) für T-8.
+- **Abweichung (Dialogtexte):** `SwingDialoge` bricht Frage- und Fehlertexte an Leerzeichen auf 60 Zeichen um
+  (`SwingDialoge.umbrechen`, Konstante `UMBRUCH`). Grund: `JOptionPane` bricht lange Texte nicht um, der Dialog würde
+  sonst so breit wie der Text. Wörter bleiben ganz, der Inhalt ändert sich nicht (nur Leerzeichen werden zu
+  Zeilenumbrüchen). Test: `SwingDialogeTest.umbruchHaeltWoerterGanzUndVeraendertDenInhaltNicht`.
+- Layout: 2 x 2 (1 oben links, 2 oben rechts, 3 unten links, 4 unten rechts), darunter Fußleiste und Statusleiste.
+- `ScanStarter` ist ein Interface (`imHintergrund` mit `SwingWorker`; im Test synchron). Im Hintergrund läuft nur
+  `ScanAuftrag.ausfuehren()`; `scanAbgeschlossen`/`scanFehlgeschlagen` genau einmal je Auftrag auf dem Ereignis-Thread.
+- Zeilenenden: Gescannt wird `eingabe.getText()`, Markierungsgrenzen sind Offsets desselben Dokuments; `markieren()` gibt
+  sie nur an die Sitzung, solange das Feld genau den gescannten Text zeigt.
+- Tabelle: Modell liest direkt aus `Sitzung.zeilen()`; bei gleichen Funden nur `fireTableRowsUpdated` (Zeilenwahl und
+  Hervorhebung bleiben), sonst `fireTableDataChanged`. Liste "Nicht zurückübersetzt": höchstens
+  `Texte.MAX_LISTENZEILEN` (500) Zeilen, dann "… und n weitere".
+
+### Änderungen an der abgenommenen Logik (klein, begründet)
+
+- `Sitzung.textKopieren` liefert `boolean` (abgelegt oder nicht). Grund: Ausschneiden darf den Text nur löschen, wenn
+  das Ablegen gelang (sonst Datenverlust bei gesperrter Zwischenablage). Tests in `SitzungKopierenTest` ergänzt.
+- `Texte` um die festen Texte der Ansicht ergänzt (Überschriften, Hinweise, Leer-Texte, Beschriftungen, Dialogantworten,
+  `undWeitere`, `MAX_LISTENZEILEN`).
+
+### Sicherheit
+
+- Text-/Kopierwege: Alle Textfelder, Tabelle und Liste tragen einen eigenen `TransferHandler` (`Textaktionen.Uebertragung`:
+  `getSourceActions = NONE`, `exportToClipboard` schreibt nie in eine `Clipboard`, Drop nur `stringFlavor` und nie mit
+  Dateiliste, nur in bearbeitbare Felder) und belegen `copy`, `copy-to-clipboard`, `cut`, `cut-to-clipboard`, `paste`,
+  `paste-from-clipboard` in der eigenen `ActionMap` (überlebt Look-and-Feel-Wechsel). Bereich 3: jedes Kopieren ist
+  `fuerKiKopieren()`, Ausschneiden gibt es nicht. Tabelle/Liste: alles abgeschaltet.
+- HTML: `html.disable` auf Etiketten, Schaltflächen, Tabellen- und Listenrenderer; kein `JEditorPane`.
+- `SwingDialoge.erneutVersuchen` wirft bei einer Ausnahme beim Anzeigen (auch headless) und liefert nie still `true`;
+  `ZWISCHENABLAGE_NICHT_GELEERT` nie über `bestaetigt()` (IllegalArgumentException).
+
+### Neue Grenzen und Vormerkungen
+
+- **Zeilenumbruch:** Swing bricht eine einzige Zeile von rund einer Million Zeichen in quadratischer Zeit um (Test
+  hing minutenlang; gemessen rund 11 s je Breitenänderung). Zeilen über `TextBereich.UMBRUCH_GRENZE` (50 000 Zeichen)
+  werden daher nicht umbrochen (waagerechter Rollbalken); mehrzeilige Texte bleiben umbrochen. Durchlauf 2 (Fund S-1):
+  Die Prüfung steckt nicht mehr nur in `textSetzen`/`einfuegen`, sondern im Dokument des Feldes (`UmbruchDokument`):
+  Nach **jeder** Einfügung (Tippen, Einfügen, Ablegen, `setText`) wird die Länge der betroffenen Zeilen (Elemente des
+  Root-Elements an der Änderungsstelle, je Zeile konstante Zeit, nie ein Volldurchlauf) geprüft; liegt eine über der
+  Grenze, wird der Umbruch abgeschaltet. Das geschieht nachdem alle Dokument-Hörer (auch die Ansicht) das Ereignis
+  bekommen haben. Mehrfaches Einfügen in dieselbe Zeile wird so erkannt. Wieder eingeschaltet wird nach einer
+  Löschung nur, wenn der **ganze** Text höchstens 50 000 Zeichen hat (dann kann keine Zeile darüber liegen, O(1));
+  ein mehrzeiliger Text, der nur insgesamt über der Grenze liegt, bleibt ohne Umbruch bis zum nächsten vollständigen
+  Setzen (`textSetzen`) oder Zurücksetzen. Zeilenende ist wie im Dokument nur der Zeilenvorschub (ein einzelnes
+  `\r` trennt keine Zeile).
+- **Speicherreste (Durchlauf 2, S-2):** Leeren per `setText("")` lässt den alten Text im Zeichenpuffer (`GapContent`)
+  des Dokuments stehen. Beim Zurücksetzen (`HauptPanel.zuruecksetzen`) und über `HauptPanel.felderVerwerfen()`
+  bekommen Eingabe, KI-Antwort, Ergebnis und (über die Aktualisierung der Sitzung) Text für die KI **neue**
+  Dokumente (`TextBereich.zuruecksetzen()`); die Dokument-Hörer werden am neuen Dokument wieder angemeldet
+  (`TextBereich.aenderungenMelden`), Hervorhebungen werden vorher entfernt, Umbruch wieder eingeschaltet. Caret,
+  `TransferHandler` und `ActionMap` hängen am Feld und bleiben unverändert. Ebenso geleert: `gescannterText`,
+  `KiTextBereich.angezeigt`, `AntwortBereich.angezeigt`. Nachweis: `FelderVerwerfenTest` (schwache Referenzen auf
+  die alten Dokumente sind nach dem Zurücksetzen und garbage collection leer; Reflexion in JDK-Klassen ist unter
+  Java 21 nicht möglich, deshalb dieser Weg). **Für T-8:** Nach `sitzung.beendenAnfordern() == true` und vor dem
+  Beenden des Prozesses `HauptPanel.felderVerwerfen()` rufen (öffentlich, nur Ereignis-Thread); die Bereiche 2 und 3
+  und das Ergebnis leert die Sitzung selbst über ihre Benachrichtigung.
+- **Weitere Härtung (Durchlauf 2):** `SwingDialoge.fehler` verwirft eine Ausnahme beim Anzeigen auf dem
+  Ereignis-Thread (aus `invokeLater`) still, ohne Stacktrace (S-3); der Hörer der Tabellenauswahl (`hervorheben`)
+  läuft über `Kontext.sicher` (S-3). Die Tabelle hat keine Standard-Editoren für `Object`, `String` und `Number`
+  (ein `JTextField` mit Standard-`TransferHandler` wäre ein Weg an der Zwischenablage-Regel vorbei); bearbeitbar
+  ist nur das Kontrollkästchen der Spalte 0 (S-4).
+- **Plattformgrenze (S-5):** Unter Linux/X11 schreibt Swing jede Markierung eines fokussierten Textfeldes direkt in
+  die Systemauswahl (PRIMARY), am Adapter der Zwischenablage vorbei; das lässt sich in der Oberfläche nicht
+  abfangen. Unter Windows (Zielplattform) gibt es keine Systemauswahl, der Weg besteht dort nicht.
+- Das 1-Mio.-Zeilen-Szenario (Einzelzeichen-Markierung) erzeugt einen Text für die KI von 10 Mio. Zeichen in Bereich 3.
+- **T-7:** Tastenkürzel, Mnemonics, Fokusreihenfolge, zugängliche Namen, Tooltips (Sperrgrund). Die Hinweistexte sind
+  `setFocusable(false)` (nicht in der Tab-Reihenfolge); T-7 entscheidet über Screenreader-Zugang. `Hinweistext` und
+  Etiketten haben keine Accessible Names.
+- **T-8:** `HauptPanel`-Fehler-Handler/`SwingDialoge` mit Elternfenster verdrahten; echte `AwtZwischenablage` mit
+  System-Clipboard erzeugen; mit FlatLaf prüfen, ob ein eigenes Kontextmenü der Textfelder existiert (sollte über die
+  ActionMap-Namen ebenfalls an die Sitzung laufen; Sichtprüfung). Anwendertext (README): Hinzufügen kann abgewählte Funde zu
+  einem `TEXT`-Fund zusammenfassen (Nachtrag 2 zu T-3); Zeilen über 50 000 Zeichen werden nicht umbrochen
+  (waagerechter Rollbalken; bei mehrzeiligem Text, der nur insgesamt darüber liegt, bleibt der Umbruch nach dem
+  ersten Überschreiten aus, siehe oben); eine Teilmarkierung in Bereich 3 mit Strg+C kopiert den **ganzen** Text für die
+  KI (jedes Kopieren dort ist "Für KI kopieren"); nach "Beenden" muss der Prozess wirklich enden und
+  `HauptPanel.felderVerwerfen()` gerufen werden, weil die Felder sonst noch Klartext halten.

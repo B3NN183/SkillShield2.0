@@ -1,5 +1,6 @@
 package de.skillshield.ui.logik;
 
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -76,7 +77,77 @@ public final class Texte {
     /** Grund in der Liste "Nicht zurückübersetzt": beschädigter Platzhalter. */
     public static final String GRUND_BESCHAEDIGT = "beschädigt";
 
+    // ---- Beschriftungen der Ansicht (T-6); feste Texte, nie Eingabe- oder Fundtext
+
+    /** Überschrift Bereich 1 (D-1). */
+    public static final String BEREICH_1 = "1 Text eingeben";
+    /** Überschrift Bereich 2 (D-1). */
+    public static final String BEREICH_2 = "2 Funde prüfen";
+    /** Überschrift Bereich 3 (D-1). */
+    public static final String BEREICH_3 = "3 Für KI kopieren";
+    /** Überschrift Bereich 4 (D-1). */
+    public static final String BEREICH_4 = "4 KI-Antwort zurückübersetzen";
+    /** Leer-Text der Tabelle vor dem ersten Scan (AK-5). */
+    public static final String LEER_VOR_SCAN = "Noch kein Scan. Text eingeben und Scannen wählen.";
+    /** Leer-Text der Tabelle nach einem Scan ohne Fund (D-16, AK-5). */
+    public static final String LEER_NACH_SCAN = "Keine Fundstelle erkannt. Das heißt nicht, dass der Text keine "
+            + "personenbezogenen Daten enthält: Namen und Adressen werden noch nicht erkannt. "
+            + "Bitte prüfen Sie den Text und markieren Sie fehlende Stellen von Hand.";
+    /** Dauerhinweis in Bereich 2 (AK-21). */
+    public static final String HINWEIS_ERKENNUNG = "Die Erkennung ist nicht vollständig. Namen und Adressen werden "
+            + "noch nicht erkannt. Bitte prüfen Sie den Text und markieren Sie fehlende Stellen von Hand.";
+    /** Dauerhinweis in Bereich 4 (AK-40, D-5). */
+    public static final String HINWEIS_ZUORDNUNG = "Die Rückübersetzung ist nur möglich, solange dieses Programm "
+            + "geöffnet ist und kein neuer Scan gestartet wurde. Die Zuordnung wird nicht gespeichert.";
+    /** Leer-Text von Bereich 3 (AK-5). */
+    public static final String LEER_BEREICH_3 = "Hier erscheint der Text für die KI, sobald gescannt wurde.";
+    /** Leer-Text von Bereich 4 (AK-5). */
+    public static final String LEER_BEREICH_4 = "Hier erscheint der rückübersetzte Text, sobald eine KI-Antwort "
+            + "zurückübersetzt wurde.";
+    /** Beschriftung der Schaltfläche in Bereich 1. */
+    public static final String SCANNEN = "Scannen";
+    /** Beschriftung der Schaltfläche in Bereich 2 (AK-16: es gibt kein "alle abwählen"). */
+    public static final String ALLE_ANWAEHLEN = "Alle anwählen";
+    /** Beschriftung der Schaltfläche in Bereich 2 (D-7). */
+    public static final String MARKIERUNG_HINZUFUEGEN = "Markierung als Fund hinzufügen";
+    /** Beschriftung der Schaltfläche in Bereich 3. */
+    public static final String FUER_KI_KOPIEREN = "Für KI kopieren";
+    /** Beschriftung der Schaltfläche in Bereich 4 (AK-36). */
+    public static final String ZURUECKUEBERSETZEN = "Zurückübersetzen";
+    /** Beschriftung der Schaltfläche in Bereich 4 (AK-39). */
+    public static final String ERGEBNIS_KOPIEREN_SCHALTFLAECHE = "Rückübersetzten Text kopieren";
+    /** Beschriftung der Schaltfläche in der Fußleiste (AK-42). */
+    public static final String ZURUECKSETZEN = "Zurücksetzen";
+    /** Beschriftung der Schaltfläche in der Fußleiste (AK-43). */
+    public static final String BEENDEN = "Beenden";
+    /** Beschriftung des Eingabefeldes in Bereich 4 (AK-36). */
+    public static final String KI_ANTWORT = "KI-Antwort";
+    /** Beschriftung des Ergebnisfeldes in Bereich 4 (AK-37). */
+    public static final String RUECKUEBERSETZTER_TEXT = "Rückübersetzter Text";
+    /** Beschriftung der Liste in Bereich 4 (AK-38). */
+    public static final String NICHT_ZURUECKUEBERSETZT = "Nicht zurückübersetzt";
+    /** Spaltenköpfe der Fundtabelle in dieser Reihenfolge (AK-13). */
+    public static final List<String> SPALTENKOEPFE = List.of("Übernehmen", "Typ", "Fundtext", "Stufe", "Platzhalter");
+    /** Antwort "Ja" der Rückfragen (AK-2). */
+    public static final String JA = "Ja";
+    /** Antwort "Abbrechen" der Rückfragen, Standard (AK-2). */
+    public static final String ABBRECHEN = "Abbrechen";
+    /** Schaltfläche des Fehlerdialogs (AK-2). */
+    public static final String OK = "OK";
+    /** Titel der Rückfragedialoge. */
+    public static final String TITEL_RUECKFRAGE = "Rückfrage";
+    /** Titel des Fehlerdialogs. */
+    public static final String TITEL_FEHLER = "Fehler";
+
+    /** Höchstzahl der angezeigten Zeilen der Liste "Nicht zurückübersetzt"; der Rest wird nur gezählt. */
+    public static final int MAX_LISTENZEILEN = 500;
+
     private Texte() {
+    }
+
+    /** Letzte Zeile der gekürzten Liste "Nicht zurückübersetzt": "… und 124.500 weitere". Nur eine Zahl. */
+    public static String undWeitere(int anzahl) {
+        return String.format(Locale.GERMANY, "… und %,d weitere", anzahl);
     }
 
     /** Meldung nach dem Kopieren für die KI (AK-35): "Text für KI kopiert (3 Stellen ersetzt)". */

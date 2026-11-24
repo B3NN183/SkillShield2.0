@@ -387,12 +387,15 @@ public final class Sitzung {
      * Strg+C/X aus der Eingabe, der KI-Antwort oder dem Ergebnis: legt den markierten Ausschnitt ab und merkt ihn
      * für die Zwischenablage-Regel (D-6). Ein leerer Ausschnitt tut nichts. Aus Bereich 3 kopiert die Ansicht über
      * {@link #fuerKiKopieren()}, nie über diese Methode.
+     *
+     * @return {@code true}, wenn der Ausschnitt abgelegt wurde; die Ansicht löscht beim Ausschneiden nur dann
+     *         (T-6: sonst ginge der Text verloren, wenn die Zwischenablage gesperrt ist)
      */
-    public void textKopieren(String teil) {
+    public boolean textKopieren(String teil) {
         if (teil == null || teil.isEmpty()) {
-            return;
+            return false;
         }
-        ablegen(teil);
+        return ablegen(teil);
     }
 
     /** Die Ansicht meldet, ob das Feld "KI-Antwort" leer ist; davon hängt "Zurückübersetzen" ab (AK-36). */
