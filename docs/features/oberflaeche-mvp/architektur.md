@@ -827,3 +827,46 @@ Ergänzung zum Nachtrag 2; beide Wächter (ui und app) sind gleich geändert:
 - **Einordnung:** Der Wächter ist ein Sicherheitsnetz gegen Versehen, kein Beweis. Restlücken: alles, was nicht auf
   der Liste steht; Reflection mit zusammengesetzten Zeichenketten; Aufrufe über Hilfsklassen fremder Bibliotheken.
   Diese Lücken deckt die Prüfung durch reviewer und security ab.
+
+---
+
+## Nachtrag zu T-3 (weitere Vorkommen: "möglichst viel schützen", Entscheidung der Hauptsitzung)
+
+Ändert Kap. 3.4 Schritt 6 sowie D-9 c, AK-25 und G-4 der Anforderung (Abweichung in Richtung Schutz; `anforderung.md`
+bleibt unverändert). Anlass: Ein weiteres Vorkommen der markierten Zeichenfolge, das einen **abgewählten** Fund
+schnitt, wurde übersprungen und blieb im Text für die KI im Klartext.
+
+**Regel für jedes weitere Vorkommen** (nicht überlappende Suche von links nach rechts, Surrogat-Regel unverändert,
+Suchwert ist die markierte Zeichenfolge, nicht der erweiterte Fund):
+
+- **a) Schneidet es keinen Fund:** neuer angewählter `TEXT`-Fund (wie bisher).
+- **b) Liegt es vollständig in angewählten Funden** (jedes Zeichen, auch im in diesem Aufruf neu entstandenen Fund):
+  bereits geschützt, nichts ändert sich, Typ und Platzhalter des bestehenden Fundes bleiben.
+- **c) Sonst** (es schneidet einen abgewählten Fund oder ragt aus einem angewählten heraus): ein neuer angewählter
+  `TEXT`-Fund über die Vereinigung aus dem Vorkommen und allen Funden, die es schneidet; diese Funde werden ersetzt.
+  Neue Funde der Fälle c und der markierten Stelle, die sich berühren oder überlappen, werden zu einem verschmolzen
+  (freie Vorkommen des Falls a nicht). Ergebnis sortiert und überlappungsfrei; die Auswahl aller nicht betroffenen
+  Zeilen bleibt; kein vorher angewählter Bereich wird ungeschützt.
+
+Folge: Nach dem Hinzufügen steht kein Vorkommen der markierten Zeichenfolge (im Sinn der nicht überlappenden Suche)
+mehr ganz oder teilweise im Klartext. Das sich selbst überlappende Muster (`aa` in `aaaa`, Markierung [1,3)) ergibt
+einen Fund über alles. **G-4 entfällt für die markierte Zeichenfolge; G-9 (anderer `TEXT`-Platzhalter bei
+Vereinigung) gilt auch für diese Fälle.** Umsetzung linear (ein Durchlauf mit Zeiger über die sortierten Funde).
+
+**Zählweise der Meldung** (`Texte.hinzugefuegt(hinzugefuegt, bereitsGeschuetzt, ersetzt)`):
+
+- `hinzugefuegt` = Stellen, die neu geschützt wurden = markierte Stelle + Vorkommen der Fälle a und c (nicht die
+  Zahl der Funde, weil Verschmelzen Funde zusammenfasst); Text "N Stellen als Fund hinzugefügt." ("1 Stelle").
+- `bereitsGeschuetzt` = Vorkommen des Falls b; Text " M Stellen waren bereits geschützt." ("1 Stelle war ..."),
+  nur bei M > 0.
+- `ersetzt` = Zahl der bestehenden (nicht neuen) Funde, die in neuen Funden aufgegangen sind, auch die bei der
+  markierten Stelle; Text " K bestehende Funde wurden dabei ersetzt." ("1 bestehender Fund wurde ..."), nur bei K > 0.
+- Das Wort "übersprungen" kommt nicht mehr vor. Nur feste Wörter und Zahlen.
+
+**Statuszeile (AK-20):** Nach dem Hinzufügen steht in derselben Meldung hinter der Hinzufüge-Meldung die aktuelle
+Zählung ("... 3 Funde, 3 angewählt, 0 fraglich."); die Struktur von `Statusleiste` bleibt unverändert.
+
+**Neue Grenze G-10 (Schreibvarianten):** Es werden nur zeichengleiche Vorkommen erkannt. Andere Groß-/Kleinschreibung,
+Unicode-Normalform (NFC/NFD), andere Trennzeichen oder anderer Leerraum zählen nicht als weiteres Vorkommen. Wird
+ohne ein folgendes kombinierendes Zeichen markiert, bleibt dieses hinter dem Platzhalter stehen. Für den
+Anwendertext (README-Abschnitt in T-8) vormerken: Schreibvarianten eines Namens einzeln markieren.

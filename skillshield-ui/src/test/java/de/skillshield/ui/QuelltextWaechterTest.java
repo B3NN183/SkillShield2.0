@@ -37,7 +37,7 @@ class QuelltextWaechterTest {
     static final List<String> VERBOTEN = List.of(
             "java.net.", "javax.net.", "java.net.http", "java.awt.Desktop", ".browse(", "Socket", "URLConnection",
             "HttpClient", "java.rmi", "javax.naming",
-            "FileOutputStream", "FileWriter", "Files.write", "newOutputStream","Files.newBufferedWriter",
+            "FileOutputStream", "FileWriter", "Files.write", "newOutputStream", "Files.newBufferedWriter",
             "Files.createFile", "Files.createTempFile", "Files.createTempDirectory", "RandomAccessFile",
             "java.util.prefs", "java.util.logging.FileHandler", "printStackTrace", "System.out", "System.err",
             "ProcessBuilder", "Runtime.getRuntime", ".exec(", "Desktop.getDesktop", "FileHandler",
@@ -47,7 +47,7 @@ class QuelltextWaechterTest {
             "import static java.lang.System.*", "import static java.nio.file.Files.*",
             "import static java.lang.Runtime.*", "System.console", "getMethod(", "loadClass(", "System.load",
             "createImageOutputStream", "PrinterJob", "getField(", "getDeclaredField", "Formatter(",
-            "createNewFile");
+            "createNewFile", ".print(", "getPrintJob");
 
     private static final Path POM = Path.of("pom.xml");
     private static final Pattern UNICODE_ESCAPE = Pattern.compile("\\\\u+([0-9a-fA-F]{4})");
@@ -315,6 +315,22 @@ class QuelltextWaechterTest {
             assertFalse(verstoesse("A.java", "class A { Object o = " + form + "; }").isEmpty(), form);
         }
         assertTrue(verstoesse("A.java", "class A { String s = String.format(\"%s\", 1); }").isEmpty());
+    }
+
+    @Test
+    void selbsttest_druckenIstVerbotenAberPrintlnUndPrintfSindEsHierNichtDoppelt() {
+        List<String> drucken = List.of(
+                "w.print(x)", "w.print (x)", "w .print(x)", "w.\nprint(x)", "w/**/.print(x)",
+                "Toolkit.getDefaultToolkit().getPrintJob(f, t, p)");
+        for (String form : drucken) {
+            assertFalse(verstoesse("A.java", "class A { Object o = " + form + "; }").isEmpty(), form);
+        }
+        assertEquals(1, verstoesse("A.java", "class A { Object o = w.print(x); }").size());
+        // Diese Formen treffen nur ihre eigenen Eintraege, nicht ".print(".
+        assertTrue(verstoesse("A.java", "class A { Object o = w.println(x); }").isEmpty());
+        assertTrue(verstoesse("A.java", "class A { Object o = w.printf(x); }").isEmpty());
+        assertTrue(verstoesse("A.java", "class A { Object o = blueprint(x); String s = \"print(\"; }").isEmpty());
+        assertEquals(1, verstoesse("A.java", "class A { void f(Throwable t) { t.printStackTrace(); } }").size());
     }
 
     @Test

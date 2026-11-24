@@ -31,7 +31,33 @@ public final class Texte {
     /** Sperrgrund für das Kopieren des Ergebnisses vor der Rückübersetzung. */
     public static final String ERST_ZURUECKUEBERSETZEN = "Erst zurückübersetzen.";
 
+    /** Meldung bei leerer oder nur aus Leerraum bestehender Markierung (AK-26). */
+    public static final String MARKIERUNG_FEHLT = "Bitte zuerst im Text eine Stelle markieren.";
+
     private Texte() {
+    }
+
+    /**
+     * Meldung nach dem manuellen Hinzufügen (AK-23, AK-24, AK-25), etwa "3 Stellen als Fund hinzugefügt. 1 Stelle
+     * war bereits geschützt. 2 bestehende Funde wurden dabei ersetzt." Die beiden letzten Sätze stehen nur, wenn die
+     * Zahl größer als null ist.
+     *
+     * @param hinzugefuegt      Zahl der neu geschützten Stellen (die markierte Stelle eingeschlossen)
+     * @param bereitsGeschuetzt Zahl der weiteren Vorkommen, die schon vollständig in angewählten Funden lagen
+     * @param ersetzt           Zahl der bestehenden Funde, die in neuen Funden aufgegangen sind
+     */
+    public static String hinzugefuegt(int hinzugefuegt, int bereitsGeschuetzt, int ersetzt) {
+        StringBuilder text = new StringBuilder();
+        text.append(hinzugefuegt).append(hinzugefuegt == 1 ? " Stelle" : " Stellen").append(" als Fund hinzugefügt.");
+        if (bereitsGeschuetzt > 0) {
+            text.append(bereitsGeschuetzt == 1 ? " 1 Stelle war bereits geschützt."
+                    : " " + bereitsGeschuetzt + " Stellen waren bereits geschützt.");
+        }
+        if (ersetzt > 0) {
+            text.append(ersetzt == 1 ? " 1 bestehender Fund wurde dabei ersetzt."
+                    : " " + ersetzt + " bestehende Funde wurden dabei ersetzt.");
+        }
+        return text.toString();
     }
 
     /** Meldung bei zu langem Text (AK-7), mit der Obergrenze in deutscher Schreibweise (1.000.000). */

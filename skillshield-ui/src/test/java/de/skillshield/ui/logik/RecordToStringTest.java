@@ -2,7 +2,9 @@ package de.skillshield.ui.logik;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.model.FindingType;
@@ -18,6 +20,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.opentest4j.AssertionFailedError;
 
 /**
  * Kein Record im Paket {@code logik} gibt per {@code toString()} Text oder Funde aus (Standard-{@code toString()}
@@ -82,15 +85,15 @@ class RecordToStringTest {
             return 0L;
         }
         if (typ == List.class) {
-            return List.of();
+            return List.of(MARKER);
         }
         if (typ == Map.class) {
-            return Map.of();
+            return Map.of(MARKER, MARKER);
         }
         if (typ == Set.class) {
-            return Set.of();
+            return Set.of(MARKER);
         }
-        return null;
+        return fail("Typ nicht unterstuetzt: " + typ.getName() + " (Komponente " + komponente.getName() + ")");
     }
 
     private static String ausgabe(Class<?> record) throws ReflectiveOperationException {
@@ -131,6 +134,31 @@ class RecordToStringTest {
 
         assertTrue(ausgabe(Schlecht.class).contains(MARKER));
         assertFalse(NUR_FESTE_TEXTE.contains(Schlecht.class.getSimpleName()));
+    }
+
+    @Test
+    void selbsttest_nichtUnterstuetzteKomponententypenSchlagenFehl() {
+        record Fremd(java.util.Optional<String> wert) { }
+
+        assertThrows(AssertionFailedError.class, () -> ausgabe(Fremd.class));
+    }
+
+    @Test
+    void statusleisteUndBedienzustandEnthaltenNachScanMitMarkerTextKeineMarkierung() {
+        String eingabe = "Zeile " + MARKER + " mail mustermann@example.org " + MARKER + " Ende";
+        Sitzung sitzung = Sitzung.standard(new Attrappen.TestZwischenablage(), new Attrappen.TestDialoge());
+        Attrappen.scannen(sitzung, eingabe);
+        sitzung.anwaehlen(0, false);
+        sitzung.anwaehlen(0, true);
+        sitzung.markierungHinzufuegen(eingabe.indexOf(MARKER), eingabe.indexOf(MARKER) + MARKER.length());
+
+        assertFalse(sitzung.statusleiste().toString().contains(MARKER), "Statusleiste");
+        assertFalse(sitzung.statusleiste().meldung().contains(MARKER), "Statusmeldung");
+        assertFalse(sitzung.statusleiste().zuordnung().contains(MARKER), "Zuordnungsanzeige");
+        assertFalse(sitzung.bedienzustand().toString().contains(MARKER), "Bedienzustand");
+        assertFalse(sitzung.toString().contains(MARKER), "Sitzung");
+        assertTrue(sitzung.textFuerKi().length() > 0 && !sitzung.textFuerKi().contains(MARKER),
+                "Vorbedingung: Der Marker ist im Text fuer die KI ersetzt");
     }
 
     @Test

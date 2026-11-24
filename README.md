@@ -108,7 +108,8 @@ Tag war (jünger als 4 Stunden); geprüft wurde also gegen den lokalen Stand die
   Statische Sternchen-Importe aus `java.lang.System`, `java.nio.file.Files` und `java.lang.Runtime` sind verboten,
   ebenso `System.console`, `getMethod(`, `loadClass(`, `System.load`, `createImageOutputStream`, `PrinterJob`,
   `PrintWriter(`, `PrintStream(`, `newOutputStream`, `getField(`, `getDeclaredField`, `Formatter(` und
-  `createNewFile`. **Der Wächter ist ein Sicherheitsnetz gegen Versehen, kein Beweis.** Nicht erkannt werden alles,
+  `createNewFile`; Drucken ist im Produkt nicht vorgesehen und deshalb mit `.print(` und `getPrintJob` verboten
+  (`println` und `printf` sind davon nicht betroffen). **Der Wächter ist ein Sicherheitsnetz gegen Versehen, kein Beweis.** Nicht erkannt werden alles,
   was nicht auf der Liste steht, Reflection mit zusammengesetzten Zeichenketten und Aufrufe über Hilfsklassen
   fremder Bibliotheken; dafür gilt die Prüfung durch reviewer und security.
 - **Testdaten-Wächter**: prüft `src/test/java` und `src/test/resources` auf Ziffernketten ab neun Ziffern (auch mit

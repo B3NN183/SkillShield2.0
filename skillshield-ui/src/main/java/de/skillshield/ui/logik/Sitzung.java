@@ -28,8 +28,8 @@ import java.util.function.Function;
  * und bewertet nichts selbst (AK-53). Meldungen entstehen nur aus {@link Texte} und Zahlen; {@link #toString()}
  * enthält nie Text.
  *
- * <p>Stand T-2: Scan, Auswahl, Live-Ergebnis, Statusleiste und Bedienzustand. Manuelles Hinzufügen, Kopieren,
- * Rückübersetzung und die Rückfragen beim Zurücksetzen und Beenden folgen in T-3 bis T-5; bis dahin folgt die
+ * <p>Stand T-3: Scan, Auswahl, Live-Ergebnis, manuelles Hinzufügen, Statusleiste und Bedienzustand. Kopieren,
+ * Rückübersetzung und die Rückfragen beim Zurücksetzen und Beenden folgen in T-4 und T-5; bis dahin folgt die
  * aktive Zuordnung immer dem Live-Ergebnis.
  */
 public final class Sitzung {
@@ -106,7 +106,7 @@ public final class Sitzung {
         if (zustand == ScanZustand.LAEUFT) {
             return Optional.empty();
         }
-        if (istLeer(eingabe)) {
+        if (Leerraum.istLeer(eingabe)) {
             return ablehnen(Texte.TEXT_FEHLT);
         }
         if (eingabe.length() > MAX_ZEICHEN) {
@@ -251,6 +251,46 @@ public final class Sitzung {
         auswahlUebernehmen(neu);
     }
 
+    /**
+     * Fügt die markierte Stelle {@code [start, ende)} des Eingabetextes und alle weiteren zeichengleichen Vorkommen
+     * als manuelle Funde hinzu (D-7 bis D-9, Algorithmus in {@link ManuellerFund}). Die neuen Funde sind
+     * angewählt, die Auswahl der übrigen Zeilen bleibt. Ohne gültigen Scan geschieht nichts (die Funktion ist
+     * gesperrt, AK-26). Eine leere oder nur aus Leerraum bestehende Markierung ändert nur die Statusmeldung.
+     * Berechnet wird vor dem Festschreiben: Scheitert die Neuberechnung, bleibt der bisherige Zustand vollständig
+     * erhalten und die Ausnahme erreicht den Aufrufer.
+     *
+     * @throws IndexOutOfBoundsException wenn die Markierung nicht im Text liegt
+     */
+    public void markierungHinzufuegen(int start, int ende) {
+        if (zustand != ScanZustand.GUELTIG) {
+            return;
+        }
+        ManuellerFund.Ergebnis hinzu = ManuellerFund.hinzufuegen(text, live.zeilen(), start, ende);
+        if (hinzu.abgelehnt()) {
+            meldung = Texte.MARKIERUNG_FEHLT;
+            informieren();
+            return;
+        }
+        List<Finding> neueFunde = new ArrayList<>(hinzu.zeilen().size());
+        boolean[] neueAuswahl = new boolean[hinzu.zeilen().size()];
+        for (int i = 0; i < neueAuswahl.length; i++) {
+            FundZeile zeile = hinzu.zeilen().get(i);
+            neueFunde.add(zeile.fund());
+            neueAuswahl[i] = zeile.angewaehlt();
+        }
+        Live neuesLive = berechne(text, neueFunde, neueAuswahl);
+        // Hinzufüge-Meldung und aktuelle Zählung (AK-20) stehen zusammen in der Meldungszeile.
+        String neueMeldung = Texte.hinzugefuegt(hinzu.hinzugefuegt(), hinzu.bereitsGeschuetzt(), hinzu.ersetzt())
+                + " " + zaehlung(neueFunde, neueAuswahl);
+        // Festschreiben: nur noch Zuweisungen, nichts kann mehr scheitern.
+        funde = List.copyOf(neueFunde);
+        angewaehlt = neueAuswahl;
+        live = neuesLive;
+        zuordnung = neuesLive.zuordnung();
+        meldung = neueMeldung;
+        informieren();
+    }
+
     /** Text für die KI (Bereich 3): der Text mit den angewählten Funden als Platzhalter; leer ohne gültigen Scan. */
     public String textFuerKi() {
         return zustand == ScanZustand.GUELTIG ? live.text() : "";
@@ -313,10 +353,6 @@ public final class Sitzung {
             case VERALTET -> Texte.NEUER_SCAN_NOETIG;
             case KEIN_SCAN, GUELTIG -> Texte.ERST_SCANNEN;
         };
-    }
-
-    private static boolean istLeer(String eingabe) {
-        return eingabe.codePoints().allMatch(cp -> Character.isWhitespace(cp) || Character.isSpaceChar(cp));
     }
 
     private Optional<ScanAuftrag> ablehnen(String grund) {
