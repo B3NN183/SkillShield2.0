@@ -1,5 +1,7 @@
 package de.skillshield.ui.swing;
 
+import de.skillshield.ui.logik.Bedienzustand;
+import de.skillshield.ui.logik.Funktion;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.FlowLayout;
@@ -10,6 +12,7 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JToolTip;
 import javax.swing.table.DefaultTableCellRenderer;
 
 /**
@@ -38,10 +41,32 @@ final class Bausteine {
     }
 
     static JButton knopf(String text, String name, Runnable aktion) {
-        JButton knopf = htmlAus(new JButton(text));
+        JButton knopf = htmlAus(new Knopf(text));
         knopf.setName(name);
         knopf.addActionListener(e -> aktion.run());
         return knopf;
+    }
+
+    /**
+     * Setzt Sperrgrund als Tooltip und als zugängliche Beschreibung, wenn die Funktion gesperrt ist, sonst beides
+     * zurück (AK-48). Der Grund ist immer ein fester Text aus {@code Texte}, nie Anwenderinhalt.
+     */
+    static void sperrgrund(JComponent komponente, Bedienzustand zustand, Funktion funktion) {
+        String grund = zustand.istAktiv(funktion) ? null : zustand.sperrgrund().get(funktion);
+        komponente.setToolTipText(grund);
+        komponente.getAccessibleContext().setAccessibleDescription(grund);
+    }
+
+    /** Schaltfläche, deren Tooltip nie als HTML gedeutet wird (die Property liegt am {@code JToolTip}). */
+    private static final class Knopf extends JButton {
+        Knopf(String text) {
+            super(text);
+        }
+
+        @Override
+        public JToolTip createToolTip() {
+            return htmlAus(super.createToolTip());
+        }
     }
 
     static JScrollPane scroll(Component inhalt, String name) {
@@ -72,12 +97,24 @@ final class Bausteine {
         TabellenText() {
             htmlAus(this);
         }
+
+        /** Vergisst den Text der zuletzt gezeichneten Zelle (der Renderer ist ein {@code JLabel}). */
+        void zuruecksetzen() {
+            setText("");
+            setIcon(null);
+        }
     }
 
     /** Zeilendarstellung der Liste "Nicht zurückübersetzt": Text, nie HTML. */
     static final class ListenText extends DefaultListCellRenderer {
         ListenText() {
             htmlAus(this);
+        }
+
+        /** Vergisst den Text der zuletzt gezeichneten Zeile (der Renderer ist ein {@code JLabel}). */
+        void zuruecksetzen() {
+            setText("");
+            setIcon(null);
         }
     }
 }

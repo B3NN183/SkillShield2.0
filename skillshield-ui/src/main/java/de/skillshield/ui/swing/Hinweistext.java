@@ -9,12 +9,15 @@ import javax.swing.UIManager;
 /**
  * Fester, umbrechender Hinweistext (Dauerhinweise AK-21 und AK-40, Leer-Texte): ein nicht bearbeitbares Textfeld
  * ohne Rahmen. Ein Textfeld statt eines {@code JLabel}, damit der Text umbricht und nie als HTML gedeutet wird.
- * Es ist nicht kopierbar ({@link Textaktionen.Rolle#HINWEIS}) und nimmt keinen Fokus.
+ * Es ist nicht kopierbar ({@link Textaktionen.Rolle#HINWEIS}) und nimmt keinen Fokus (OF-5, T-7: kein eigener
+ * Tab-Halt; für Hilfstechnik ist er ein eigenes Objekt mit festem zugänglichem Namen, und die Dauerhinweise stehen
+ * zusätzlich als Beschreibung am zugehörigen Bedienelement).
  */
 final class Hinweistext extends TextBereich {
 
-    Hinweistext(String name, String text, Kontext kontext) {
+    Hinweistext(String name, String text, String zugaenglicherName, Kontext kontext) {
         super(name, 2);
+        getAccessibleContext().setAccessibleName(zugaenglicherName);
         setText(text);
         setEditable(false);
         setFocusable(false);

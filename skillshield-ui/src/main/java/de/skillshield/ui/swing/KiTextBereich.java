@@ -33,13 +33,15 @@ final class KiTextBereich extends JPanel {
         setName("bereich3");
         Bausteine.innenabstand(this);
         text.setEditable(false);
+        text.getAccessibleContext().setAccessibleName(Texte.NAME_TEXT_FUER_KI);
         Textaktionen.installiere(text, Textaktionen.Rolle.FUER_KI, kontext);
         JLabel ueberschrift = Bausteine.etikett(Texte.BEREICH_3, "ueberschrift3");
         ueberschrift.setLabelFor(text);
         kopieren = Bausteine.knopf(Texte.FUER_KI_KOPIEREN, "fuerKiKopieren", kopierenAktion);
         add(Bausteine.kopfzeile(ueberschrift, kopieren), BorderLayout.NORTH);
         kartenFlaeche.setName("kartenFuerKi");
-        kartenFlaeche.add(new Hinweistext("leerFuerKi", Texte.LEER_BEREICH_3, kontext), KARTE_LEER);
+        kartenFlaeche.add(new Hinweistext("leerFuerKi", Texte.LEER_BEREICH_3, Texte.NAME_LEER_TEXT_FUER_KI, kontext),
+                KARTE_LEER);
         kartenFlaeche.add(Bausteine.scroll(text, "scrollFuerKi"), KARTE_TEXT);
         add(kartenFlaeche, BorderLayout.CENTER);
         karten.show(kartenFlaeche, KARTE_LEER);
@@ -66,5 +68,6 @@ final class KiTextBereich extends JPanel {
         }
         karten.show(kartenFlaeche, neu.isEmpty() ? KARTE_LEER : KARTE_TEXT);
         kopieren.setEnabled(zustand.istAktiv(Funktion.FUER_KI_KOPIEREN));
+        Bausteine.sperrgrund(kopieren, zustand, Funktion.FUER_KI_KOPIEREN);
     }
 }

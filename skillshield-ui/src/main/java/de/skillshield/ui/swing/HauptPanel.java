@@ -14,10 +14,14 @@ import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 
@@ -103,12 +107,65 @@ public final class HauptPanel extends JPanel {
         unten.add(status, BorderLayout.SOUTH);
         add(raster, BorderLayout.CENTER);
         add(unten, BorderLayout.SOUTH);
+        namenSetzen(fussleiste, status);
+        tastaturEinrichten();
 
         sitzung.beobachten(this::aktualisieren);
         aktualisieren();
     }
 
-    // ------------------------------------------------------------------ Aktionen (T-7 bindet Tastenkürzel daran)
+    /** Feste zugängliche Namen für Bereiche, Fußleiste und Statusleiste (AK-47). */
+    private void namenSetzen(JPanel fussleiste, JPanel status) {
+        bereich1.getAccessibleContext().setAccessibleName(Texte.BEREICH_1);
+        bereich2.getAccessibleContext().setAccessibleName(Texte.BEREICH_2);
+        bereich3.getAccessibleContext().setAccessibleName(Texte.BEREICH_3);
+        bereich4.getAccessibleContext().setAccessibleName(Texte.BEREICH_4);
+        fussleiste.getAccessibleContext().setAccessibleName(Texte.NAME_FUSSLEISTE);
+        status.getAccessibleContext().setAccessibleName(Texte.NAME_STATUSLEISTE);
+        statusMeldung.getAccessibleContext().setAccessibleName(Texte.NAME_STATUSMELDUNG);
+        statusZuordnung.getAccessibleContext().setAccessibleName(Texte.NAME_ZUORDNUNGSANZEIGE);
+    }
+
+    /**
+     * Tastenkürzel (D-14), Alt-Kürzel, Tab-Tasten und Tab-Reihenfolge (AK-45, AK-46). Die Kürzel rufen dieselben
+     * Aktionsmethoden wie die Schaltflächen.
+     */
+    private void tastaturEinrichten() {
+        List<JComponent> reihenfolge = List.of(bereich1.eingabe(), bereich1.scannen(), bereich2.tabelle(),
+                bereich2.alleAnwaehlen(), bereich2.markieren(), bereich3.text(), bereich3.kopieren(),
+                bereich4.antwort(), bereich4.zurueckuebersetzen(), bereich4.ergebnis(), bereich4.ergebnisKopieren(),
+                bereich4.liste(), zuruecksetzen, beendenKnopf);
+        Map<Tastatur.Kuerzel, Runnable> aktionen = new EnumMap<>(Tastatur.Kuerzel.class);
+        aktionen.put(Tastatur.Kuerzel.SCANNEN, this::scannen);
+        aktionen.put(Tastatur.Kuerzel.FUER_KI_KOPIEREN, this::fuerKiKopieren);
+        aktionen.put(Tastatur.Kuerzel.ZURUECKUEBERSETZEN, this::zurueckuebersetzen);
+        aktionen.put(Tastatur.Kuerzel.MARKIEREN, this::markieren);
+        Tastatur.kuerzelBinden(this, reihenfolge, aktionen, sitzung::bedienzustand);
+        for (JComponent komponente : reihenfolge) {
+            if (komponente instanceof TextBereich) {
+                Tastatur.tabIstFokustaste(komponente, kontext);
+            }
+        }
+        Tastatur.tabelleBelegen(bereich2.tabelle(), kontext);
+
+        Tastatur.alt(bereich1.scannen(), 'S', "S");
+        Tastatur.alt(bereich2.alleAnwaehlen(), 'A', "A");
+        Tastatur.alt(bereich2.markieren(), 'M', "M");
+        Tastatur.alt(bereich3.kopieren(), 'K', "KI");
+        Tastatur.alt(bereich4.zurueckuebersetzen(), 'R', "r");
+        Tastatur.alt(bereich4.ergebnisKopieren(), 'T', "Text");
+        Tastatur.alt(zuruecksetzen, 'Z', "Z");
+        Tastatur.alt(beendenKnopf, 'E', "e");
+        for (int i = 1; i <= 4; i++) {
+            Tastatur.alt((JLabel) komponente("ueberschrift" + i), (char) ('0' + i));
+        }
+
+        Fokusreihenfolge reihe = new Fokusreihenfolge(reihenfolge);
+        setFocusCycleRoot(true);
+        setFocusTraversalPolicy(reihe);
+    }
+
+    // ------------------------------------------------------------------ Aktionen (Schaltflächen, Kürzel)
 
     /** "Scannen": nimmt den Text des Eingabefeldes und startet den Hintergrund-Scan, wenn die Sitzung zustimmt. */
     void scannen() {
@@ -184,7 +241,16 @@ public final class HauptPanel extends JPanel {
     public void felderVerwerfen() {
         bereich1.leeren();
         bereich4.leeren();
+        bereich2.rendererZuruecksetzen();
         gescannterText = "";
+    }
+
+    /**
+     * Setzt den Fokus auf das erste Element der Tab-Reihenfolge, das Eingabefeld (AK-45: ohne Maus beginnen). Das
+     * Startprogramm (T-8) ruft das, sobald das Fenster sichtbar ist; vorher kann kein Fokus vergeben werden.
+     */
+    public void anfangsfokus() {
+        bereich1.eingabe().requestFocusInWindow();
     }
 
     /** "Beenden": der Weg der Schaltfläche; die Logik und das eigentliche Beenden steckt im {@code Runnable}. */
@@ -203,12 +269,14 @@ public final class HauptPanel extends JPanel {
         bereich3.aktualisieren(zustand);
         bereich4.aktualisieren(zustand);
         zuruecksetzen.setEnabled(zustand.istAktiv(Funktion.ZURUECKSETZEN));
+        Bausteine.sperrgrund(zuruecksetzen, zustand, Funktion.ZURUECKSETZEN);
         beendenKnopf.setEnabled(zustand.istAktiv(Funktion.BEENDEN));
+        Bausteine.sperrgrund(beendenKnopf, zustand, Funktion.BEENDEN);
         statusMeldung.setText(leiste.meldung());
         statusZuordnung.setText(leiste.zuordnung());
     }
 
-    // ------------------------------------------------------------------ Zugriff für Tests und T-7
+    // ------------------------------------------------------------------ Zugriff für Tests und Tastatur
 
     EingabeBereich eingabeBereich() {
         return bereich1;

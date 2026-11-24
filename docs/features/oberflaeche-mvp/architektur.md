@@ -1306,3 +1306,142 @@ gehört in die Verdrahtung von T-8 (der Adapter wird von außen hereingereicht).
   ersten Überschreiten aus, siehe oben); eine Teilmarkierung in Bereich 3 mit Strg+C kopiert den **ganzen** Text für die
   KI (jedes Kopieren dort ist "Für KI kopieren"); nach "Beenden" muss der Prozess wirklich enden und
   `HauptPanel.felderVerwerfen()` gerufen werden, weil die Felder sonst noch Klartext halten.
+
+## Nachtrag zu T-7 (Umsetzungsstand Tastatur und Barrierefreiheit)
+
+Ergänzt den „Nachtrag zu T-6“ (dessen Text bleibt unverändert). `anforderung.md` bleibt unverändert. Kein Fenster, kein
+FlatLaf im ui-Modul, keine neue Abhängigkeit, kein Netzwerk-, Platten-, Konsolen- oder Druck-Code.
+
+### Vorab-Korrekturen aus den Prüfungen von T-6
+
+- **V-1 Zeilenumbruch (ergänzt „Neue Grenzen“ im Nachtrag zu T-6):** Die Umbruchgrenze war durch das Löschen eines
+  Zeilenumbruchs umgehbar (zwei Zeilen verschmelzen zu einer zu langen). `TextBereich.nachLoeschung` prüft jetzt bei
+  eingeschaltetem Umbruch zusätzlich die **eine** Zeile an der Löschstelle (ein Element, kein Volldurchlauf) und schaltet
+  bei Überschreitung ab; bei ausgeschaltetem Umbruch gilt unverändert die Regel „ganzer Text höchstens 50 000 Zeichen →
+  wieder ein“. Tests in `GrosseMengenTest`: Verschmelzen über Entf, Rückschritt, `replaceSelection("")` und
+  `AbstractDocument.replace(pos, 1, "", null)`, kein Abschalten bei zwei kurzen Zeilen, Zeitgrenze mit fünf Zeilen
+  knapp unter der Grenze.
+- **V-2 Renderer-Reste:** `Bausteine.TabellenText` und `ListenText` (beide `JLabel`) behielten den Text der zuletzt
+  gezeichneten Zelle. Sie haben jetzt `zuruecksetzen()`; `FundeBereich.rendererZuruecksetzen()` läuft, wenn die Tabelle
+  leer wird und aus `HauptPanel.felderVerwerfen()`; `AntwortBereich.leeren()` und das Leeren des Ergebnisses setzen
+  Liste und Listenrenderer zurück. Tests in `FelderVerwerfenTest` (Tabelle nach Zurücksetzen, nach Scan ohne Funde, nach
+  `felderVerwerfen()`, Liste nach Zurücksetzen).
+- **V-3:** Klassen-Javadoc von `SwingDialoge` nimmt `fehler(...)` über `invokeLater` vom Satz „nie umgedeutet, sondern
+  weitergegeben“ aus; `GrosseMengenTest` nutzt `assertFalse`.
+
+### Belegung (D-14, AK-45)
+
+Neue Klassen `Tastatur` (Kürzel, Mnemonics, Tab, Leertaste) und `Fokusreihenfolge` (`FocusTraversalPolicy`).
+
+| Taste | Wirkung | Aktionsname |
+|-------|---------|-------------|
+| Strg+Enter | Scannen | `skillshield-scannen` |
+| Strg+Umschalt+C | Für KI kopieren (`fuerKiKopieren()`, mit Rückfrage bei „kein Fund angewählt“) | `skillshield-fuer-ki-kopieren` |
+| Strg+Umschalt+R | Zurückübersetzen | `skillshield-zurueckuebersetzen` |
+| Strg+M | Markierung als Fund hinzufügen | `skillshield-markieren` |
+| Tab / Umschalt+Tab | Fokus weiter / zurück, in allen vier Textfeldern **und der Tabelle** | `skillshield-fokus-vor` / `-zurueck` |
+| Leertaste in der Tabelle | Kontrollkästchen der gewählten Zeile(n) umschalten | `skillshield-funde-umschalten` |
+| Alt+S, A, M, K, R, T, Z, E | Scannen, Alle anwählen, Markierung als Fund hinzufügen, Für KI kopieren, Zurückübersetzen, Rückübersetzten Text kopieren (T von „Text“ unterstrichen), Zurücksetzen, Beenden | Mnemonic der Schaltfläche |
+| Alt+1 bis Alt+4 | Fokus in das Feld des Bereichs (`setLabelFor`): Eingabe, Tabelle, Text für die KI, KI-Antwort | Mnemonic der Überschrift |
+
+- Die Kürzel sind in `WHEN_IN_FOCUSED_WINDOW` des Panels **und** in `WHEN_FOCUSED` jeder der 14 Tab-Komponenten
+  eingetragen. Jedes hat einen eigenen Aktionsnamen, der keiner der sechs Kopiernamen ist: **Strg+Umschalt+C löst nie
+  das Kopieren eines Feldes aus** (Test: aus jeder Komponente genau ein Ablegen, der Text für die KI, nicht die
+  Auswahl des Feldes). Die Kopierwege aus T-6 sind unverändert; die Tests `keineKomponenteBesitztMehrEinen…` und
+  `jedesTastenkuerzelDerKopierwege…` blieben unverändert grün, dazu ein Baumtest in `TastaturTest`, dass nach dem
+  Binden kein Kürzel in irgendeiner der drei InputMap-Bedingungen auf eine Standard-Übertragungsaktion zeigt.
+- Die Aktionen rufen die Aktionsmethoden von `HauptPanel` (also `Kontext.sicher`) und sind **nur wirksam, wenn die
+  Funktion im `Bedienzustand` aktiv ist** (`KuerzelAktion.isEnabled()` liest den Zustand live; Swing reicht die Taste
+  dann nicht an die Aktion, und `actionPerformed` prüft ein zweites Mal). Ein gesperrtes Kürzel tut nichts: kein Dialog,
+  keine Ausnahme, keine Statusmeldung. Mit aktivem Kürzel erscheint die Statusmeldung der Sitzung wie bei der
+  Schaltfläche (z. B. „Bitte zuerst Text eingeben.“ bei Strg+Enter ohne Text).
+- Tab: Die Fokus-Tasten der Felder sind ausdrücklich gesetzt (Tab, Strg+Tab / Umschalt+Tab, Strg+Umschalt+Tab), und
+  Tab ist zusätzlich in der eigenen `InputMap` an `skillshield-fokus-vor` gebunden, falls ein Look-and-Feel „Tab
+  einfügen“ bindet; ein Tabulator ist weder tippbar noch über Tab einfügbar, **eingefügte Tabulatoren bleiben
+  erhalten** (Test mit Einfügen aus der Zwischenablage-Attrappe). In der Tabelle wandert Tab nicht mehr von Zelle zu
+  Zelle (sonst käme man mit Tab nie heraus); die Pfeiltasten bewegen die Zeilenwahl wie bisher.
+- **Leertaste (endgültige Regel, Durchlauf 2, schützende Variante nach D-2/AK-16 „Abwählen nur einzeln“):** Ist
+  **genau eine** Zeile gewählt, schaltet die Leertaste sie um (an ↔ ab). Sind **mehrere** Zeilen gewählt (z. B. nach
+  Strg+A), **wählt** die Leertaste alle gewählten Zeilen **an** und wählt **nie** eine ab; bereits angewählte bleiben
+  angewählt, nicht gewählte Zeilen bleiben unverändert. Abwählen geht damit nur zeilenweise (Einzelwahl plus Leertaste,
+  oder Mausklick auf das Kontrollkästchen). Die Änderung läuft über `setValueAt` des Modells, also über die Sitzung.
+  **Grenze G-T7-1 (bleibt für das Anwählen):** höchstens `Tastatur.MAX_UMSCHALTEN` (200) geänderte Zeilen je
+  Tastendruck, weil `Sitzung` keine Methode hat, die eine beliebige Auswahl in einem Schritt übernimmt (nur
+  `anwaehlen(zeile, wert)` je Zeile und `alleAnwaehlen()`); jede Änderung rechnet neu. „Alle anwählen“ ist der Weg für
+  viele Zeilen. Es wurde bewusst **keine** Massen-Abwahl-Methode in `Sitzung` eingeführt (`KeinStufenfilterTest`).
+- **Zellbearbeitung (S-2, Durchlauf 2):** Die Tabelle startet keinen Editor durch eine beliebige Taste
+  (`JTable.autoStartsEdit=false`) und übernimmt einen Editor beim Fokusverlust (`terminateEditOnFocusLost`). Der
+  Kontrollkästchen-Editor ist `AuswahlEditor`: Er ändert immer genau eine Zeile und **schreibt nie einen veralteten
+  Wert**; hat sich die Zeile in der Sitzung seit dem Öffnen geändert, bricht er ab statt zu schreiben. Zusätzlich bricht
+  `Tastatur.umschalten` und jedes `FundeBereich.aktualisieren` (vor jeder Modellmeldung) eine laufende Zellbearbeitung
+  ab (`cancelCellEditing`, ohne Übernahme). Damit stimmen Anzeige (Renderer/Editor) und `Sitzung.zeilen()` nach jeder
+  Aktion überein; „Für KI kopieren“ legt nie Klartext ab, während die Zelle „angewählt“ zeigt. Andere Wege, mehrere
+  Kästchen auf einmal zu ändern: keiner (Swing ruft `setValueAt` je Editor-Übernahme für genau eine Zelle; Drag und
+  Einfügen sind in der Tabelle gesperrt).
+- **Kürzel-Aktion (S-3):** `KuerzelAktion.isEnabled()` fängt eine Ausnahme beim Lesen des Bedienzustands ab und meldet
+  dann „gesperrt“.
+
+### Fokusreihenfolge (AK-46)
+
+`HauptPanel` ist Fokuswurzel (`setFocusCycleRoot(true)`) mit `Fokusreihenfolge`. Feste Liste: Eingabe, Scannen,
+Tabelle, Alle anwählen, Markieren, Text für die KI, Für KI kopieren, KI-Antwort, Zurückübersetzen, Ergebnis, Ergebnis
+kopieren, Liste „Nicht zurückübersetzt“, Zurücksetzen, Beenden (wie im Plan zu T-7). Übersprungen wird, was nicht `enabled` ist oder (selbst
+oder über einen Elternteil) nicht sichtbar, also gesperrte Schaltflächen und die ausgeblendeten Karten (Tabelle,
+Text für die KI und Ergebnis vor dem ersten Inhalt). Am Ende folgt wieder die erste Komponente. Ein Kind einer
+Komponente der Liste (z. B. ein Zelleneditor der Tabelle) zählt als diese Komponente, eine fremde Komponente führt zum
+ersten Element. Der Spaltenkopf der Tabelle ist kein Tab-Halt. Neu: `HauptPanel.anfangsfokus()` (öffentlich) setzt den
+Fokus auf die Eingabe; T-8 ruft es nach dem Sichtbarmachen.
+
+### Zugänglichkeit und Tooltips (AK-47, AK-48, OF-5)
+
+- **Namen und Beschreibungen nur aus festen Texten:** neue Konstanten `Texte.NAME_*` (Eingabetext, Fundtabelle,
+  Spaltenköpfe der Fundtabelle, Text für die KI, Statusleiste, Statusmeldung, Zuordnungsanzeige, Fußleiste, die fünf
+  Hinweise); KI-Antwort, Ergebnis und Liste benutzen die vorhandenen Beschriftungen, die vier Bereiche ihre
+  Überschriften, die Schaltflächen ihren Text. Die **Statusmeldung** bekommt den festen Namen „Statusmeldung“ (der Name
+  ist nicht die jeweilige Meldung; Hilfstechnik liest den Text des Etiketts über die Textschnittstelle).
+- **Dauerhinweise (Entscheidung zu den nicht fokussierbaren Hinweistexten, OF-5):** Sie bleiben ohne Tab-Halt (sonst
+  fünf zusätzliche Tab-Stopps ohne Funktion), sind aber für Hilfstechnik eigene Objekte mit festem Namen
+  („Hinweis zur Erkennung“ usw.) und stehen zusätzlich als **Accessible Description** an dem Bedienelement, zu dem sie
+  gehören: `HINWEIS_ERKENNUNG` an der Tabelle, `HINWEIS_ZUORDNUNG` am Feld „KI-Antwort“. Die Leer-Hinweise bleiben eigene
+  Objekte ohne Beschreibung am Bedienelement (ihr Text ändert sich mit dem Zustand).
+- **Sperrgrund (AK-48):** `Bausteine.sperrgrund` setzt bei jeder Aktualisierung an jeder der acht Schaltflächen den
+  Sperrgrund aus `Bedienzustand.sperrgrund()` als Tooltip **und** als Accessible Description (bei aktiver Funktion
+  beides `null`). Tooltips zeigen sonst nirgends etwas. `html.disable` liegt an der Schaltfläche **und** am `JToolTip`
+  selbst (`Bausteine.Knopf.createToolTip()`; Swing liest die Property am Tooltip, nicht an der Komponente).
+- **Keine Zellen-Tooltips:** `JTable.getToolTipText(MouseEvent)` (Fundtabelle) und `JList.getToolTipText(MouseEvent)`
+  (Liste) sind überschrieben und liefern `null`; Swing hätte sonst den Renderer gefragt. Test über alle Zellen und
+  Zeilen, auch mit `<html>`-Fundtext.
+- **Spaltenköpfe:** Die Tabelle hat einen `JTableHeader` (Spaltennamen aus `Texte.SPALTENKOEPFE`), über den die
+  `AccessibleTable` die Spaltenköpfe liefert; der Kopf hat den festen Namen „Spaltenköpfe der Fundtabelle“.
+- **Grenzen G-T7-2 (kein Verstoß):** (a) Textfelder geben ihren Inhalt über die Textschnittstelle an Screenreader
+  (gewollt). (b) Die Zellen der Tabelle und die Zeilen der Liste tragen ihren Inhalt als zugänglichen Namen der
+  Renderer-Komponenten (daraus liest Hilfstechnik die Zelle vor); der Test schließt Komponenten unter einem
+  `CellRendererPane` und die Pfeil-Schaltflächen der Rollbalken (Look-and-Feel) aus der Namensprüfung aus und prüft
+  bei ihnen nur die Tooltips. (c) Die Namen der Rollbalken-Schaltflächen setzt das Look-and-Feel, nicht das Programm.
+  (d) **Java Access Bridge (S-4):** Nach `jabswitch -enable` (je Benutzer, standardmäßig aus) kann **jede** Software
+  mit Access-Bridge-Zugriff, nicht nur ein Screenreader, den Klartext der Felder, der Tabelle und der Liste lesen. Für
+  die README (T-8) vorgemerkt.
+- **Grenze G-T7-3:** Alt+2, Alt+3 bringen den Fokus nur in ein **sichtbares** Feld; solange die Karte „leer“ zu sehen ist
+  (vor dem ersten Scan), bleibt der Fokus unverändert. Mit Tab sind die Bedienelemente erreichbar, sobald sie
+  existieren; die ausgeblendeten Karten haben nichts zu bedienen.
+
+### Zuordnung der Akzeptanzkriterien
+
+| AK | Automatisch (headless) | Nur Sichtprüfung |
+|----|------------------------|------------------|
+| AK-45 | `TastaturTest` (Kürzel aus jeder Komponente und aus dem Fenster, gesperrte Kürzel, Tab/Umschalt+Tab, Leertaste, Mnemonics vollständig und eindeutig, Alt-Tasten im Fenster eingetragen, Kopierwege unverändert) | S-8: vollständiger Durchlauf nur mit Tastatur im echten Fenster (ob Alt-Kürzel und Strg-Kürzel mit FlatLaf und Windows ankommen) |
+| AK-46 | `FokusreihenfolgeTest` (feste Liste, `getComponentAfter/Before/First/Last` in fünf Zuständen, Umlauf, Hinweise ohne Tab-Halt, Anfangsfokus) | S-8: **der Fokus ist jederzeit sichtbar** (Fokusrahmen von FlatLaf, T-8) |
+| AK-47 | `ZugaenglichkeitTest` (fester Name jedes Bedienelements einschließlich Statusleiste, Spaltenköpfe, Namen sind feste Texte) | S-9: **ob ein Screenreader (NVDA/JAWS über die Java Access Bridge) die Namen vorliest** |
+| AK-48 | `ZugaenglichkeitTest` (Tooltip = Sperrgrund an jeder gesperrten Schaltfläche in allen Zuständen, ohne Sperrgrund nach Freigabe, kein Marker, kein Zellen-Tooltip) | S-8: dass der Tooltip bei der Maus **erscheint** |
+
+### Vormerkungen für T-8
+
+- `HauptFenster`: Panel als Inhalt; nach `setVisible(true)` `panel.anfangsfokus()`; Mindestgröße
+  `HauptPanel.MINDESTGROESSE`. Mit FlatLaf in der Sichtprüfung prüfen: Alt-Kürzel (FlatLaf zeigt Unterstriche erst nach
+  Drücken von Alt), Strg+Enter in der Eingabe (kein Zeilenumbruch), Fokusrahmen, Tab-Reihenfolge.
+- Zugängliche Namen setzt das Programm selbst; FlatLaf ändert sie nicht (OF-5). Für S-9: `jabswitch -enable` einmalig je
+  Benutzer, Screenreader neu starten (README); dort auch den Hinweis aus G-T7-2 (d) aufnehmen (jede Software mit
+  Access-Bridge-Zugriff kann den Klartext lesen).
+- Sichtprüfung (nur am echten Gerät): Auf deutscher Tastatur (auch über RDP/Citrix) dürfen AltGr-Eingaben (AltGr+E,
+  +M, +Q, +2, +3, +7 bis +0, +ß, ++, +<) weder „Beenden“ noch „Markieren“ noch einen Fokuswechsel auslösen. Headless
+  belegt für Strg+Alt und Strg+Alt+AltGr; die Maske „Alt+AltGr ohne Strg“ löst Mnemonics aus und ist nur am Gerät prüfbar.

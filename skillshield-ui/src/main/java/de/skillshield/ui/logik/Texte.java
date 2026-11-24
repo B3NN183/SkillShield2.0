@@ -126,6 +126,35 @@ public final class Texte {
     public static final String RUECKUEBERSETZTER_TEXT = "Rückübersetzter Text";
     /** Beschriftung der Liste in Bereich 4 (AK-38). */
     public static final String NICHT_ZURUECKUEBERSETZT = "Nicht zurückübersetzt";
+
+    // ---- Zugängliche Namen (T-7, AK-47); feste Texte, nie Eingabe-, Fund- oder KI-Text
+
+    /** Zugänglicher Name des Eingabefeldes. */
+    public static final String NAME_EINGABE = "Eingabetext";
+    /** Zugänglicher Name der Fundtabelle. */
+    public static final String NAME_FUNDE = "Fundtabelle";
+    /** Zugänglicher Name der Spaltenköpfe der Fundtabelle. */
+    public static final String NAME_SPALTENKOEPFE = "Spaltenköpfe der Fundtabelle";
+    /** Zugänglicher Name des Feldes mit dem Text für die KI. */
+    public static final String NAME_TEXT_FUER_KI = "Text für die KI";
+    /** Zugänglicher Name der Statusleiste. */
+    public static final String NAME_STATUSLEISTE = "Statusleiste";
+    /** Zugänglicher Name der Statusmeldung (links in der Statusleiste). */
+    public static final String NAME_STATUSMELDUNG = "Statusmeldung";
+    /** Zugänglicher Name der Zuordnungsanzeige (rechts in der Statusleiste). */
+    public static final String NAME_ZUORDNUNGSANZEIGE = "Zuordnungsanzeige";
+    /** Zugänglicher Name der Fußleiste mit "Zurücksetzen" und "Beenden". */
+    public static final String NAME_FUSSLEISTE = "Fußleiste";
+    /** Zugänglicher Name des Hinweises zur Erkennung (Bereich 2). */
+    public static final String NAME_HINWEIS_ERKENNUNG = "Hinweis zur Erkennung";
+    /** Zugänglicher Name des Hinweises zur Rückübersetzung (Bereich 4). */
+    public static final String NAME_HINWEIS_ZUORDNUNG = "Hinweis zur Rückübersetzung";
+    /** Zugänglicher Name des Leer-Hinweises der Fundtabelle. */
+    public static final String NAME_LEER_FUNDE = "Hinweis zur Fundtabelle";
+    /** Zugänglicher Name des Leer-Hinweises von Bereich 3. */
+    public static final String NAME_LEER_TEXT_FUER_KI = "Hinweis zum Text für die KI";
+    /** Zugänglicher Name des Leer-Hinweises des Ergebnisses. */
+    public static final String NAME_LEER_ERGEBNIS = "Hinweis zum rückübersetzten Text";
     /** Spaltenköpfe der Fundtabelle in dieser Reihenfolge (AK-13). */
     public static final List<String> SPALTENKOEPFE = List.of("Übernehmen", "Typ", "Fundtext", "Stufe", "Platzhalter");
     /** Antwort "Ja" der Rückfragen (AK-2). */

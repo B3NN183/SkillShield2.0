@@ -9,6 +9,7 @@ import java.awt.Component;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.event.MouseEvent;
 import java.util.List;
 import java.util.Optional;
 import javax.swing.JButton;
@@ -32,7 +33,14 @@ final class AntwortBereich extends JPanel {
     private final Kontext kontext;
     private final TextBereich antwort = new TextBereich("antwort", 4);
     private final TextBereich ergebnis = new TextBereich("ergebnis", 4);
-    private final JList<String> liste = Bausteine.htmlAus(new JList<>());
+    private final JList<String> liste = Bausteine.htmlAus(new JList<>() {
+        /** Nie ein Tooltip aus dem Zeileninhalt: Swing fragt sonst den Renderer. */
+        @Override
+        public String getToolTipText(MouseEvent e) {
+            return null;
+        }
+    });
+    private final Bausteine.ListenText listenRenderer = new Bausteine.ListenText();
     private final CardLayout karten = new CardLayout();
     private final JPanel kartenFlaeche = new JPanel(karten);
     private final JButton zurueckuebersetzen;
@@ -49,7 +57,11 @@ final class AntwortBereich extends JPanel {
         ergebnis.setEditable(false);
         Textaktionen.installiere(ergebnis, Textaktionen.Rolle.NUR_LESEN, kontext);
         liste.setName("nichtZurueckuebersetzt");
-        liste.setCellRenderer(new Bausteine.ListenText());
+        liste.setCellRenderer(listenRenderer);
+        liste.getAccessibleContext().setAccessibleName(Texte.NICHT_ZURUECKUEBERSETZT);
+        antwort.getAccessibleContext().setAccessibleName(Texte.KI_ANTWORT);
+        antwort.getAccessibleContext().setAccessibleDescription(Texte.HINWEIS_ZUORDNUNG);
+        ergebnis.getAccessibleContext().setAccessibleName(Texte.RUECKUEBERSETZTER_TEXT);
         liste.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         Textaktionen.sperre(liste);
         antwort.aenderungenMelden(() ->
@@ -66,11 +78,13 @@ final class AntwortBereich extends JPanel {
         listeTitel.setLabelFor(liste);
 
         kartenFlaeche.setName("kartenErgebnis");
-        kartenFlaeche.add(new Hinweistext("leerErgebnis", Texte.LEER_BEREICH_4, kontext), KARTE_LEER);
+        kartenFlaeche.add(new Hinweistext("leerErgebnis", Texte.LEER_BEREICH_4, Texte.NAME_LEER_ERGEBNIS, kontext),
+                KARTE_LEER);
         kartenFlaeche.add(Bausteine.scroll(ergebnis, "scrollErgebnis"), KARTE_TEXT);
         karten.show(kartenFlaeche, KARTE_LEER);
 
-        zeile(new Hinweistext("hinweisZuordnung", Texte.HINWEIS_ZUORDNUNG, kontext), 0, 0.0);
+        zeile(new Hinweistext("hinweisZuordnung", Texte.HINWEIS_ZUORDNUNG, Texte.NAME_HINWEIS_ZUORDNUNG, kontext),
+                0, 0.0);
         zeile(Bausteine.kopfzeile(antwortTitel, zurueckuebersetzen), 1, 0.0);
         zeile(Bausteine.scroll(antwort, "scrollAntwort"), 2, 1.0);
         zeile(Bausteine.kopfzeile(ergebnisTitel, ergebnisKopieren), 3, 0.0);
@@ -116,13 +130,23 @@ final class AntwortBereich extends JPanel {
      */
     void leeren() {
         antwort.zuruecksetzen();
-        ergebnis.zuruecksetzen();
+        ergebnisLeeren();
         angezeigt = null;
+    }
+
+    /** Leert Ergebnis und Liste samt dem Text, den der Renderer der Liste von der letzten Zeile behält. */
+    private void ergebnisLeeren() {
+        ergebnis.zuruecksetzen();
+        liste.setListData(new String[0]);
+        listenRenderer.zuruecksetzen();
+        karten.show(kartenFlaeche, KARTE_LEER);
     }
 
     void aktualisieren(Bedienzustand zustand) {
         zurueckuebersetzen.setEnabled(zustand.istAktiv(Funktion.ZURUECKUEBERSETZEN));
+        Bausteine.sperrgrund(zurueckuebersetzen, zustand, Funktion.ZURUECKUEBERSETZEN);
         ergebnisKopieren.setEnabled(zustand.istAktiv(Funktion.ERGEBNIS_KOPIEREN));
+        Bausteine.sperrgrund(ergebnisKopieren, zustand, Funktion.ERGEBNIS_KOPIEREN);
         Optional<Rueckuebersetzung> neu = kontext.sitzung.rueckuebersetzung();
         Rueckuebersetzung aktuell = neu.orElse(null);
         if (aktuell == angezeigt) {
@@ -130,9 +154,7 @@ final class AntwortBereich extends JPanel {
         }
         angezeigt = aktuell;
         if (aktuell == null) {
-            ergebnis.zuruecksetzen();
-            liste.setListData(new String[0]);
-            karten.show(kartenFlaeche, KARTE_LEER);
+            ergebnisLeeren();
             return;
         }
         ergebnis.textSetzen(aktuell.text());

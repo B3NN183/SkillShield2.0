@@ -17,8 +17,10 @@ import javax.swing.SwingUtilities;
  * {@link Texte} und {@link Rueckfrage} (plus der Klassenname einer Ausnahme beim Fehlerdialog), nie Anwenderinhalt.
  *
  * <p>Die Entscheidungslogik (Optionen, Standardoption, Zuordnung Rückgabewert zu Antwort) steckt in statischen
- * Methoden, die ohne sichtbaren Dialog testbar sind. Eine Ausnahme beim Anzeigen wird nie in eine Antwort
- * umgedeutet, sondern weitergegeben.
+ * Methoden, die ohne sichtbaren Dialog testbar sind. Eine Ausnahme beim Anzeigen einer Rückfrage wird nie in eine
+ * Antwort umgedeutet, sondern weitergegeben. Ausgenommen ist {@link #fehler(String)}, wenn der Dialog über
+ * {@code invokeLater} auf dem Ereignis-Thread erscheint: Dort wird eine Ausnahme beim Anzeigen still verworfen (kein
+ * Stacktrace, kein Inhalt), weil es keinen Aufrufer mehr gibt, der sie bekommen könnte.
  */
 public final class SwingDialoge implements Dialoge {
 

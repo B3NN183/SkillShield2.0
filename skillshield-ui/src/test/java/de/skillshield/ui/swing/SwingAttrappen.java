@@ -60,6 +60,37 @@ final class SwingAttrappen {
         return wert;
     }
 
+    /** Alle Komponenten unterhalb der Wurzel (einschließlich ihr selbst), Tiefensuche. */
+    static List<java.awt.Component> alleKomponenten(java.awt.Component wurzel) {
+        List<java.awt.Component> liste = new ArrayList<>();
+        sammeln(wurzel, liste);
+        return liste;
+    }
+
+    private static void sammeln(java.awt.Component c, List<java.awt.Component> liste) {
+        liste.add(c);
+        if (c instanceof java.awt.Container container) {
+            for (java.awt.Component kind : container.getComponents()) {
+                sammeln(kind, liste);
+            }
+        }
+    }
+
+    /** {@code true} für die Pfeil-Schaltflächen der Rollbalken (vom Look-and-Feel, nicht vom Programm). */
+    static boolean istRollbalkenTeil(java.awt.Component c) {
+        for (java.awt.Component k = c; k != null; k = k.getParent()) {
+            if (k instanceof javax.swing.JScrollBar) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Starter, der nie fertig wird: Der Scan bleibt im Zustand "läuft". */
+    static ScanStarter haengend() {
+        return (sitzung, auftrag) -> { };
+    }
+
     /** Starter, der synchron ausführt (kein Hintergrund): Ergebnis oder Fehler gehen sofort an die Sitzung. */
     static ScanStarter synchron() {
         return (sitzung, auftrag) -> {

@@ -148,9 +148,19 @@ class TextBereich extends JTextArea {
         }
     }
 
-    /** Nach einer Löschung: ein Text bis zur Grenze hat keine zu lange Zeile, der Umbruch darf wieder ein. */
-    private void nachLoeschung(int gesamtLaenge) {
-        if (!ersetzt && !getLineWrap() && gesamtLaenge <= UMBRUCH_GRENZE) {
+    /**
+     * Nach einer Löschung: Bei eingeschaltetem Umbruch wird die Zeile an der Löschstelle geprüft (ein Element; das
+     * Löschen eines Zeilenumbruchs verschmilzt zwei Zeilen zu einer womöglich zu langen). Bei ausgeschaltetem Umbruch
+     * gilt: ein Text bis zur Grenze hat keine zu lange Zeile, der Umbruch darf wieder ein.
+     */
+    private void nachLoeschung(int stelle, int gesamtLaenge) {
+        if (getLineWrap()) {
+            Element wurzel = getDocument().getDefaultRootElement();
+            Element zeile = wurzel.getElement(wurzel.getElementIndex(stelle));
+            if (zeile.getEndOffset() - zeile.getStartOffset() - 1 > UMBRUCH_GRENZE) {
+                setLineWrap(false);
+            }
+        } else if (!ersetzt && gesamtLaenge <= UMBRUCH_GRENZE) {
             setLineWrap(true);
         }
     }
@@ -166,7 +176,7 @@ class TextBereich extends JTextArea {
         @Override
         protected void fireRemoveUpdate(DocumentEvent e) {
             super.fireRemoveUpdate(e);
-            nachLoeschung(getLength());
+            nachLoeschung(e.getOffset(), getLength());
         }
     }
 

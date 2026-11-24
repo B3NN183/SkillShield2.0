@@ -3,6 +3,7 @@ package de.skillshield.ui.swing;
 import static de.skillshield.ui.swing.SwingAttrappen.DREI_FUNDE;
 import static de.skillshield.ui.swing.SwingAttrappen.edt;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -92,15 +93,15 @@ class GrosseMengenTest {
         assertTrue(TextBereich.umbruchMoeglich("kurz\nzeilen\r\nund mehr"));
         assertTrue(TextBereich.umbruchMoeglich("a".repeat(TextBereich.UMBRUCH_GRENZE)));
         assertTrue(TextBereich.umbruchMoeglich(("a".repeat(TextBereich.UMBRUCH_GRENZE) + "\n").repeat(3)));
-        assertEquals(false, TextBereich.umbruchMoeglich("a".repeat(TextBereich.UMBRUCH_GRENZE + 1)));
+        assertFalse(TextBereich.umbruchMoeglich("a".repeat(TextBereich.UMBRUCH_GRENZE + 1)));
         edt(() -> {
             TextBereich feld = new TextBereich("probe", 3);
             feld.textSetzen("a".repeat(TextBereich.UMBRUCH_GRENZE + 1));
-            assertEquals(false, feld.getLineWrap());
+            assertFalse(feld.getLineWrap());
             feld.textSetzen("kurz");
             assertTrue(feld.getLineWrap());
             feld.einfuegen("b".repeat(TextBereich.UMBRUCH_GRENZE + 1));
-            assertEquals(false, feld.getLineWrap());
+            assertFalse(feld.getLineWrap());
         });
     }
 
@@ -114,7 +115,7 @@ class GrosseMengenTest {
                 assertEquals(i * stueck <= TextBereich.UMBRUCH_GRENZE, feld.getLineWrap(), "nach " + i + " Stücken");
             }
             feld.einfuegen("a".repeat(stueck));
-            assertEquals(false, feld.getLineWrap());
+            assertFalse(feld.getLineWrap());
             assertEquals(6 * stueck, feld.getDocument().getLength());
         }));
     }
@@ -127,7 +128,7 @@ class GrosseMengenTest {
                 feld.einfuegen("a".repeat(100));
             }
             assertEquals(200_000, feld.getDocument().getLength());
-            assertEquals(false, feld.getLineWrap());
+            assertFalse(feld.getLineWrap());
         }));
     }
 
@@ -140,7 +141,7 @@ class GrosseMengenTest {
             tippen(feld, feld.getDocument().getLength(), "b");
             assertTrue(feld.getLineWrap(), "genau an der Grenze wird noch umbrochen");
             tippen(feld, feld.getDocument().getLength(), "c");
-            assertEquals(false, feld.getLineWrap());
+            assertFalse(feld.getLineWrap());
         });
     }
 
@@ -152,7 +153,7 @@ class GrosseMengenTest {
             feld.textSetzen(zeile.repeat(3));
             assertTrue(feld.getLineWrap(), "mehrere Zeilen unter der Grenze, zusammen darüber");
             tippen(feld, TextBereich.UMBRUCH_GRENZE - 1, "bc");
-            assertEquals(false, feld.getLineWrap(), "die erste Zeile ist jetzt zu lang");
+            assertFalse(feld.getLineWrap(), "die erste Zeile ist jetzt zu lang");
         });
     }
 
@@ -161,12 +162,93 @@ class GrosseMengenTest {
         edt(() -> {
             TextBereich feld = new TextBereich("probe", 3);
             feld.textSetzen("a".repeat(60_000));
-            assertEquals(false, feld.getLineWrap());
+            assertFalse(feld.getLineWrap());
             loeschen(feld, 0, 5_000);
-            assertEquals(false, feld.getLineWrap(), "55 000 Zeichen: noch über der Grenze");
+            assertFalse(feld.getLineWrap(), "55 000 Zeichen: noch über der Grenze");
             loeschen(feld, 0, 5_000);
             assertTrue(feld.getLineWrap(), "50 000 Zeichen: keine Zeile kann zu lang sein");
         });
+    }
+
+    /** Zwei Zeilen, die je unter der Grenze liegen, zusammen aber darüber; der Umbruch ist noch ein. */
+    private static TextBereich zweiZeilen() {
+        TextBereich feld = new TextBereich("probe", 3);
+        int laenge = TextBereich.UMBRUCH_GRENZE - 10_000;
+        feld.textSetzen("a".repeat(laenge) + "\n" + "b".repeat(laenge));
+        assertTrue(feld.getLineWrap());
+        return feld;
+    }
+
+    private static void aktion(TextBereich feld, String name) {
+        feld.getActionMap().get(name).actionPerformed(
+                new java.awt.event.ActionEvent(feld, java.awt.event.ActionEvent.ACTION_PERFORMED, name));
+    }
+
+    @Test
+    void dasLoeschenEinesZeilenumbruchsPerEntfSchaltetDenUmbruchAus() {
+        edt(() -> {
+            TextBereich feld = zweiZeilen();
+            feld.setCaretPosition(TextBereich.UMBRUCH_GRENZE - 10_000);
+            aktion(feld, "delete-next");
+            assertFalse(feld.getLineWrap());
+            assertEquals(2 * (TextBereich.UMBRUCH_GRENZE - 10_000), feld.getDocument().getLength());
+        });
+    }
+
+    @Test
+    void dasLoeschenEinesZeilenumbruchsPerRueckschrittSchaltetDenUmbruchAus() {
+        edt(() -> {
+            TextBereich feld = zweiZeilen();
+            feld.setCaretPosition(TextBereich.UMBRUCH_GRENZE - 10_000 + 1);
+            aktion(feld, "delete-previous");
+            assertFalse(feld.getLineWrap());
+        });
+    }
+
+    @Test
+    void dasLoeschenEinesZeilenumbruchsPerReplaceSelectionSchaltetDenUmbruchAus() {
+        edt(() -> {
+            TextBereich feld = zweiZeilen();
+            feld.select(TextBereich.UMBRUCH_GRENZE - 10_000, TextBereich.UMBRUCH_GRENZE - 10_000 + 1);
+            feld.replaceSelection("");
+            assertFalse(feld.getLineWrap());
+        });
+    }
+
+    @Test
+    void dasLoeschenEinesZeilenumbruchsPerDocumentReplaceSchaltetDenUmbruchAus() throws BadLocationException {
+        edt(() -> {
+            TextBereich feld = zweiZeilen();
+            try {
+                ((javax.swing.text.AbstractDocument) feld.getDocument())
+                        .replace(TextBereich.UMBRUCH_GRENZE - 10_000, 1, "", null);
+            } catch (BadLocationException e) {
+                throw new AssertionError(e);
+            }
+            assertFalse(feld.getLineWrap());
+        });
+    }
+
+    @Test
+    void dasVerschmelzenZweierKurzerZeilenLaesstDenUmbruchEin() {
+        edt(() -> {
+            TextBereich feld = new TextBereich("probe", 3);
+            feld.textSetzen("a".repeat(100) + "\n" + "b".repeat(100));
+            loeschen(feld, 100, 1);
+            assertTrue(feld.getLineWrap());
+        });
+    }
+
+    @Test
+    void dasVerschmelzenInDerMitteVielerZeilenPruftNurDieBetroffeneZeile() {
+        assertTimeout(GRENZE, () -> edt(() -> {
+            TextBereich feld = new TextBereich("probe", 3);
+            int laenge = TextBereich.UMBRUCH_GRENZE - 1;
+            feld.textSetzen((("a".repeat(laenge)) + "\n").repeat(5) + "b".repeat(100));
+            assertTrue(feld.getLineWrap());
+            loeschen(feld, laenge, 1);
+            assertFalse(feld.getLineWrap());
+        }));
     }
 
     private static void tippen(TextBereich feld, int stelle, String text) {

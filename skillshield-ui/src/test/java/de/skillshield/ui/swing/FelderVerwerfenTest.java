@@ -14,6 +14,9 @@ import de.skillshield.ui.swing.SwingAttrappen.Aufbau;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.util.List;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JTable;
 import javax.swing.TransferHandler;
 import javax.swing.text.Caret;
 import javax.swing.text.Document;
@@ -141,6 +144,90 @@ class FelderVerwerfenTest {
             assertTrue(a.panel.antwortBereich().zurueckuebersetzen().isEnabled(), "Antwort-Hörer am neuen Dokument");
             antwort.setText("");
             assertFalse(a.panel.antwortBereich().zurueckuebersetzen().isEnabled());
+        });
+    }
+
+    /** Ein Fundtext der Tabelle: der Originalwert der E-Mail-Adresse in {@link SwingAttrappen#DREI_FUNDE}. */
+    private static final String FUNDTEXT = "mustermann@example.org";
+
+    /** Zeichnet jede Zelle der Tabelle über den Renderer und liefert die Renderer-Labels mit ihrem Text. */
+    private static List<JLabel> tabelleZeichnen(Aufbau a) {
+        JTable tabelle = a.panel.fundeBereich().tabelle();
+        for (int zeile = 0; zeile < tabelle.getRowCount(); zeile++) {
+            for (int spalte = 0; spalte < tabelle.getColumnCount(); spalte++) {
+                tabelle.prepareRenderer(tabelle.getCellRenderer(zeile, spalte), zeile, spalte);
+            }
+        }
+        return List.of((JLabel) tabelle.getDefaultRenderer(String.class),
+                (JLabel) tabelle.getDefaultRenderer(Object.class));
+    }
+
+    private static JLabel listeZeichnen(Aufbau a, String text) {
+        JList<String> liste = a.panel.antwortBereich().liste();
+        return (JLabel) liste.getCellRenderer().getListCellRendererComponent(liste, text, 0, false, false);
+    }
+
+    @Test
+    void zuruecksetzenLaesstKeinenFundtextImRendererDerTabelleStehen() {
+        Aufbau a = new Aufbau();
+        a.scannen(DREI_FUNDE);
+        edt(() -> {
+            List<JLabel> renderer = tabelleZeichnen(a);
+            assertTrue(renderer.get(0).getText().length() > 0, "Probe: der Renderer hat etwas gezeichnet");
+            a.dialoge.antwort = true;
+            a.panel.zuruecksetzen();
+            for (JLabel label : renderer) {
+                assertFalse(label.getText().contains(FUNDTEXT));
+                assertEquals("", label.getText());
+            }
+        });
+    }
+
+    @Test
+    void einNeuerScanOhneFundeLeertDenRendererDerTabelle() {
+        Aufbau a = new Aufbau();
+        a.scannen(DREI_FUNDE);
+        edt(() -> {
+            List<JLabel> renderer = tabelleZeichnen(a);
+            assertTrue(renderer.stream().anyMatch(l -> !l.getText().isEmpty()));
+        });
+        a.scannen("Text ohne Fund");
+        edt(() -> {
+            assertEquals(0, a.panel.fundeBereich().tabelle().getRowCount());
+            for (JLabel label : List.of((JLabel) a.panel.fundeBereich().tabelle().getDefaultRenderer(String.class),
+                    (JLabel) a.panel.fundeBereich().tabelle().getDefaultRenderer(Object.class))) {
+                assertEquals("", label.getText());
+            }
+        });
+    }
+
+    @Test
+    void felderVerwerfenLeertDieRendererVonTabelleUndListe() {
+        Aufbau a = new Aufbau();
+        a.scannen(DREI_FUNDE);
+        edt(() -> {
+            List<JLabel> renderer = tabelleZeichnen(a);
+            JLabel listenZeile = listeZeichnen(a, "[[A_1]] " + MARKER);
+            assertTrue(listenZeile.getText().contains(MARKER), "Probe: der Listenrenderer trägt den Text");
+            assertTrue(renderer.stream().anyMatch(l -> !l.getText().isEmpty()));
+            a.panel.felderVerwerfen();
+            assertEquals("", listenZeile.getText());
+            for (JLabel label : renderer) {
+                assertEquals("", label.getText());
+            }
+        });
+    }
+
+    @Test
+    void zuruecksetzenLeertDenRendererDerListe() {
+        Aufbau a = mitAllenFeldern();
+        edt(() -> {
+            JLabel listenZeile = listeZeichnen(a, "[[A_1]] " + MARKER);
+            assertTrue(listenZeile.getText().contains(MARKER));
+            a.dialoge.antwort = true;
+            a.panel.zuruecksetzen();
+            assertEquals("", listenZeile.getText());
+            assertEquals(0, a.panel.antwortBereich().liste().getModel().getSize());
         });
     }
 
