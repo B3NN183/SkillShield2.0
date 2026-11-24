@@ -300,6 +300,8 @@ class BsnrScannerKollisionenTest {
     @Test
     void ak30_dieselbeZahlAlsLanrUndAlsBsnrFund_platzhalterTragenJeEigenenTypUndFuehrenZurueck() {
         String text = "LANR " + B + ", BSNR " + B;
+        // T-15 (vorgemerkt aus security T-14): Der Text geht nicht durch scan(); Waechter hier ausdruecklich.
+        BsnrSynthetischWaechter.assertBsnrSynthetisch(text);
         int zweiter = text.lastIndexOf(B);
         List<Finding> funde = List.of(
                 new Finding(FindingType.LANR, B, 5, 5 + B.length(), 0.95, "lanr"),

@@ -1,5 +1,7 @@
 package de.skillshield.core;
 
+import static de.skillshield.core.SynthetischeKvNummern.BSNR_BEKANNT;
+import static de.skillshield.core.SynthetischeKvNummern.BSNR_NULL;
 import static de.skillshield.core.SynthetischeKvNummern.IK_FORM_DOKU_IP;
 import static de.skillshield.core.SynthetischeKvNummern.IK_GUELTIG;
 import static de.skillshield.core.SynthetischeKvNummern.KVNR_NULL;
@@ -20,6 +22,7 @@ import de.skillshield.core.pseudonymize.PseudonymizationResult;
 import de.skillshield.core.pseudonymize.Pseudonymizer;
 import de.skillshield.core.recognizer.Recognizer;
 import de.skillshield.core.recognizer.TextScanner;
+import de.skillshield.core.recognizer.kv.BsnrSynthetischWaechter;
 import de.skillshield.core.recognizer.kv.KvnrSynthetischWaechter;
 import de.skillshield.core.reidentify.ReidentificationResult;
 import de.skillshield.core.reidentify.Reidentifier;
@@ -996,5 +999,94 @@ class GrenzlastTest {
     void ak22_kvnr_laufUnsichtbarerZeichenUndIp_dreiSchritteJeUnterZweiSekunden() {
         zusatzLastFall("Lauf unsichtbarer Zeichen und IP", "KVNR ", String.valueOf(ZWSP), "Z" + IK_FORM_DOKU_IP, 1,
                 999_982, 0, 1, null);
+    }
+
+    // ------------------------------------------------------------------ AK-33: BSNR (T-15)
+
+    /**
+     * Ein Lastfall der BSNR mit {@code TextScanner.standard()}, Pseudonymisierung und Rueckuebersetzung (je Schritt
+     * unter 2 Sekunden, Aufwaermlauf mit 10 000 Zeichen): Praefix, Baustein, Schluss, Bausteinlaenge, Wiederholungen r
+     * (Formel {@code (1 000 000 - |Praefix| - |Schluss| + |Baustein| - 1) / |Baustein|}, ganzzahlig, aus den Regeln und
+     * nicht aus einem Probelauf), erwartete BSNR-Funde je Stufe (sicher, wahrscheinlich, fraglich) und der Text, der im
+     * pseudonymisierten Text nicht stehen darf ({@code null}: keiner). Es gibt keine Funde anderer Typen. Vor dem Scan
+     * besteht der Text (auch der Aufwaermtext) den Waechter {@link BsnrSynthetischWaechter}.
+     */
+    private static void bsnrLastFall(String name, String praefix, String baustein, String schluss,
+            int bausteinLaenge, int r, int sicher, int wahrscheinlich, int fraglich, String verboten) {
+        assertEquals(bausteinLaenge, baustein.length(), "Bausteinlaenge " + name);
+        assertEquals(r, kvWiederholungen(praefix, baustein, schluss, MIN_ZEICHEN), "Wiederholungen " + name);
+        String warm = kvText(praefix, baustein, schluss, 10_000);
+        BsnrSynthetischWaechter.assertBsnrSynthetisch(warm);
+        drei(warm, GRENZE_GROSSER_TEXT);
+
+        String text = kvText(praefix, baustein, schluss, MIN_ZEICHEN);
+        assertTrue(text.length() >= MIN_ZEICHEN, "Textlaenge " + text.length());
+        BsnrSynthetischWaechter.assertBsnrSynthetisch(text);
+
+        Durchlauf d = drei(text, GRENZE_PATHOLOGISCH);
+        List<Finding> funde = d.funde();
+        assertEquals(sicher + wahrscheinlich + fraglich, funde.size(), "Fundzahl " + name);
+        assertEquals(funde.size(), funde.stream().filter(f -> FindingType.BSNR.equals(f.type())).count(),
+                "alle Funde vom Typ BSNR " + name);
+        assertEquals(sicher, funde.stream().filter(f -> f.level() == ConfidenceLevel.SICHER).count(),
+                "Stufe sicher " + name);
+        assertEquals(wahrscheinlich, funde.stream().filter(f -> f.level() == ConfidenceLevel.WAHRSCHEINLICH).count(),
+                "Stufe wahrscheinlich " + name);
+        assertEquals(fraglich, funde.stream().filter(f -> f.level() == ConfidenceLevel.FRAGLICH).count(),
+                "Stufe fraglich " + name);
+        pruefeRoundtrip(text, d);
+        if (verboten != null) {
+            assertFalse(d.pseudo().text().contains(verboten), "Klartext im Ausgabetext " + name);
+        } else if (funde.isEmpty()) {
+            assertTrue(text.equals(d.pseudo().text()), "Text ohne Fund veraendert " + name);
+        }
+    }
+
+    /**
+     * Die BSNR-Lastfaelle aus AK-33 und dem Plan zu T-15, je 1 000 000 Zeichen. Fall 01: {@code BSNR } und nur Ziffern
+     * (ueber 12 Ziffern, kein Fund). Fall 02: {@code BSNR } und {@code 0 } wiederholt: r = (1 000 000 - 5 + 1) / 2 =
+     * 499 998 einzelne Ziffern mit
+     * je einem Leerzeichen; der Scanner liest je neun Ziffern (mit den acht Trennern 17 Zeichen) als einen
+     * Kandidaten, also 499 998 / 9 = 55 555 Funde mit Rest 3 Ziffern (unter sechs Ziffern kein Fund); Praefix
+     * {@code 00}: Regionalcode unbekannt, alle 55 555 fraglich. Fall 03: {@code BSNR} und nur {@code -}: kein Fund.
+     * Fall 04: {@code BSNR } und die Nullnummer mit Leerzeichen wiederholt (10 Zeichen): r = (1 000 000 - 5 + 9) / 10 =
+     * 100 000 Funde (ueber 70 000), Regionalcode {@code 00}: alle fraglich. Fall 05: {@code B S N R } wiederholt ohne
+     * Nummer: kein Fund. Fall 06: bekannte BSNR und {@code  (BSNR) } wiederholt (17 Zeichen): r = (1 000 000 + 16) /
+     * 17 = 58 824 Funde, der erste nachgestellt (0,80 wahrscheinlich), jeder weitere direkt hinter dem Kontextwort
+     * (0,90 sicher).
+     *
+     * <p>Ohne eigenen Lasttest: Gruppierte Ziffern mit bekanntem Regionalcode (zum Beispiel {@code BSNR } und
+     * {@code 1 } wiederholt) bilden ebenso Kandidaten aus je neun Ziffern wie Fall 02, nur mit hoeherer Stufe; solche
+     * Texte bestehen den Waechter nicht (kein Praefix {@code 00}, kein Nullblock), und fuer ihn gibt es keine
+     * Ausnahme. Das Zeitverhalten der Kandidatenbildung belegt Fall 02.
+     */
+    static Stream<Arguments> bsnrLastFaelle() {
+        return Stream.of(
+            // 01 "BSNR " (5) und 999 995 Nullen: ein Block mit ueber 12 Ziffern: 0 Funde
+            Arguments.of("01 BSNR und nur Ziffern", "BSNR ", "0", "", 1, 999_995, 0, 0, 0, null),
+            // 02 "BSNR " (5), "0 " = 2 Zeichen, r = (1 000 000 - 5 + 1) / 2 = 499 998; 499 998 / 9 = 55 555 Funde
+            // (Rest drei Ziffern: kein Fund), Praefix 00 ist kein Regionalcode: 55 555 fraglich
+            Arguments.of("02 BSNR und 0 wiederholt", "BSNR ", "0 ", "", 2, 499_998, 0, 0, 55_555,
+                "0 ".repeat(8) + "0"),
+            // 03 "BSNR" (4) und 999 996 Bindestriche: Kontextwort ohne Ziffern: 0 Funde
+            Arguments.of("03 BSNR und nur Bindestrich", "BSNR", "-", "", 1, 999_996, 0, 0, 0, null),
+            // 04 "BSNR " (5), Nullnummer und Leerzeichen = 10 Zeichen, r = (1 000 000 - 5 + 9) / 10 = 100 000
+            // (ueber 70 000): Regionalcode 00 unbekannt, alle fraglich
+            Arguments.of("04 BSNR und Nullnummer wiederholt", "BSNR ", BSNR_NULL + " ", "", 10, 100_000, 0, 0,
+                100_000, BSNR_NULL),
+            // 05 "B S N R " = 8 Zeichen, r = (1 000 000 + 7) / 8 = 125 000; eine einzige Sperrfolge ohne Nummer: 0
+            Arguments.of("05 B S N R wiederholt", "", "B S N R ", "", 8, 125_000, 0, 0, 0, null),
+            // 06 bekannte BSNR (9) und " (BSNR) " (8) = 17 Zeichen, r = (1 000 000 + 16) / 17 = 58 824; die erste
+            // Nummer steht vor dem Kontextwort (nachgestellt 0,80), jede weitere direkt dahinter (0,90)
+            Arguments.of("06 Nummer mit nachgestelltem Kontextwort wiederholt", "", BSNR_BEKANNT + " (BSNR) ", "", 17,
+                58_824, 58_823, 1, 0, BSNR_BEKANNT));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("bsnrLastFaelle")
+    void ak33_bsnr_eineMillionZeichen_dreiSchritteJeUnterZweiSekundenMitExakterFundzahl(String name, String praefix,
+            String baustein, String schluss, int bausteinLaenge, int r, int sicher, int wahrscheinlich, int fraglich,
+            String verboten) {
+        bsnrLastFall(name, praefix, baustein, schluss, bausteinLaenge, r, sicher, wahrscheinlich, fraglich, verboten);
     }
 }

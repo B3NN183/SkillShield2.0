@@ -1473,3 +1473,60 @@ Tests in `KvnrGrenzenTest`, sofern nicht anders genannt. Diese Liste ergänzt un
   4. Hinweis für das UI-Feature (kein Mangel): Ein zusammengelegter Fund kann durch einen teilweise
      überlappenden BSNR-Kandidaten von „sicher" auf „wahrscheinlich" fallen (K-4, Abdeckung wird größer;
      gemessen 27 Positionen je 1 Mio. Texte). Ein späterer Filter nach Stufe muss das berücksichtigen.
+- **Nachtrag zu T-15 (Entscheidungen der Hauptsitzung nach dem ersten Engineer-Durchlauf, 24.11.2026):**
+  1. **Lastfall `BSNR ` + `1 ` wiederholt entfällt.** Er besteht den Wächter nicht (Neunerfolgen ohne `00`-Präfix
+     und ohne Nullblock), und für den Wächter gibt es keine Ausnahme. Die Berichtigung aus „Vorgemerkt aus
+     security T-14", Punkt 2, wird durch den wächterkonformen Fall `BSNR ` + `0 ` wiederholt erfüllt (gemessen:
+     ⌊499 998 / 9⌋ = 55 555 Funde, alle „fraglich", Regionalcode 00 unbekannt). Der Parameter `mitWaechter` und
+     der Einzeltest ohne Wächter werden entfernt; das Javadoc nennt, dass gruppierte Ziffern mit bekanntem
+     Regionalcode ebenso Kandidaten bilden (Stufe dann höher), ohne eigenen Lasttest.
+  2. **`<Kontextwort> <IPv4>/<Nummer>` – Richtigstellung nach Messung:** Eine geschlossene Nummer ist gedeckt
+     (hinter `IP/` 0,80, vor `/IP` 0,90). Ungedeckt bleibt nur der hintere Teil einer **gruppierten** Nummer,
+     wenn IP-Ziffern und Nummer zusammen eine Kette von mehr als zwölf Ziffern bilden: IP-Fund, Restfund
+     (`bsnr-rest` bzw. bei LANR entsprechend) über die erste Gruppe, die letzte Gruppe bleibt im Klartext. So
+     dokumentiert und getestet; für den Abschlussbericht als Restlücke (selten) geführt.
+  3. Weitere Messbefunde, als Grenzen dokumentiert: Nullbreitenzeichen in der Nummer (Fund nur über den
+     zusammenhängenden Teil ab sechs Ziffern, bis zu drei Ziffern bleiben stehen – wie Grenze 7 der Vorgänger).
+     Kein Mangel: `BSNR` direkt vor den Ziffern ohne Leerzeichen ergibt einen Fund (anders als G-K4 bei KVNR).
+- **Nachtrag 2 zu T-15 (security FAIL „mittel", reviewer FAIL; Entscheidung der Hauptsitzung, 24.11.2026):**
+  1. **Punkt 3 des Nachtrags zu T-15 ist zu günstig formuliert und wird ersetzt.** Richtig ist (gemessen, gilt für
+     LANR, IK und BSNR gleichermaßen, also kein Rückschritt, aber bisher nirgends vollständig dokumentiert) –
+     **neue bekannte Grenze G-B4 „Zeichen in der Nummer"**: Ein Fund entsteht nur über einen zusammenhängenden
+     Teil mit mindestens sechs Ziffern bzw. über Gruppen, die mit einem Gruppentrenner nach AK-6 der Vorgänger
+     getrennt sind (Leerzeichen, geschütztes Leerzeichen, `-`, `.`, `/`). (a) Ein unsichtbares Zeichen in der
+     Nummer (Nullbreitenzeichen, weicher Trennstrich U+00AD, Wortverbinder U+2060): Bei Teilung 6+3 oder 3+6
+     bleiben drei Ziffern im Klartext; hat **kein** Teil sechs Ziffern (4+5, 5+4, 3+3+3), bleibt die **ganze**
+     Nummer im Klartext, ohne Fund. (b) Gruppen, die mit einem Zeichen außerhalb der Gruppentrenner getrennt
+     sind – Halbgeviertstrich U+2013, geschützter Bindestrich U+2011, Unterstrich `_` –: ebenfalls kein Fund,
+     die ganze Nummer bleibt im Klartext. In diesem Feature wird das **nicht** geändert (T-15 ist nur Tests und
+     Dokumentation; eine Erweiterung der Gruppentrenner beträfe LANR, IK, KVNR und BSNR und braucht eigenen
+     Bestandsschutz und eine Fehlalarm-Messung). T-15 dokumentiert G-B4 präzise im Javadoc (`KvNumberScanner`,
+     `BsnrRecognizer`, `KvArt`) und mit benannten `bekannteGrenze…`-Tests samt Gegenprobe (Teilung 4+5 mit
+     Nullbreitenzeichen; Gruppen mit Halbgeviertstrich, geschütztem Bindestrich, Unterstrich; Gegenprobe mit `-`
+     bzw. Leerzeichen → Fund). Für den Abschlussbericht: Restrisiko ausweisen und im Folgefeature-Vorschlag
+     aufnehmen („Gruppentrenner U+2013/U+2011/`_` und unsichtbare Zeichen in der Nummer").
+  2. **`BSNR_LANR_GUELTIG`:** Restrisiko-Vermerk für die LANR-Seite ergänzen; die Konstante bleibt die einzige
+     benannte Ausnahme. `istBsnrForm` (Zulässigkeit (c) in `TestdatenSynthetischTest`) lässt eine Folge mit
+     Nullblock an Stelle 3 bis 7 künftig nur zu, wenn sie nach LANR- und IK-Verfahren ungültig ist **oder** eine
+     der ausdrücklich benannten Ausnahmen ist (`BSNR_NULL`, `BSNR_LANR_GUELTIG` – jeweils im Javadoc begründet);
+     Selbsttest dazu; keine Mindestzahl sinkt.
+  3. reviewer-Mängel: `baustein-aufgegeben` (= 0) und `baustein-verworfen` (Messwert) für Teil 1h exakt
+     festhalten; Javadoc zum IPv4-Fall an allen Stellen in der engen Fassung; Begründung „gruppierte Ziffern mit
+     bekanntem Regionalcode" im Javadoc von `bsnrLastFaelle`; Linearitätsbeleg um `ak33_bsnr_…` ergänzen.
+- **Nachtrag 3 zu T-15 (security PASS „niedrig", reviewer FAIL; Hauptsitzung, 24.11.2026):**
+  1. **G-B4 allgemein gefasst (ersetzt die Zeichenaufzählungen in Nachtrag 2, Punkt 1):** Gruppentrenner sind
+     ausschließlich Leerzeichen, U+00A0, U+2009, U+202F, `-`, `.`, `/`. **Jedes andere Zeichen** in der Nummer
+     unterbricht sie – unsichtbare und Formatzeichen (z. B. U+200B bis U+200F, U+FEFF, U+2060 bis U+2064, U+00AD,
+     Variantenwähler, U+034F), Strich-Varianten (z. B. U+2010 bis U+2015, U+2212, U+FF0D), andere Leerräume (z. B.
+     U+2002, U+2007, U+3000, Tab, Zeilenumbruch) und ASCII-Zeichen wie `_ , ; : + * |`. Folge: Fund nur über einen
+     zusammenhängenden Teil ab sechs Ziffern; bei 4+5, 5+4, 3+3+3, 2+2+2+3 bleibt die ganze Nummer im Klartext,
+     bei 6+3 / 3+6 bleiben drei Ziffern. Gilt für LANR, IK, BSNR **und für den Ziffernteil der KVNR** (dort bleibt
+     dann auch der Buchstabe stehen; vgl. G-K8, G-K10, G-K17; Sonderform: ein Kombinationszeichen nach der dritten
+     Ziffer lässt bei der KVNR alle neun Ziffern stehen). Die genannten Zeichen sind Beispiele, keine
+     vollständige Liste.
+  2. **`kandidat-bereich-abweichend` = 116 ist erklärt (security-Messung):** alle 116 Fälle sind Blöcke der Art
+     „nachgestellt"; die Stufe ist in jedem Fall **höher** als nach der Konstruktion erwartet (0,60 → 0,80 oder
+     0,90; 0,80 → 0,90), Quelle `bsnr`, weil ein voranstehendes Kontextwort eines Nachbarblocks oder einer
+     Aufzählung zusätzlich Vorwärts-Kontext liefert (D-8). 0 Fälle mit niedrigerer Stufe, 0 mit falschem Typ,
+     0 ohne Abdeckung. Der Test hält das als getrennte Zähler fest (höher = 116, niedriger = 0, Quelle
+     abweichend = 0, Aufschlüsselung nach Blockart) und begründet es im Javadoc.

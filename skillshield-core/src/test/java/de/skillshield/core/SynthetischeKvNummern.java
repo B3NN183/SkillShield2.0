@@ -274,6 +274,20 @@ public final class SynthetischeKvNummern {
      */
     public static final String BSNR_SONDER_75_SCHLUESSEL = "750100000";
 
+    /**
+     * Bekannter Regionalcode 50 (Anlage 1: 37 bis 73), Stellen 3 bis 7 gleich 00000, Stellen 8 und 9 gleich 1 und 2.
+     * Zugleich nach dem LANR-Verfahren gueltig (T-15, Grenze G-D1): Summe 4*5 + 9*0 = 20, erwartete Stelle 7 ist 0 und
+     * sie ist 0. IK: Stelle 8 ungleich Stelle 9 (ungueltig). Nur fuer die Tests zum Gleichstand zwischen BSNR und LANR
+     * (Formularfeld {@code BSNR/LANR}); sonst gilt die Regel, dass eine BSNR-Testnummer nach LANR ungueltig ist.
+     *
+     * <p>Restrisiko (Nachtrag 2 zu T-15, LANR-Seite): Steht die Nummer in einem Text mit LANR-Kontextwort, entsteht
+     * ein LANR-Fund (hoechstens 0,95) statt eines BSNR-Funds. Das ist hier gewollt und im Test benannt; ein Test,
+     * der damit einen BSNR-Fund erwartet, ist falsch. Die Konstante ist neben {@code BSNR_NULL} die einzige
+     * benannte Ausnahme in {@code TestdatenSynthetischTest#istBsnrForm}; jede weitere Nullblock-Nummer, die nach
+     * LANR oder IK gueltig ist, wird dort als Verstoss gemeldet.
+     */
+    public static final String BSNR_LANR_GUELTIG = "500000012";
+
     // ------------------------------------------------------------------ Trennerformen (AK-6)
 
     /** LANR mit Leerzeichen, Gruppen 3-3-3; ohne Trenner {@link #LANR_GUELTIG}. */
@@ -469,6 +483,46 @@ public final class SynthetischeKvNummern {
         int rest = ikQuersummenSumme(sb.toString()) % 10;
         sb.setCharAt(8, (char) ('0' + rest));
         return sb.toString();
+    }
+
+    /** Regionalcodes der Bildung {@link #bildeBsnr}: Schluessel der Anlage 1 (06 bis 21, 37 bis 73 und 01). */
+    private static final String[] BSNR_CODES_BEKANNT = {"01", "10", "17", "21", "43", "52", "60", "73"};
+
+    /** Praefixe der Bildung {@link #bildeBsnrUnbekannt}: kein Schluessel der Anlage 1, Sonderkennungen 35 und 75. */
+    private static final String[] BSNR_CODES_UNBEKANNT = {"00", "99", "35", "75"};
+
+    private static final String BSNR_NULLBLOCK = "00000";
+
+    /**
+     * Bildet rechnerisch eine BSNR mit bekanntem Regionalcode (Liste {@link #BSNR_CODES_BEKANNT}), den Stellen 3 bis 7
+     * gleich {@code 00000} und zwei zufaelligen verschiedenen Ziffern an den Stellen 8 und 9; die Zahl ist nach
+     * {@link #lanrGueltigReferenz} und nach {@link #ikGueltigReferenz} ungueltig (A-6, T-12).
+     */
+    public static String bildeBsnr(Random zufall) {
+        while (true) {
+            String nummer = BSNR_CODES_BEKANNT[zufall.nextInt(BSNR_CODES_BEKANNT.length)] + BSNR_NULLBLOCK
+                    + zufall.nextInt(10) + zufall.nextInt(10);
+            if (!lanrGueltigReferenz(nummer) && !ikGueltigReferenz(nummer)) {
+                return nummer;
+            }
+        }
+    }
+
+    /**
+     * Bildet rechnerisch eine neunstellige Nummer mit unbekanntem Regionalcode: Praefix {@code 00}, {@code 99}
+     * (Netzverbund) oder die Sonderkennungen {@code 35} und {@code 75} mit unbekanntem Schluessel ({@code 00} an den
+     * Stellen 3 und 4), sonst wie {@link #bildeBsnr}; nach LANR und IK ungueltig. Beim Praefix {@code 00} ist Stelle 7
+     * von Null verschieden, damit die Zahl nicht zufaellig eine gueltige LANR ist.
+     */
+    public static String bildeBsnrUnbekannt(Random zufall) {
+        while (true) {
+            String code = BSNR_CODES_UNBEKANNT[zufall.nextInt(BSNR_CODES_UNBEKANNT.length)];
+            String mitte = "00".equals(code) ? "0000" + (1 + zufall.nextInt(9)) : BSNR_NULLBLOCK;
+            String nummer = code + mitte + zufall.nextInt(10) + zufall.nextInt(10);
+            if (!lanrGueltigReferenz(nummer) && !ikGueltigReferenz(nummer)) {
+                return nummer;
+            }
+        }
     }
 
     // ------------------------------------------------------------------ Fremdnummern (Fehlalarm-Pruefstand 1b)

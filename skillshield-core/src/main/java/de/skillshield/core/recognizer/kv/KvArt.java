@@ -40,7 +40,19 @@ import java.util.Set;
  * Laenge 6 bis 12 Ziffern ausser neun 0,40 (Quelle {@code bsnr-laenge-abweichend}); sonst Quelle {@code bsnr}. Die
  * Pruefung ({@code isValid}) nutzt die Vierziffern-Variante von {@link BsnrRegionalcodes}, damit die Sonderkennungen
  * 35 und 75 an den Stellen 3 und 4 gelten. Das nachgestellte Kompositum gilt fuer KVNR und BSNR
- * ({@link #nachgestelltesKompositum()}), nicht fuer LANR und IK.
+ * ({@link #nachgestelltesKompositum()}), nicht fuer LANR und IK. Der Restfund {@code bsnr-rest} (Zuschneiden am
+ * Bestand im {@code TextScanner}) hat hoechstens 0,80. Bekannte Grenzen der BSNR (Einzelheiten im Javadoc von
+ * {@code KvNumberScanner} und {@code BsnrRecognizer}, je Grenze ein Test in {@code BsnrGrenzenTest}): keine BSNR ohne
+ * Kontextwort (G-B1); zerlegte Umlaute (G-B2); Haupt- und Nebenbetriebsstaette nicht unterscheidbar (G-B3);
+ * Abkuerzungen, Pluralformen, Tippfehler und Trennstriche im Wort sind kein Kontextwort, {@code Betriebsstaette} ohne
+ * Nachsatzwort ebenso nicht; eine Leerzeile beendet den Kontext; ein unbekannter Regionalcode ergibt nur die Stufe
+ * "fraglich"; bei Gleichstand der Konfidenz kann der Typ "falsch" sein (G-D1). G-B4 "Zeichen in der Nummer" (auch
+ * LANR, IK und der Ziffernteil der KVNR): Gruppentrenner sind ausschliesslich Leerzeichen, U+00A0, U+2009, U+202F,
+ * {@code -}, {@code .} und {@code /}; jedes andere Zeichen in der Nummer (unsichtbare Zeichen, Strich-Varianten,
+ * andere Leerraeume, ASCII-Zeichen wie {@code _}; die Beispiele sind keine vollstaendige Liste) unterbricht sie. Bei
+ * der Teilung 6+3 oder 3+6 bleiben drei Ziffern im Klartext; hat kein Teil sechs Ziffern (4+5, 5+4, 3+3+3), bleibt
+ * die ganze Nummer im Klartext, ohne Fund (Einzelheiten und Folgefeature-Vorschlag im Javadoc von
+ * {@code KvNumberScanner}).
  *
  * <p><b>Konfidenzen der KVNR</b> (Buchstabe und neun Ziffern mit gueltiger Pruefziffer): 0,95 bei direktem Kontextwort
  * ({@link #confidenceDirekt()}), 0,80 bei weiterem Kontext, nachgestelltem Kontextwort oder gesperrt geschriebenem

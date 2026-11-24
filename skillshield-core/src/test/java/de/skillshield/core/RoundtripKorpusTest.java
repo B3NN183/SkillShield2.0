@@ -45,6 +45,7 @@ import de.skillshield.core.model.FindingType;
 import de.skillshield.core.pseudonymize.PseudonymizationResult;
 import de.skillshield.core.pseudonymize.Pseudonymizer;
 import de.skillshield.core.recognizer.TextScanner;
+import de.skillshield.core.recognizer.kv.BsnrSynthetischWaechter;
 import de.skillshield.core.recognizer.kv.KvnrRecognizer;
 import de.skillshield.core.recognizer.kv.KvnrSynthetischWaechter;
 import de.skillshield.core.reidentify.ReidentificationResult;
@@ -1992,5 +1993,219 @@ class RoundtripKorpusTest {
                 "Vorher [[TEXT_1]][[IK_2]]]] nachher", "IK"), true);
         kvPruefe(kvFall("grenze13-ik-neun-ziffern", "Vorher [[IK_" + IK_GUELTIG + "]] nachher",
                 "Vorher [[TEXT_1]][[IK_2]]]] nachher", "IK"), true);
+    }
+
+    // ------------------------------------------------------------------ BSNR-Korpus (kvnr-bsnr-erkennung T-15)
+
+    /** Genau ein BSNR-Fund: {@code vor + nummer + nach}, die Nummer wird zu {@code [[BSNR_1]]}. */
+    private static KvFall bn(String name, String vor, String nummer, String nach) {
+        return ein(name, vor, nummer, "BSNR", nach);
+    }
+
+    /** Die neun Ziffern in Gruppen der angegebenen Groessen, je zwei Gruppen durch {@code t} getrennt. */
+    private static String bsnrGruppiert(String neun, int[] gruppen, String t) {
+        StringBuilder sb = new StringBuilder();
+        int pos = 0;
+        for (int i = 0; i < gruppen.length; i++) {
+            sb.append(i > 0 ? t : "").append(neun, pos, pos + gruppen[i]);
+            pos += gruppen[i];
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Scan, Pseudonymisierung und Rueckuebersetzung eines BSNR-Falls wie {@code kvPruefe}, davor der Laufzeit-Waechter
+     * {@link BsnrSynthetischWaechter} (Neunerfolgen nach A-6, keine KVNR-Form ausser den {@code erlaubteKvnrFormen}).
+     */
+    private static PseudonymizationResult bsnrPruefe(KvFall k, int erlaubteKvnrFormen) {
+        BsnrSynthetischWaechter.assertBsnrSynthetisch(k.text(), erlaubteKvnrFormen);
+        return kvPruefe(k, !k.typen().isEmpty());
+    }
+
+    /**
+     * Der BSNR-Korpus (Roundtrip, AK-25 bis AK-33, AK-32; Namen {@code bn-...}, disjunkt zu den anderen Korpora):
+     * je Fall der erwartete pseudonymisierte Text, die erwarteten Typen in Textreihenfolge und der Roundtrip. Eigene
+     * Liste im Stil von {@link #kvnrOhneKontextFaelle()}, nicht Teil der Bestandsmengen. Alle Nummern sind die
+     * Konstanten von {@link SynthetischeKvNummern} oder Teilstuecke davon; Umlaute und Sonderzeichen kommen als
+     * {@code (char)}-Konstanten. Jeder Text besteht den Waechter {@link BsnrSynthetischWaechter}.
+     */
+    static List<KvFall> bsnrFaelle() {
+        List<KvFall> f = new ArrayList<>();
+        String b = SynthetischeKvNummern.BSNR_BEKANNT;
+        String b2 = SynthetischeKvNummern.BSNR_BEKANNT_ZWEI;
+        String b3 = SynthetischeKvNummern.BSNR_MARKER;
+        String u = SynthetischeKvNummern.BSNR_UNBEKANNT;
+        String l = LANR_GUELTIG;
+        String ae = zeichen(0xE4);
+        String nb = zeichen(0xA0);
+        // AK-25: Grundfall und Kontextwoerter, je mit Doppelpunkt oder Leerzeichen
+        f.add(bn("bn-ak25-grundfall", "Praxis, BSNR ", b, ", Ansprechpartner"));
+        String[] woerter = {"bsnr", "BSNR-Nr.", "Praxis-BSNR", "NBSNR", "BSNRNr", "Betriebsstaettennummer",
+            "Betriebsst" + ae + "ttennummer", "Betriebsstaettennr", "Betriebsstaetten-Nr.", "Betriebsstaette Nr.",
+            "Betriebsst" + ae + "tte Nummer", "Nebenbetriebsstaettennummer", "Nebenbetriebsst" + ae + "ttennummer",
+            "BETRIEBSSTAETTENNUMMER", "BETRIEBSST" + zeichen(0xC4) + "TTENNUMMER"};
+        for (int i = 0; i < woerter.length; i++) {
+            f.add(bn("bn-ak25-wort-" + i + "-doppelpunkt", woerter[i] + ": ", b, ""));
+            f.add(bn("bn-ak25-wort-" + i + "-leerzeichen", woerter[i] + " ", b2, ""));
+        }
+        // AK-26: Abgrenzung der Woerter und die Nummer allein (E-2), jeweils ohne Fund
+        for (String fremd : new String[] {"BSNRX", "Betriebsstaette", "Betriebsst" + ae + "tte", "KV-Nr.", "Betrieb",
+            "Rueckruf unter", "Tel."}) {
+            f.add(kein("bn-ak26-fremdwort-" + f.size(), fremd + " " + b));
+        }
+        f.add(kein("bn-ak26-nummer-allein", b));
+        f.add(kein("bn-ak26-nummer-im-satz", "Der Wert " + b + " steht hier"));
+        // AK-27: unbekannter Regionalcode: Fund der Stufe fraglich, Netzverbundnummer und Sonderkennung ebenso
+        f.add(bn("bn-ak27-regionalcode-unbekannt", "BSNR ", u, ""));
+        f.add(bn("bn-ak27-netzverbund", "BSNR ", SynthetischeKvNummern.BSNR_NETZVERBUND, ""));
+        f.add(bn("bn-ak27-sonderkennung-35", "BSNR ", SynthetischeKvNummern.BSNR_SONDER_35, ""));
+        f.add(bn("bn-ak27-sonderkennung-75-schluessel", "BSNR ", SynthetischeKvNummern.BSNR_SONDER_75_SCHLUESSEL, ""));
+        // AK-28: Schreibweisen (2+5+2, 3+3+3 mit allen Trennern), Laengen, Trenner am Ende und weiterer Text
+        int[][] gruppen = {{2, 5, 2}, {3, 3, 3}, {4, 5}, {1, 8}};
+        String[] trenner = {" ", nb, "-", ".", "/"};
+        for (int g = 0; g < gruppen.length; g++) {
+            for (int t = 0; t < trenner.length; t++) {
+                f.add(bn("bn-ak28-gruppen-" + g + "-" + t, "BSNR ", bsnrGruppiert(b, gruppen[g], trenner[t]), ""));
+            }
+        }
+        f.add(bn("bn-ak28-trenner-am-ende", "BSNR ", b, " Rest"));
+        f.add(bn("bn-ak28-bindestrich-am-ende", "BSNR ", b, "- Rest"));
+        for (String laenge : new String[] {LAENGE_6, LAENGE_7, LAENGE_8, LAENGE_10, LAENGE_12}) {
+            f.add(bn("bn-ak28-laenge-" + laenge.length(), "BSNR ", laenge, ""));
+        }
+        f.add(kein("bn-ak28-zu-kurz-fuenf-ziffern", "BSNR " + LAENGE_5));
+        f.add(kein("bn-ak28-zu-lang-dreizehn-ziffern", "BSNR " + LAENGE_13));
+        // AK-29: Kontextregeln (Fuellwoerter, Umbruch, Aufzaehlung, nachgestellt, Komma, Sperrschrift)
+        f.add(bn("bn-ak29-drei-fuellwoerter", "BSNR der Praxis Muster ", b, ""));
+        f.add(kein("bn-ak29-vier-fuellwoerter", "BSNR der Praxis Muster hier " + b));
+        f.add(bn("bn-ak29-umbruch-lf", "BSNR:\n", b, ""));
+        f.add(bn("bn-ak29-umbruch-crlf", "BSNR:\r\n", b, ""));
+        f.add(bn("bn-ak29-umbruch-cr-uz-lf", "BSNR:\r" + zeichen(0x200B) + "\n", b, ""));
+        f.add(kein("bn-ak29-leerzeile", "BSNR:\n\n" + b));
+        f.add(kvFall("bn-ak29-aufzaehlung", "BSNR " + b + ", " + b2 + " und " + b3,
+                "BSNR [[BSNR_1]], [[BSNR_2]] und [[BSNR_3]]", "BSNR,BSNR,BSNR"));
+        f.add(bn("bn-ak29-nachgestellt", "", b, " (BSNR)"));
+        f.add(bn("bn-ak29-nachgestellt-kompositum", "", b, " (Praxis-BSNR)"));
+        f.add(bn("bn-ak29-komma", "", b, ", BSNR"));
+        for (String sperr : new String[] {"B S N R ", "B. S. N. R. ", "N B S N R ", "B  S  N  R "}) {
+            f.add(bn("bn-ak29-sperrschrift-" + f.size(), sperr, b, ""));
+        }
+        // AK-30: Kollision mit LANR; das Formularfeld; gleiche Zahl unter LANR und BSNR (Typ je Fund, ein Platzhalter)
+        f.add(kvFall("bn-ak30-bsnr-dann-lanr", "BSNR " + b + "/LANR " + l, "BSNR [[BSNR_1]]/LANR [[LANR_2]]",
+                "BSNR,LANR"));
+        f.add(kvFall("bn-ak30-lanr-dann-bsnr", "LANR " + l + "/BSNR " + b, "LANR [[LANR_1]]/BSNR [[BSNR_2]]",
+                "LANR,BSNR"));
+        f.add(kvFall("bn-ak30-formularfeld", "BSNR/LANR " + b + "/" + l, "BSNR/LANR [[BSNR_1]]/[[LANR_2]]",
+                "BSNR,LANR"));
+        f.add(kvFall("bn-ak30-formularfeld-umgekehrt", "LANR/BSNR " + l + "/" + b, "LANR/BSNR [[LANR_1]]/[[BSNR_2]]",
+                "LANR,BSNR"));
+        f.add(kvFall("bn-ak30-gleiche-zahl-lanr-und-bsnr", "LANR " + l + ", BSNR " + l,
+                "LANR [[LANR_1]], BSNR [[LANR_1]]", "LANR,LANR"));
+        // AK-31: Enthaltensein (die Nummer steht in einer URL, einem Pfad, einer E-Mail; das Kontextwort bleibt)
+        f.add(kvFall("bn-ak31-url", "https://example.invalid/praxis?bsnr=" + b, "[[URL_1]]", "URL"));
+        f.add(kvFall("bn-ak31-pfad", "C:" + BS_KN + "Praxis" + BS_KN + "BSNR-" + b + BS_KN + "x.txt", "[[PFAD_1]]",
+                "PFAD"));
+        f.add(kvFall("bn-ak31-email", "BSNR " + b + "@example.invalid", "BSNR [[EMAIL_1]]", "EMAIL"));
+        // AK-32: Konsistenz (zeichengleich: ein Platzhalter; mit und ohne Trenner: zwei), Mischung mit anderen Arten
+        f.add(kvFall("bn-ak32-gleiche-nummer-zweimal", "BSNR " + b + " ... BSNR " + b,
+                "BSNR [[BSNR_1]] ... BSNR [[BSNR_1]]", "BSNR,BSNR"));
+        f.add(kvFall("bn-ak32-mit-und-ohne-trenner", "BSNR " + b + " ... BSNR " + bsnrGruppiert(b, gruppen[1], " "),
+                "BSNR [[BSNR_1]] ... BSNR [[BSNR_2]]", "BSNR,BSNR"));
+        f.add(kvFall("bn-ak32-mit-lanr-ik-und-bestand", "Mail " + MAIL + ", IK " + IK_GUELTIG + ", LANR " + l
+                + ", BSNR " + b, "Mail [[EMAIL_1]], IK [[IK_2]], LANR [[LANR_3]], BSNR [[BSNR_4]]",
+                "EMAIL,IK,LANR,BSNR"));
+        return f;
+    }
+
+    @Test
+    void bsnr_korpusIstGrossGenugUndNamenSindEindeutigUndDisjunkt() {
+        List<KvFall> faelle = bsnrFaelle();
+        assertTrue(faelle.size() >= KORPUS_BSNR_MIN_FAELLE, "Korpusgroesse BSNR: " + faelle.size());
+        assertEquals(faelle.size(), faelle.stream().map(KvFall::name).distinct().count(), "Fallnamen eindeutig");
+        List<String> bestand = new ArrayList<>();
+        kvFaelle().forEach(k -> bestand.add(k.name()));
+        kvTrennerFaelle().forEach(k -> bestand.add(k.name()));
+        kvnrFaelle().forEach(k -> bestand.add(k.name()));
+        kvnrOhneKontextFaelle().forEach(k -> bestand.add(k.name()));
+        assertTrue(faelle.stream().noneMatch(k -> bestand.contains(k.name())), "Fallnamen disjunkt zum Bestand");
+        assertTrue(faelle.stream().filter(k -> k.typen().isEmpty()).count() >= KORPUS_BSNR_MIN_OHNE_FUND,
+                "Gegenproben ohne Fund");
+        assertTrue(faelle.stream().filter(k -> k.typen().contains("BSNR")).count() >= KORPUS_BSNR_MIN_MIT_FUND,
+                "Faelle mit BSNR-Fund");
+        assertTrue(faelle.stream().filter(k -> k.typen().contains("URL") || k.typen().contains("PFAD")
+                || k.typen().contains("EMAIL")).count() >= 2, "Faelle mit Bestand");
+        assertTrue(laengsteZiffernkette("BSNR " + SynthetischeKvNummern.BSNR_BEKANNT) >= 6, "Pruefung erkennt Ziffern");
+    }
+
+    /**
+     * Mindestzahlen des BSNR-Korpus. Istwerte: 98 Faelle, davon 13 ohne Fund, 81 mit BSNR-Fund und 4 mit einem Fund
+     * aus dem Bestand (URL, Pfad, E-Mail; Untergrenzen bei 70 Prozent, abgerundet: 68, 9 und 56; fuer den Bestand 2).
+     */
+    private static final int KORPUS_BSNR_MIN_FAELLE = 68;
+    private static final int KORPUS_BSNR_MIN_OHNE_FUND = 9;
+    private static final int KORPUS_BSNR_MIN_MIT_FUND = 56;
+
+    /**
+     * AK-32 (Korpus): Scan, Pseudonymisierung aller Funde, Roundtrip zeichengleich ohne Meldung, keine Ziffernkette
+     * mit 6+ Ziffern im Ausgabetext (Faelle mit Fund), Typen und erwarteter Ausgabetext je Fall; vorher der Waechter.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("bsnrFallStrom")
+    void bsnr_scanPseudonymisierungRoundtrip_keineLangeZiffernketteImAusgabetext(String name, KvFall k) {
+        bsnrPruefe(k, 0);
+    }
+
+    static Stream<Arguments> bsnrFallStrom() {
+        return bsnrFaelle().stream().map(k -> Arguments.of(k.name(), k));
+    }
+
+    /**
+     * AK-32, AK-17 sinngemaess: Dieselbe BSNR zeichengleich ergibt denselben Platzhalter, mit und ohne Trenner
+     * verschiedene; beide fuehren zum Originalwert zurueck (keine Normalisierung).
+     */
+    @Test
+    void bsnr_ak32_gleicheNummerGleicherPlatzhalter_mitUndOhneTrennerVerschieden_beideFuehrenZurueck() {
+        String b = SynthetischeKvNummern.BSNR_BEKANNT;
+        PseudonymizationResult gleich = bsnrPruefe(kvFall("bn-konsistenz-gleich", "BSNR " + b + " ... BSNR " + b,
+                "BSNR [[BSNR_1]] ... BSNR [[BSNR_1]]", "BSNR,BSNR"), 0);
+        assertEquals(1, gleich.mapping().size(), "ein Platzhalter fuer dieselbe Nummer");
+        String getrennt = bsnrGruppiert(b, new int[] {3, 3, 3}, " ");
+        PseudonymizationResult verschieden = bsnrPruefe(kvFall("bn-konsistenz-trenner", "BSNR " + b + " ... BSNR "
+                + getrennt, "BSNR [[BSNR_1]] ... BSNR [[BSNR_2]]", "BSNR,BSNR"), 0);
+        assertEquals(2, verschieden.mapping().size(), "keine Normalisierung: zwei Platzhalter");
+        assertTrue(b.equals(verschieden.mapping().resolve("[[BSNR_1]]").orElseThrow()), "Platzhalter 1 fuehrt zurueck");
+        assertTrue(getrennt.equals(verschieden.mapping().resolve("[[BSNR_2]]").orElseThrow()),
+                "Platzhalter 2 fuehrt zurueck");
+    }
+
+    /**
+     * AK-32 (Mensch entscheidet): Der Scan liefert den Fund der Stufe fraglich ({@code BSNR <BSNR ungueltig>}); ersetzt
+     * wird nur, was der Aufrufer uebergibt (leere Liste: Text unveraendert).
+     */
+    @Test
+    void bsnr_ak32_fraglicherFundWirdNurBeiUebergabeErsetzt() {
+        String text = "BSNR " + SynthetischeKvNummern.BSNR_UNBEKANNT;
+        BsnrSynthetischWaechter.assertBsnrSynthetisch(text);
+        List<Finding> funde = SCANNER.scan(text);
+        assertEquals(1, funde.size(), "ein Fund");
+        assertEquals(FindingType.BSNR, funde.get(0).type(), "Typ BSNR");
+        assertEquals(ConfidenceLevel.FRAGLICH, funde.get(0).level(), "Stufe fraglich");
+        PseudonymizationResult leer = PSEUDONYMIZER.pseudonymize(text, List.of());
+        assertTrue(text.equals(leer.text()), "ohne Uebergabe bleibt der Text unveraendert");
+        assertTrue(leer.mapping().size() == 0, "keine Zuordnung");
+        PseudonymizationResult alle = PSEUDONYMIZER.pseudonymize(text, funde);
+        assertTrue("BSNR [[BSNR_1]]".equals(alle.text()), "mit Uebergabe ersetzt");
+    }
+
+    /** KI-Simulation (AK-32): Platzhalter vertauscht und eingebettet ergeben die Originalwerte zurueck. */
+    @Test
+    void bsnr_kiSimulation_platzhalterVertauschtUndEingebettet_ergibtOriginalwerte() {
+        String b = SynthetischeKvNummern.BSNR_BEKANNT;
+        PseudonymizationResult p = bsnrPruefe(kvFall("bn-ki", "BSNR " + b + ", IK " + IK_GUELTIG,
+                "BSNR [[BSNR_1]], IK [[IK_2]]", "BSNR,IK"), 0);
+        ReidentificationResult r = umformen(p, "Antwort: IK [[IK_2]] und BSNR ([[BSNR_1]]), nochmal [[BSNR_1]].");
+        assertTrue(("Antwort: IK " + IK_GUELTIG + " und BSNR (" + b + "), nochmal " + b + ".").equals(r.text()),
+                "KI-Antwort wird rueckuebersetzt");
+        assertTrue(r.unresolved().isEmpty(), "keine Meldung");
     }
 }

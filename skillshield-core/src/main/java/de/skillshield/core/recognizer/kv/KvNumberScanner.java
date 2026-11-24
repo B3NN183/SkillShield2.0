@@ -302,7 +302,7 @@ import java.util.Set;
  * als Fuellwort verbraucht ist.</li>
  * <li>G-K8: Unsichtbare Zeichen zwischen Buchstabe und Ziffern beenden die Kette (Fund hoechstens 0,40 ueber die
  * Ziffern, der Buchstabe bleibt stehen; ein Variantenwaehler klebt die Ziffern am Buchstaben, dann gibt es keinen
- * Fund); unsichtbare Zeichen in der Nummer beenden sie ebenfalls.</li>
+ * Fund); unsichtbare Zeichen in der Nummer beenden sie ebenfalls (allgemein: G-B4).</li>
  * <li>G-K9: Ein Kontextwort direkt am Buchstaben der Nummer ({@code KVNR} und Buchstabe ohne Trenner, auch mit einem
  * unsichtbaren Zeichen dazwischen) ergibt keinen Fund; jede Schreibweise der Nummer bleibt stehen. Auch eine Erkennung
  * ohne Kontextwort schuetzt hier nicht, weil sie vor dem Buchstaben eine Wortgrenze verlangt.</li>
@@ -344,7 +344,8 @@ import java.util.Set;
  * <li>G-K17: Jedes Kombinationszeichen (Kategorien Mn, Mc, Me; darunter U+034F, U+180B, die Variantenwaehler und
  * U+E0100 bis U+E01EF) und die Fuellzeichen U+115F, U+1160, U+3164 und U+FFA0, die nicht zur Menge der unsichtbaren
  * Zeichen dieses Scanners gehoeren, verhindern direkt vor dem Buchstaben oder zwischen Buchstabe und Ziffern den
- * Fund in Buchstabenform; Buchstabe und Ziffern koennen dann vollstaendig stehen bleiben.</li>
+ * Fund in Buchstabenform; Buchstabe und Ziffern koennen dann vollstaendig stehen bleiben (zu Zeichen im Ziffernteil
+ * siehe G-B4).</li>
  * <li>G-D2: Ein LANR- oder IK-Kontextwort vor einer KVNR-Form schuetzt nur die Ziffern (Fund LANR bzw. IK, der
  * Buchstabe bleibt stehen); mit einem KVNR-Kontextwort davor umfasst der Fund Buchstabe und Ziffern (Typ KVNR). Mit
  * Teil 1b gilt das auch fuer eine gueltige, geschlossene, grossgeschriebene Form hinter einem LANR- oder IK-Kontextwort
@@ -353,6 +354,64 @@ import java.util.Set;
  * </ul>
  * Fuer die KVNR gelten ausserdem alle Grenzen der Vorgaenger (12R, 14a, 14b, 14cR, 14d, 14e, 14f, 14g, 14h-Rest, 15R)
  * sinngemaess, zum Beispiel Kombinationszeichen am Kontextwort und Teilgruppen wie {@code K VNR}.
+ *
+ * <p><b>Bekannte Grenzen der BSNR (Feature kvnr-bsnr-erkennung, Teil 2, Plan Kap. 11 und die Nachtraege zu T-13, T-14
+ * und T-15).</b> Je Grenze gibt es einen Test {@code bekannteGrenze...} in {@code BsnrGrenzenTest} (dort die Tabelle
+ * "Grenze zu Test"; zwei Tests stehen zusaetzlich in {@code BsnrRecognizerTest}). Die Tests halten das tatsaechliche
+ * Verhalten fest und sind kein Soll fuer kuenftige Erweiterungen. Konfidenzen der BSNR (D-8): 0,90 bei bekanntem
+ * Regionalcode und direktem Kontextwort, 0,80 bei weiterem Kontext, nachgestelltem oder gesperrt geschriebenem
+ * Kontextwort, 0,60 nachgestellt hinter Komma oder Semikolon, 0,50 bei unbekanntem Regionalcode, 0,40 bei einer Laenge
+ * von 6 bis 12 Ziffern ausser neun; der Restfund {@code bsnr-rest} hoechstens 0,80.
+ * <ul>
+ * <li>G-B1: Eine BSNR ohne Kontextwort bleibt Klartext (E-2); es gibt keine Pruefziffer, die eine Zahl als BSNR
+ * auswiese. Ebenso eine Nummer in einer Tabelle unter einer Spaltenueberschrift, wenn mehr als drei Woerter oder eine
+ * Leerzeile zwischen Kontextwort und Nummer liegen (Regel der Vorgaenger: eine Leerzeile beendet den Kontext).</li>
+ * <li>G-B2: Zerlegte Umlaute ({@code a} plus U+0308) in {@code Betriebsstaette...} sind Kombinationszeichen und
+ * ergeben kein Kontextwort; ein Kombinationszeichen direkt am Kontextwort ({@code BSNR} plus U+0301) ebenso nicht
+ * (Grenze 8 der Vorgaenger).</li>
+ * <li>G-B3: Haupt- und Nebenbetriebsstaette sind nicht unterscheidbar ({@code BSNR}, {@code NBSNR},
+ * {@code Nebenbetriebsstaettennummer} ergeben denselben Typ mit denselben Feldern).</li>
+ * <li>Schreibweisen ausserhalb von D-8 sind kein Kontextwort: die Abkuerzungen {@code Betriebsst.-Nr.},
+ * {@code Betriebsst. Nr.}, {@code BS-Nr.}, {@code BSN}, {@code BSt-Nr.}, {@code HBSNR}, Pluralformen
+ * ({@code BSNRs}, {@code Betriebsstaettennummern}), Tippfehler ({@code BSRN}) und ein Trennstrich im Wort
+ * ({@code Betriebs-staetten-nummer}); bewusst nicht aufgenommen wegen Verwechslungs- und Fehlalarmgefahr
+ * (Nutzervorgabe: bei vermehrten Fehlalarmen lassen). Folgefeature-Vorschlag: der Abkuerzungspunkt als
+ * Nachsatz-Trenner fuer {@code Betriebsst.-Nr.}.</li>
+ * <li>{@code Betriebsstaette}, {@code Betriebsstaetten}, {@code Nebenbetriebsstaette} und
+ * {@code Nebenbetriebsstaetten} sind nur mit Nachsatzwort {@code Nr} oder {@code Nummer} ein Kontextwort.</li>
+ * <li>Kontextwort, IPv4-Adresse, ein einzelner Trenner ({@code /} oder Leerzeichen) und eine gruppierte Nummer
+ * ({@code BSNR <IPv4>/<4 Ziffern>-<5 Ziffern>}, bestand schon bei der LANR, vgl. G-K18): Die Ziffernkette ist
+ * laenger als zwoelf Ziffern; der Scan liefert den IP-Fund und einen Restfund {@code bsnr-rest} (0,40) ueber die
+ * erste Zifferngruppe, die Ziffern hinter dem Bindestrich bleiben im Klartext. Eine geschlossene Nummer hinter
+ * {@code IP/} bleibt abgedeckt (0,80).</li>
+ * <li>G-K14 gilt auch fuer {@code bsnr-rest}: Ein Rest von einer oder zwei Ziffern neben einem Bestandsfund (E-Mail,
+ * IP, URL, Pfad) bleibt stehen; ab drei Ziffern entsteht ein Restfund (hoechstens 0,80).</li>
+ * <li>Der Regionalcode bestimmt nie, ob ein Fund entsteht (Schutz geht vor): Ein unbekannter Code, die
+ * Netzverbundnummer (Praefix 99) und eine Sonderkennung (35, 75) mit unbekanntem Schluessel ergeben nur die Stufe
+ * "fraglich" (0,50), nie "sicher".</li>
+ * <li>G-B4 "Zeichen in der Nummer" (gilt gleichermassen fuer LANR, IK und BSNR, ebenso fuer den Ziffernteil der
+ * KVNR; gemessen, kein Rueckschritt, aber bisher nicht vollstaendig dokumentiert; Grenze 7 der Vorgaenger):
+ * Gruppentrenner sind ausschliesslich Leerzeichen, U+00A0, U+2009, U+202F, {@code -}, {@code .} und {@code /}
+ * (vgl. die Begriffsbestimmung oben). <b>Jedes andere Zeichen</b> in der Nummer unterbricht sie, zum Beispiel
+ * unsichtbare und Formatzeichen (Nullbreitenzeichen, U+00AD, U+2060, Variantenwaehler, U+034F), Strich-Varianten
+ * (U+2010 bis U+2015, U+2212, U+FF0D), andere Leerraeume (U+2002, U+2007, U+3000, Tab, Zeilenumbruch) und
+ * ASCII-Zeichen wie {@code _ , ; : + * |}; die genannten Zeichen sind Beispiele, keine vollstaendige Liste. Folge:
+ * Ein Fund entsteht nur ueber einen zusammenhaengenden Teil mit mindestens sechs Ziffern. Bei der Teilung 6+3 oder
+ * 3+6 ist der Teil mit sechs Ziffern ein Fund (0,40) und drei Ziffern bleiben im Klartext; hat <b>kein</b> Teil
+ * sechs Ziffern (4+5, 5+4, 3+3+3, 2+2+2+3), entsteht kein Fund, und die <b>ganze</b> Nummer bleibt im Klartext.
+ * Bei der KVNR bleibt dann auch der Buchstabe stehen (vgl. G-K8, G-K10, G-K17; Sonderform: ein Kombinationszeichen
+ * nach der dritten Ziffer laesst bei der KVNR alle neun Ziffern stehen). Bewusst nicht geaendert (T-15 ist nur Tests
+ * und Dokumentation; eine Erweiterung der Gruppentrenner betraefe LANR, IK, KVNR und BSNR und braucht eigenen
+ * Bestandsschutz und eine Fehlalarm-Messung). Restrisiko; Folgefeature-Vorschlag: weitere Gruppentrenner (U+2013,
+ * U+2011, {@code _}) und unsichtbare Zeichen in der Nummer.</li>
+ * <li>G-D1: Bei Gleichstand der Konfidenz bei gleichem Bereich gewinnt {@code BSNR} vor {@code IK}, {@code KVNR} und
+ * {@code LANR}, {@code KVNR} vor {@code LANR}, {@code IP} vor allen KV-Arten; der Typ kann "falsch" sein, die Position
+ * ist geschuetzt und umkehrbar. Im Formularfeld {@code BSNR/LANR <B>/<L>} kann eine gueltige LANR, deren erste zwei
+ * Ziffern ein bekannter Regionalcode sind, als BSNR typisiert werden (beide 0,80).</li>
+ * </ul>
+ * Hinweis fuer die Oberflaeche (kein Mangel): Ein zusammengelegter Fund kann durch einen teilweise ueberlappenden
+ * BSNR-Kandidaten von "sicher" auf "wahrscheinlich" fallen (K-4; die Abdeckung wird groesser); ein spaeterer
+ * Filter nach Stufe muss das beruecksichtigen.
  *
  * <p><b>Linearitaet.</b> Ein Durchlauf, keine Rekursion, kein regulaerer Ausdruck, kein Zuruecksetzen der
  * Leseposition der Hauptschleife. Jeder Lauf wird in einem Zug gelesen. Dabei fuehrt der Durchlauf nur ein Fenster
@@ -412,7 +471,10 @@ import java.util.Set;
  * {@code KVNR Z} wiederholt, eine lange Aufzaehlung hinter einem einzigen Kontextwort, Kontextwort und Nummer
  * wiederholt, gesperrte und Weit-Schreibweise, unsichtbare Zeichen vor dem Buchstaben, das nachgestellte Kompositum,
  * Buchstabe und IPv4-Gestalt, abwechselnd Bestandsfunde und KVNR-Kandidaten (Zuschneiden im {@code TextScanner}) und
- * abgebrochene Beinahe-Kontextwoerter; die Formel steht je Fall im Test.
+ * abgebrochene Beinahe-Kontextwoerter; die Formel steht je Fall im Test. Fuer die BSNR belegen es die sechs
+ * Lastfaelle {@code ak33_bsnr_...} ({@code BSNR } und nur Ziffern, {@code BSNR } und {@code 0 } wiederholt, nur
+ * Bindestriche, die Nullnummer wiederholt, {@code B S N R } wiederholt, Nummer und nachgestelltes Kontextwort
+ * wiederholt) mit exakter Fundzahl je Stufe.
  *
  * <p>Der Durchlauf wirft nur {@link NullPointerException} mit den festen Meldungen {@code art} und {@code text}; er
  * schreibt nichts aus, und kein Fund und keine Meldung enthaelt Ziffern des Textes.

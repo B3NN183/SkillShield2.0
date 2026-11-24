@@ -15,6 +15,8 @@ import de.skillshield.core.pseudonymize.PseudonymizationResult;
 import de.skillshield.core.pseudonymize.Pseudonymizer;
 import de.skillshield.core.recognizer.Recognizer;
 import de.skillshield.core.recognizer.TextScanner;
+import de.skillshield.core.recognizer.kv.BsnrRecognizer;
+import de.skillshield.core.recognizer.kv.BsnrSynthetischWaechter;
 import de.skillshield.core.recognizer.kv.IkRecognizer;
 import de.skillshield.core.recognizer.kv.KvTestHilfen;
 import de.skillshield.core.recognizer.kv.KvnrBsnrHilfen;
@@ -81,6 +83,14 @@ import org.junit.jupiter.api.Test;
  * Scan-Abdeckung zaehlen strikt 0, markierte Grenzbloecke (G-K9, Nicht-ASCII-Ziffer als Nachbar) einzeln. Der
  * Bestandsschutz gegen die eingefrorene Kopie steht in {@code KvnrOhneKontextFuzzBestandTest}; der ganze Teil gehoert
  * zum 1b-Inventar (Plan Regel 14).
+ * Teil 1h ({@code SEED_TEXTE_KV_H}, kvnr-bsnr-erkennung T-15, eigener Generator {@link #erzeugeKvH}, eigene Records
+ * {@link BlockH}, {@link GegenprobeH} und {@link FallH}, Hash {@link #HASH_TEIL_1H}): BSNR-Bloecke mit allen
+ * Kontextwoertern aus D-8 (auch mit Umlaut statt {@code ae}), Schreibweisen, Fuellwoertern, Umbruch, Aufzaehlung,
+ * nachgestelltem Kontextwort (auch Kompositum), gesperrter Schrift, dem Formularfeld {@code BSNR/LANR}, Wiederholung
+ * derselben Nummer, Gegenproben mit Positivprobe, gemischt mit LANR-, IK- und KVNR-Bloecken (nur Formen von Teil 1a)
+ * und Bausteinen aus 1b bis 1e. Kein Text enthaelt eine enge KVNR-Form ausserhalb eines KVNR-Blocks mit Kontextwort
+ * (geprueft); nicht markierte Bloecke ohne Scan-Abdeckung und Mischbloecke ohne Abdeckung zaehlen strikt 0, markierte
+ * Grenzbloecke einzeln. Der Bestandsschutz gegen die eingefrorene Kopie steht in {@code BsnrFuzzBestandTest}.
  * Teil 2: {@value #ANZAHL_EINGABEN} Zufallseingaben an {@code restore}.
  *
  * <p>Der Lauf wird einmal ausgeführt ({@link #LAUF}); jede Eigenschaft ist ein eigener Test. Meldungen nennen nur
@@ -144,6 +154,7 @@ class RoundtripFuzzTest {
     private static Lauf LAUF_KV_E;
     private static Lauf LAUF_KV_F;
     private static Lauf LAUF_KV_G;
+    private static Lauf LAUF_KV_H;
 
     // ------------------------------------------------------------------ Erzeugung
 
@@ -2547,6 +2558,7 @@ class RoundtripFuzzTest {
         LAUF_KV_E = fuehreKvEAus();
         LAUF_KV_F = fuehreKvFAus();
         LAUF_KV_G = fuehreKvGAus();
+        LAUF_KV_H = fuehreKvHAus();
     }
 
     private static boolean paarGetrennt(String s, int pos) {
@@ -6299,5 +6311,1319 @@ class RoundtripFuzzTest {
         int anzahl = lauf.klasse_(klasse);
         assertTrue(anzahl >= minimum, "Klasse " + klasse + " kam in " + anzahl + " von " + ANZAHL_TEXTE
                 + " F\u00E4llen vor, erwartet mindestens " + minimum + " (Startwert " + lauf.seed + ")");
+    }
+
+    // ------------------------------------------------------------------ Teil 1h (kvnr-bsnr-erkennung T-15)
+
+    // Teil 1h misst den BSNR-Erkenner (Teil 2) ueber die ganze Kette: Erkenner, Konfliktaufloesung, Pseudonymisierung
+    // und Rueckuebersetzung. Aufbau wie bei Teil 1f: Seeds, Blockarten und Records, dann Generator, Pruefung und Tests.
+    // Die Erwartung stammt aus der Konstruktion (Kontextwort, Regel, Art der Nummer) und nie aus dem Erkenner. Nur
+    // Ergaenzungen: die Teile 1 bis 1g, ihre Seeds, Generatoren und Hashwerte bleiben unveraendert.
+
+    /** Teil 1h: eigene Startwerte, {@value #ANZAHL_TEXTE} Texte mit BSNR-Bloecken und Mischbausteinen. */
+    static final long SEED_TEXTE_KV_H = 20261129L;
+    static final long SEED_AUSWAHL_KV_H = 969696L;
+    /** Position des BSNR-Erkenners in {@code STANDARD_ERKENNER} (wie in {@code TextScanner.standard()}). */
+    private static final int ERKENNER_BSNR = 7;
+    private static final double KONF_DIREKT_H = 0.90;
+    private static final double KONF_WEITER_H = 0.80;
+    private static final double KONF_KOMMA_H = 0.60;
+    private static final double KONF_UNBEKANNT_H = 0.50;
+    private static final double KONF_LAENGE_H = 0.40;
+    private static final int MAX_VERSUCHE_H = 60;
+
+    /**
+     * Blockarten von Teil 1h. 0 bis 7 sind BSNR-Bloecke mit je einem erwarteten Fund: Kontextwort und Nummer direkt,
+     * mit Fuellwoertern, mit Umbruch, Aufzaehlung, nachgestelltem Kontextwort (auch Kompositum und mit Komma),
+     * gesperrt geschriebenes Kontextwort, Formularfeld {@code BSNR/LANR} und Wiederholung derselben Nummer. 8 bis 10
+     * sind Mischbloecke mit Kontextwort der anderen Arten (LANR, IK, KVNR in Formen von Teil 1a): Sie sichern, dass
+     * kein Fund dieser Arten verloren geht.
+     */
+    static final int BLOCK_H_DIREKT = 0;
+    static final int BLOCK_H_FUELLWOERTER = 1;
+    static final int BLOCK_H_UMBRUCH = 2;
+    static final int BLOCK_H_AUFZAEHLUNG = 3;
+    static final int BLOCK_H_NACHGESTELLT = 4;
+    static final int BLOCK_H_SPERR = 5;
+    static final int BLOCK_H_FORMULAR = 6;
+    static final int BLOCK_H_WIEDERHOLUNG = 7;
+    static final int BLOCK_H_MISCH_LANR = 8;
+    static final int BLOCK_H_MISCH_IK = 9;
+    static final int BLOCK_H_MISCH_KVNR = 10;
+    private static final int ANZAHL_BSNR_BLOCKARTEN_H = 8;
+    private static final String[] BLOCK_NAMEN_H = {"direkt", "fuellwoerter", "umbruch", "aufzaehlung",
+        "nachgestellt", "sperr", "formular", "wiederholung", "misch-lanr", "misch-ik", "misch-kvnr"};
+    private static final FindingType[] MISCH_TYPEN_H = {FindingType.LANR, FindingType.IK, FindingType.KVNR};
+    /** Gruppen der Kontextwoerter aus D-8; "kompositum" und "sperr" sind Schreibweisen. */
+    private static final String[] GRUPPEN_NAMEN_H = {"bsnr", "nbsnr", "betriebsstaettennummer",
+        "nebenbetriebsstaettennummer", "betriebsstaette-vorwort", "nebenbetriebsstaette-vorwort", "kompositum",
+        "sperr"};
+    private static final int GRUPPE_KOMPOSITUM_H = 6;
+    private static final int GRUPPE_SPERR_H = 7;
+
+    /** Art der Nummer eines BSNR-Blocks: bekannter Regionalcode, unbekannter Regionalcode, Laengenabweichung. */
+    private static final int ART_H_BEKANNT = 0;
+    private static final int ART_H_UNBEKANNT = 1;
+    private static final int ART_H_LAENGE = 2;
+
+    /** Ein Kontextwort aus D-8 (die Woerter mit ae gibt es auch mit dem Umlaut, siehe {@link #umlautH}). */
+    private record KwH(String text, int gruppe) {
+    }
+
+    private static final KwH[] KW_H = {new KwH("BSNR", 0), new KwH("BSNRNr", 0), new KwH("BSNR-Nr.", 0),
+        new KwH("Praxis-BSNR", 0), new KwH("NBSNR", 1), new KwH("Betriebsstaettennummer", 2),
+        new KwH("Betriebsstaettennr", 2), new KwH("Nebenbetriebsstaettennummer", 3),
+        new KwH("Nebenbetriebsstaettennr", 3), new KwH("Betriebsstaette Nr.", 4), new KwH("Betriebsstaetten-Nr.", 4),
+        new KwH("Betriebsstaette Nummer", 4), new KwH("Betriebsstaetten Nummer", 4),
+        new KwH("Nebenbetriebsstaette Nr.", 5), new KwH("Nebenbetriebsstaetten-Nummer", 5)};
+    private static final String[] PRAEFIX_H = {"", "", "Praxis, ", "Die Praxis hat die ", "Daten: "};
+    private static final String[] AUFZAEHLUNG_H = {", ", "; ", " und ", "\n"};
+    private static final String[] KOMPOSITUM_H = {"Praxis", "Pat.", "Haupt"};
+    private static final String[] SPERR_WOERTER_H = {"BSNR", "NBSNR"};
+    private static final String[] TRENNER_H = {"\n", "\r\n", "; ", ". ", "! ", "\t", " | ", ", ", "\n\n", " und "};
+    /** Zerlegungen der neun Ziffern in zwei oder drei Gruppen (nie vier: keine IPv4-Gestalt). */
+    private static final int[][] GRUPPEN_H = {{3, 3, 3}, {2, 5, 2}, {4, 5}, {1, 8}, {5, 4}, {2, 2, 5}};
+    /** Laengenabweichungen (6 bis 12 Ziffern ausser neun) mit Praefix 12 oder bekanntem Regionalcode. */
+    private static final String[] LAENGEN_H = {SynthetischeKvNummern.LAENGE_6, SynthetischeKvNummern.LAENGE_7,
+        SynthetischeKvNummern.LAENGE_8, SynthetischeKvNummern.LAENGE_10, SynthetischeKvNummern.LAENGE_12,
+        SynthetischeKvNummern.BSNR_ACHT_ZIFFERN, SynthetischeKvNummern.BSNR_ZEHN_ZIFFERN};
+    private static final String[] FREMDWOERTER_H = {"BSNRX", "Betriebsstaette", "Betrieb", "KV-Nr.", "Tel.",
+        "Ansprechpartner unter", "BSNRen"};
+    private static final String[] ABKUERZUNGEN_H = {"Betriebsst.-Nr.", "Betriebsst. Nr.", "BS-Nr.", "BSN", "BSt-Nr.",
+        "HBSNR", "BSNRs", "BSRN", "Betriebs-staetten-nummer"};
+    private static final String[] GEGENPROBEN_H = {"vier-fuellwoerter", "leerzeile", "fremdwort", "ohne-kontext",
+        "abkuerzung", "zerlegter-umlaut", "kw-ohne-nummer", "ziffernzahl"};
+    private static final int[] GEWICHT_BLOCK_H = {20, 12, 10, 8, 12, 9, 7, 5};
+
+    /**
+     * Ein erwarteter Fund einer Nummer in einem Text von Teil 1h: Blockart ({@code BLOCK_H_*}), Gruppe des Kontextworts
+     * (BSNR-Bloecke), erwartete Konfidenz und Quelle des BSNR-Kandidaten (aus der Art der Nummer; Konfidenz kleiner 0
+     * heisst: keine Erwartung an die Stufe), Bereich der Nummer, bei gesperrt geschriebenem Kontextwort der Bereich
+     * seiner Buchstaben (sonst -1). {@code grenze} ist leer oder die Grenzklasse nach {@link #grenzklasseH}; ein
+     * markierter Block muss keinen Scan-Fund haben.
+     */
+    record BlockH(int blockart, int gruppe, double konfidenz, String quelle, int start, int ende, int wortStart,
+            int wortEnde, String grenze) {
+        BlockH markiert(String klasse) {
+            return new BlockH(blockart, gruppe, konfidenz, quelle, start, ende, wortStart, wortEnde, klasse);
+        }
+
+        /** Ob dies ein BSNR-Block ist (sonst ein Mischblock einer anderen Art). */
+        boolean bsnr() {
+            return blockart < ANZAHL_BSNR_BLOCKARTEN_H;
+        }
+    }
+
+    /** Eine Gegenprobe: Name und Text; allein gescannt liefert der BSNR-Erkenner keinen Fund (aus der Konstruktion). */
+    record GegenprobeH(String name, String text) {
+    }
+
+    /** Ein Text von Teil 1h mit den Bloecken seiner Konstruktion, den Gegenproben und den Namen der Bausteine. */
+    record FallH(String text, List<BlockH> bloecke, List<GegenprobeH> gegenproben, List<String> bausteine,
+            int verworfene, int aufgegebene) {
+
+        /** Ein Fall ohne verworfene Bausteine (Selbsttests). */
+        FallH(String text, List<BlockH> bloecke, List<GegenprobeH> gegenproben, List<String> bausteine) {
+            this(text, bloecke, gegenproben, bausteine, 0, 0);
+        }
+    }
+
+    private record NummerH(String text, int art) {
+    }
+
+    /** Der im Aufbau befindliche Text; {@link #zurueck} nimmt einen verworfenen Baustein ohne Rest zurueck. */
+    private static final class AufbauH {
+        final StringBuilder sb = new StringBuilder();
+        final List<BlockH> bloecke = new ArrayList<>();
+        final List<GegenprobeH> gegenproben = new ArrayList<>();
+        final List<String> bausteine = new ArrayList<>();
+        int verworfene;
+        int aufgegebene;
+
+        int[] marke() {
+            return new int[] {sb.length(), bloecke.size(), gegenproben.size(), bausteine.size()};
+        }
+
+        void zurueck(int[] marke) {
+            sb.setLength(marke[0]);
+            bloecke.subList(marke[1], bloecke.size()).clear();
+            gegenproben.subList(marke[2], gegenproben.size()).clear();
+            bausteine.subList(marke[3], bausteine.size()).clear();
+        }
+    }
+
+    /** Teil 1h: Texte mit BSNR-Bloecken, Mischbloecken, Gegenproben und Mischung mit Bausteinen aus 1b bis 1e. */
+    static List<FallH> erzeugeKvH(long seed) {
+        Random r = new Random(seed);
+        List<FallH> faelle = new ArrayList<>(ANZAHL_TEXTE);
+        for (int i = 0; i < ANZAHL_TEXTE; i++) {
+            faelle.add(erzeugeTextH(r));
+        }
+        return faelle;
+    }
+
+    /**
+     * Ein Text aus 3 bis 10 Bausteinen. Die Mischbausteine aus 1b bis 1e ziehen aus einem eigenen {@code Random},
+     * dessen Startwert je Text eine Zufallszahl des Hauptstroms ist; ihre Bloecke werden nicht erfasst. Ein Baustein
+     * samt Trenner wird verworfen und neu gezogen, wenn der Text danach einen Waechter verletzt (LANR-/IK-Regel,
+     * KVNR-Regel, BSNR-Regel) oder eine enge KVNR-Form ausserhalb der KVNR-Bloecke entsteht
+     * ({@link #kvnrFormenAusserhalbH}).
+     * Danach werden die Bloecke markiert, die an einer dokumentierten Grenze liegen ({@link #grenzklasseH}); die
+     * Markierung zieht keine Zufallszahlen.
+     */
+    static FallH erzeugeTextH(Random r) {
+        AufbauH a = new AufbauH();
+        Random mischung = new Random(r.nextLong());
+        int n = 3 + r.nextInt(8);
+        for (int i = 0; i < n; i++) {
+            boolean angenommen = false;
+            for (int versuch = 0; versuch < MAX_VERSUCHE_H && !angenommen; versuch++) {
+                int[] marke = a.marke();
+                bausteinH(r, mischung, a);
+                if (r.nextInt(6) == 0) {
+                    a.sb.append(waehle(r, UNSICHTBAR_C));
+                }
+                a.sb.append(waehle(r, TRENNER_H));
+                angenommen = aufbauOkH(a);
+                if (!angenommen) {
+                    a.zurueck(marke);
+                    a.verworfene++;
+                }
+            }
+            a.aufgegebene += angenommen ? 0 : 1;
+        }
+        String text = a.sb.toString();
+        List<BlockH> endgueltig = new ArrayList<>(a.bloecke.size());
+        for (BlockH block : a.bloecke) {
+            String klasse = grenzklasseH(text, block);
+            endgueltig.add(klasse.isEmpty() ? block : block.markiert(klasse));
+        }
+        return new FallH(text, endgueltig, List.copyOf(a.gegenproben), List.copyOf(a.bausteine), a.verworfene,
+                a.aufgegebene);
+    }
+
+    private static boolean aufbauOkH(AufbauH a) {
+        String text = a.sb.toString();
+        return KvTestHilfen.neunerfenster(text, "00")[1] == 0 && KvnrSynthetischWaechter.pruefe(text).verstoesse() == 0
+                && BsnrSynthetischWaechter.pruefe(text).verstoesse() == 0
+                && kvnrFormenAusserhalbH(text, a.bloecke) == 0;
+    }
+
+    /**
+     * Zahl der Treffer der engen KVNR-Form (Grossbuchstabe, neun Ziffern, Wortgrenzen, gueltige Pruefziffer), die nicht
+     * ganz in einem KVNR-Mischblock mit Kontextwort liegen. In Teil 1h ist die Zahl 0: Eine geschlossene,
+     * grossgeschriebene, gueltige KVNR steht nur in Bloecken mit Kontextwort (Regel 12; Teil 1b findet sie sonst).
+     */
+    static int kvnrFormenAusserhalbH(String text, List<BlockH> bloecke) {
+        int ausserhalb = 0;
+        for (KvnrBsnrHilfen.Bereich b : KvnrBsnrHilfen.kvnrFormEngTreffer(text)) {
+            boolean imBlock = false;
+            for (BlockH block : bloecke) {
+                imBlock |= block.blockart() == BLOCK_H_MISCH_KVNR && block.start() <= b.start()
+                        && b.ende() <= block.ende();
+            }
+            ausserhalb += imBlock ? 0 : 1;
+        }
+        return ausserhalb;
+    }
+
+    /**
+     * Grenzklasse eines Blocks, ermittelt aus dem fertigen Text und unabhaengig vom BSNR-Erkenner; leer, wenn der Block
+     * an keiner dokumentierten Grenze liegt. Eine Klasse: {@link #GRENZE_SPERR_EINZELBUCHSTABE}: Das gesperrt
+     * geschriebene Kontextwort kann ueber eine Luecke nach D-2 mit einem davor oder dahinter stehenden Einzelbuchstaben
+     * verbunden sein (Grenze 14e der Vorgaenger, {@link #verbindbar}, sinngemaess auch fuer die BSNR laut Plan
+     * Kap. 11).
+     */
+    static String grenzklasseH(String text, BlockH block) {
+        if (block.wortStart() >= 0 && verbindbar(text, new BlockE(BLOCK_E_WEIT, false, 0, block.start(), block.ende(),
+                block.wortStart(), block.wortEnde(), false))) {
+            return GRENZE_SPERR_EINZELBUCHSTABE;
+        }
+        return "";
+    }
+
+    private static String umlautH(Random r, String wort) {
+        return r.nextBoolean() ? wort.replace("ae", String.valueOf(KvnrBsnrHilfen.AE_KLEIN)) : wort;
+    }
+
+    /** Das Kontextwort in zufaelliger Schreibung: Umlaut oder ae, gross, klein oder wechselnd. */
+    private static String kwTextH(Random r, KwH kw) {
+        return schreibungF(r, umlautH(r, kw.text()));
+    }
+
+    private static NummerH nummerH(Random r) {
+        int w = r.nextInt(100);
+        return nummerH(r, w < 70 ? ART_H_BEKANNT : w < 85 ? ART_H_UNBEKANNT : ART_H_LAENGE);
+    }
+
+    /** Eine BSNR-Nummer der Art; neun Ziffern teils in Gruppen mit genau einem Trenner, nach A-6 gebildet. */
+    private static NummerH nummerH(Random r, int art) {
+        if (art == ART_H_LAENGE) {
+            return new NummerH(waehle(r, LAENGEN_H), art);
+        }
+        String neun = art == ART_H_BEKANNT ? SynthetischeKvNummern.bildeBsnr(r)
+                : SynthetischeKvNummern.bildeBsnrUnbekannt(r);
+        if (r.nextInt(100) >= 35) {
+            return new NummerH(neun, art);
+        }
+        int[] gruppen = GRUPPEN_H[r.nextInt(GRUPPEN_H.length)];
+        String t = waehle(r, GRUPPENTRENNER);
+        StringBuilder sb = new StringBuilder();
+        int pos = 0;
+        for (int i = 0; i < gruppen.length; i++) {
+            sb.append(i > 0 ? t : "").append(neun, pos, pos + gruppen[i]);
+            pos += gruppen[i];
+        }
+        return new NummerH(sb.toString(), art);
+    }
+
+    private static double stufeH(int art) {
+        return art == ART_H_BEKANNT ? KONF_DIREKT_H : art == ART_H_UNBEKANNT ? KONF_UNBEKANNT_H : KONF_LAENGE_H;
+    }
+
+    private static String quelleH(int art) {
+        return art == ART_H_BEKANNT ? BsnrRecognizer.SOURCE : art == ART_H_UNBEKANNT
+                ? BsnrRecognizer.SOURCE_REGIONALCODE_UNBEKANNT : BsnrRecognizer.SOURCE_LAENGE_ABWEICHEND;
+    }
+
+    private static final int[] OHNE_WORT_H = {-1, -1};
+
+    /** Haengt die Nummer an, vermerkt den Block mit {@code min(deckel, Stufe)}; {@code deckel < 0}: keine Erwartung. */
+    private static void fundH(AufbauH a, NummerH n, int blockart, int gruppe, double deckel, int[] wort) {
+        int start = a.sb.length();
+        a.sb.append(n.text());
+        double konf = deckel < 0 ? -1 : Math.min(deckel, stufeH(n.art()));
+        a.bloecke.add(new BlockH(blockart, gruppe, konf, quelleH(n.art()), start, a.sb.length(), wort[0], wort[1],
+                ""));
+    }
+
+    private static void fundH(AufbauH a, NummerH n, int blockart, int gruppe, double deckel) {
+        fundH(a, n, blockart, gruppe, deckel, OHNE_WORT_H);
+    }
+
+    /** Haengt eine Nummer einer anderen Art an (Mischblock); keine Erwartung an Konfidenz und Quelle. */
+    private static void mischFundH(AufbauH a, String nummer, int blockart) {
+        int start = a.sb.length();
+        a.sb.append(nummer);
+        a.bloecke.add(new BlockH(blockart, -1, -1, "", start, a.sb.length(), -1, -1, ""));
+    }
+
+    private static KwH kwH(Random r) {
+        return KW_H[r.nextInt(KW_H.length)];
+    }
+
+    /** Ein Baustein: BSNR-Block, Mischblock, Gegenprobe oder Mischbaustein aus Teil 1b bis 1e. */
+    private static void bausteinH(Random r, Random mischung, AufbauH a) {
+        int wahl = r.nextInt(100);
+        if (wahl < 55) {
+            int summe = 0;
+            for (int g : GEWICHT_BLOCK_H) {
+                summe += g;
+            }
+            int x = r.nextInt(summe);
+            int b = 0;
+            while (x >= GEWICHT_BLOCK_H[b]) {
+                x -= GEWICHT_BLOCK_H[b];
+                b++;
+            }
+            bsnrBlockH(r, a, b);
+        } else if (wahl < 72) {
+            mischBlockH(r, a, BLOCK_H_MISCH_LANR + r.nextInt(3));
+        } else if (wahl < 82) {
+            gegenprobeH(r, a);
+        } else {
+            mischbausteinF(mischung, a.sb);
+        }
+    }
+
+    private static void bsnrBlockH(Random r, AufbauH a, int blockart) {
+        switch (blockart) {
+            case BLOCK_H_DIREKT:
+                blockDirektH(r, a);
+                break;
+            case BLOCK_H_FUELLWOERTER:
+                blockFuellwoerterH(r, a);
+                break;
+            case BLOCK_H_UMBRUCH:
+                blockUmbruchH(r, a);
+                break;
+            case BLOCK_H_AUFZAEHLUNG:
+                blockAufzaehlungH(r, a);
+                break;
+            case BLOCK_H_NACHGESTELLT:
+                blockNachgestelltH(r, a);
+                break;
+            case BLOCK_H_SPERR:
+                blockSperrH(r, a);
+                break;
+            case BLOCK_H_FORMULAR:
+                blockFormularH(r, a);
+                break;
+            default:
+                blockWiederholungH(r, a);
+                break;
+        }
+    }
+
+    private static void blockDirektH(Random r, AufbauH a) {
+        KwH kw = kwH(r);
+        a.sb.append(waehle(r, PRAEFIX_H)).append(kwTextH(r, kw)).append(waehle(r, DIREKT_F));
+        fundH(a, nummerH(r), BLOCK_H_DIREKT, kw.gruppe(), KONF_DIREKT_H);
+    }
+
+    private static void blockFuellwoerterH(Random r, AufbauH a) {
+        KwH kw = kwH(r);
+        a.sb.append(waehle(r, PRAEFIX_H)).append(kwTextH(r, kw)).append(waehle(r, DIREKT_F));
+        for (int i = 1 + r.nextInt(3); i > 0; i--) {
+            a.sb.append(waehle(r, FUELLWOERTER_F)).append(' ');
+        }
+        fundH(a, nummerH(r), BLOCK_H_FUELLWOERTER, kw.gruppe(), KONF_WEITER_H);
+    }
+
+    private static void blockUmbruchH(Random r, AufbauH a) {
+        KwH kw = kwH(r);
+        a.sb.append(waehle(r, PRAEFIX_H)).append(kwTextH(r, kw)).append(r.nextBoolean() ? ":" : "");
+        int v = r.nextInt(4);
+        a.sb.append(v < 3 ? UMBRUECHE_F[v] : crUzLf(r, 1 + r.nextInt(MAX_UZ_D)));
+        if (r.nextInt(100) < 30) {
+            a.sb.append(' ');
+        }
+        fundH(a, nummerH(r), BLOCK_H_UMBRUCH, kw.gruppe(), KONF_WEITER_H);
+    }
+
+    private static void blockAufzaehlungH(Random r, AufbauH a) {
+        KwH kw = kwH(r);
+        a.sb.append(waehle(r, PRAEFIX_H)).append(kwTextH(r, kw)).append(waehle(r, DIREKT_F));
+        for (int i = 0, anzahl = 2 + r.nextInt(3); i < anzahl; i++) {
+            if (i > 0) {
+                a.sb.append(waehle(r, AUFZAEHLUNG_H));
+            }
+            fundH(a, nummerH(r), BLOCK_H_AUFZAEHLUNG, kw.gruppe(), i == 0 ? KONF_DIREKT_H : KONF_WEITER_H);
+        }
+    }
+
+    private static void blockNachgestelltH(Random r, AufbauH a) {
+        KwH kw = kwH(r);
+        a.sb.append(r.nextBoolean() ? "Wert " : "");
+        int v = r.nextInt(3);
+        boolean kompositum = !kw.text().startsWith("Praxis-") && r.nextInt(100) < 35;
+        fundH(a, nummerH(r), BLOCK_H_NACHGESTELLT, kompositum ? GRUPPE_KOMPOSITUM_H : kw.gruppe(),
+                v == 0 ? KONF_WEITER_H : KONF_KOMMA_H);
+        String wort = kwTextH(r, kw);
+        if (kompositum) {
+            wort = waehle(r, KOMPOSITUM_H) + "-" + wort;
+        }
+        a.sb.append(v == 0 ? " (" + wort + ")" : (v == 1 ? ", " : "; ") + wort);
+    }
+
+    private static void blockSperrH(Random r, AufbauH a) {
+        String wort = waehle(r, SPERR_WOERTER_H);
+        boolean einzeichen = r.nextInt(3) == 0;
+        String trenner = einzeichen ? waehle(r, SPERR_TRENNER_C) : waehle(r, WEIT_F);
+        a.sb.append(waehle(r, PRAEFIX_H));
+        int wortStart = a.sb.length();
+        a.sb.append(schreibungF(r, gesperrtE(wort, trenner)));
+        int wortEnde = a.sb.length();
+        if (!einzeichen && trenner.startsWith(".") && r.nextBoolean()) {
+            a.sb.append('.');
+        }
+        a.sb.append(einzeichen || r.nextBoolean() ? " " : ": ");
+        fundH(a, nummerH(r), BLOCK_H_SPERR, GRUPPE_SPERR_H, KONF_WEITER_H, new int[] {wortStart, wortEnde});
+    }
+
+    /**
+     * Formularfeld (D-9): {@code BSNR/LANR n/n}, {@code LANR/BSNR n/n}, {@code BSNR n/LANR n} und
+     * {@code LANR n/BSNR n}; die BSNR-Nummer ist ein BSNR-Block, die LANR-Nummer ein LANR-Mischblock. Erwartet ist
+     * 0,80 bei den Kurzformen und 0,90, wenn die BSNR-Nummer direkt hinter dem Kontextwort steht.
+     */
+    private static void blockFormularH(Random r, AufbauH a) {
+        NummerH bsnr = nummerH(r, ART_H_BEKANNT);
+        String lanr = SynthetischeKvNummern.bildeLanr(r);
+        int v = r.nextInt(4);
+        if (v == 0) {
+            a.sb.append("BSNR/LANR ");
+            fundH(a, bsnr, BLOCK_H_FORMULAR, 0, KONF_WEITER_H);
+            a.sb.append('/');
+            mischFundH(a, lanr, BLOCK_H_MISCH_LANR);
+        } else if (v == 1) {
+            a.sb.append("LANR/BSNR ");
+            mischFundH(a, lanr, BLOCK_H_MISCH_LANR);
+            a.sb.append('/');
+            fundH(a, bsnr, BLOCK_H_FORMULAR, 0, KONF_WEITER_H);
+        } else if (v == 2) {
+            a.sb.append("BSNR ");
+            fundH(a, bsnr, BLOCK_H_FORMULAR, 0, KONF_DIREKT_H);
+            a.sb.append("/LANR ");
+            mischFundH(a, lanr, BLOCK_H_MISCH_LANR);
+        } else {
+            a.sb.append("LANR ");
+            mischFundH(a, lanr, BLOCK_H_MISCH_LANR);
+            a.sb.append("/BSNR ");
+            fundH(a, bsnr, BLOCK_H_FORMULAR, 0, KONF_DIREKT_H);
+        }
+    }
+
+    /** Dieselbe Nummer zweimal mit Kontextwort, zeichengleich oder die zweite in Gruppen mit Trenner. */
+    private static void blockWiederholungH(Random r, AufbauH a) {
+        KwH kw = kwH(r);
+        String neun = SynthetischeKvNummern.bildeBsnr(r);
+        boolean gleich = r.nextBoolean();
+        a.sb.append(kw.text()).append(' ');
+        fundH(a, new NummerH(neun, ART_H_BEKANNT), BLOCK_H_WIEDERHOLUNG, kw.gruppe(), KONF_DIREKT_H);
+        a.sb.append(" ... ").append(kw.text()).append(' ');
+        String zweite = gleich ? neun : neun.substring(0, 3) + " " + neun.substring(3, 6) + " " + neun.substring(6);
+        fundH(a, new NummerH(zweite, ART_H_BEKANNT), BLOCK_H_WIEDERHOLUNG, kw.gruppe(), KONF_DIREKT_H);
+        a.bausteine.add(gleich ? "wiederholung-gleich" : "wiederholung-verschieden");
+    }
+
+    /** Mischblock: LANR, IK oder KVNR mit direktem Kontextwort (KVNR in den Formen von Teil 1a). */
+    private static void mischBlockH(Random r, AufbauH a, int blockart) {
+        if (blockart == BLOCK_H_MISCH_LANR) {
+            a.sb.append(waehle(r, KW_LANR_F)).append(waehle(r, DIREKT_F));
+            mischFundH(a, SynthetischeKvNummern.bildeLanr(r), blockart);
+        } else if (blockart == BLOCK_H_MISCH_IK) {
+            a.sb.append(waehle(r, KW_IK_F)).append(waehle(r, DIREKT_F));
+            mischFundH(a, SynthetischeKvNummern.bildeIk(r), blockart);
+        } else {
+            KwF kw = kwF(r, false);
+            a.sb.append(schreibungF(r, kw.text())).append(waehle(r, DIREKT_F));
+            mischFundH(a, nummerF(r, true).text(), blockart);
+        }
+    }
+
+    /**
+     * Gegenproben (ohne Block): allein gescannt liefert der BSNR-Erkenner keinen Fund. Vier oder fuenf Fuellwoerter,
+     * Leerzeile, Woerter ausserhalb von D-8, Nummer ohne Kontext, Abkuerzungen ausserhalb von D-8, zerlegter Umlaut,
+     * Kontextwort ohne Nummer, Ziffernzahl unter 6 oder ueber 12. Hinter jeder Gegenprobe steht als Positivprobe ein
+     * BSNR-Block mit Kontextwort (Baustein {@code positiv-<name>}), damit "kein Fund" nicht an der Nummer liegt.
+     */
+    private static void gegenprobeH(Random r, AufbauH a) {
+        int v = r.nextInt(GEGENPROBEN_H.length);
+        int vor = a.sb.length();
+        KwH kw = kwH(r);
+        String nummer = nummerH(r, ART_H_BEKANNT).text();
+        switch (v) {
+            case 0:
+                a.sb.append(kwTextH(r, kw)).append(waehle(r, DIREKT_F));
+                for (int i = 4 + r.nextInt(2); i > 0; i--) {
+                    a.sb.append(waehle(r, FUELLWOERTER_F)).append(' ');
+                }
+                a.sb.append(nummer);
+                break;
+            case 1:
+                a.sb.append(kwTextH(r, kw)).append(r.nextBoolean() ? ":" : "")
+                        .append(waehle(r, new String[] {"\n\n", "\r\n\r\n", "\n  \n", "\r\r"})).append(nummer);
+                break;
+            case 2:
+                a.sb.append(umlautH(r, waehle(r, FREMDWOERTER_H))).append(r.nextBoolean() ? ": " : " ")
+                        .append(nummer);
+                break;
+            case 3:
+                a.sb.append(r.nextBoolean() ? "Nummer " : "Der Wert ").append(nummer);
+                break;
+            case 4:
+                a.sb.append(waehle(r, ABKUERZUNGEN_H)).append(' ').append(nummer);
+                break;
+            case 5:
+                a.sb.append("Betriebsst").append('a').append((char) 0x308).append("ttennummer ").append(nummer);
+                break;
+            case 6:
+                a.sb.append(kwTextH(r, kw)).append(waehle(r, new String[] {":", " fehlt", ""}));
+                break;
+            default:
+                a.sb.append(kwTextH(r, kw)).append(' ')
+                        .append(waehle(r, new String[] {SynthetischeKvNummern.LAENGE_4,
+                            SynthetischeKvNummern.LAENGE_5, SynthetischeKvNummern.LAENGE_13}));
+                break;
+        }
+        a.gegenproben.add(new GegenprobeH(GEGENPROBEN_H[v], a.sb.substring(vor)));
+        a.sb.append('\n');
+        blockDirektH(r, a);
+        a.bausteine.add("positiv-" + GEGENPROBEN_H[v]);
+    }
+
+    // ------------------------------------------------------------------ Teil 1h: Lauf und Pruefung
+
+    /**
+     * Teil 1h: dieselben Eigenschaften wie Teil 1f ({@code pruefeKvFText}: Invarianten, Roundtrip mit Teilmenge und
+     * manuellen Funden, Kandidaten gegen Scan) plus {@link #pruefeKvH}: Klassen nach Konstruktion, Zaehler der Bloecke
+     * ohne Scan-Abdeckung, Gegenproben, vollstaendiges Ersetzen und Konsistenz der Platzhalter.
+     */
+    private static Lauf fuehreKvHAus() {
+        Lauf lauf = new Lauf(SEED_TEXTE_KV_H);
+        TextScanner scanner = TextScanner.standard();
+        Random auswahl = new Random(SEED_AUSWAHL_KV_H);
+        List<FallH> faelle = erzeugeKvH(SEED_TEXTE_KV_H);
+        for (int it = 0; it < faelle.size(); it++) {
+            FallH fall = faelle.get(it);
+            String text = fall.text();
+            if (KvTestHilfen.neunerfenster(text, "00")[1] != 0) {
+                lauf.verletzt("waechter-gueltiges-neunerfenster-ohne-00", it);
+                continue;
+            }
+            if (KvnrSynthetischWaechter.pruefe(text).verstoesse() != 0) {
+                lauf.verletzt("waechter-kvnr-synthetisch", it);
+                continue;
+            }
+            if (BsnrSynthetischWaechter.pruefe(text).verstoesse() != 0) {
+                lauf.verletzt("waechter-bsnr-synthetisch", it);
+                continue;
+            }
+            if (text.contains("[[")) {
+                lauf.verletzt("generator-doppelklammer", it);
+                continue;
+            }
+            try {
+                pruefeKvFText(lauf, scanner, auswahl, it, text);
+                pruefeKvH(lauf, scanner, it, fall);
+            } catch (RuntimeException e) {
+                lauf.verletzt("ausnahme-im-lauf", it);
+            }
+        }
+        return lauf;
+    }
+
+    /**
+     * Klassen je Text, hoechstens einmal: Ein Kandidat des BSNR-Erkenners liegt genau auf der Nummer eines BSNR-Blocks,
+     * hat die aus der Konstruktion erwartete Konfidenz und die Quelle der Nummer; gezaehlt wird nach Blockart
+     * ({@code bsnr-fund-<blockart>}), Kontextwortgruppe und Stufe ({@code bsnr-wort-<gruppe>[-<stufe>]}), Stufe und
+     * Quelle. Je Block zaehlt {@code block-ohne-scan-abdeckung} die nicht markierten BSNR-Bloecke, deren Nummer von
+     * keinem Scan-Fund ganz abgedeckt ist (strikt 0 erwartet), und {@code misch-block-ohne-abdeckung} dasselbe fuer die
+     * Mischbloecke (strikt 0: ein LANR-, IK- oder KVNR-Fund darf nie verloren gehen); {@code misch-typ-abweichend}
+     * zaehlt Mischbloecke, deren Fund einen anderen Typ hat (Gleichstand D-6, Messwert). Markierte Bloecke zaehlen
+     * getrennt. Messwert {@code kandidat-bereich-abweichend} (je Block, nicht je Text): ein Kandidat liegt auf dem
+     * Bereich der Nummer, aber mit anderer Konfidenz oder Quelle als erwartet. Aufgeteilt in
+     * {@code kandidat-stufe-hoeher}, {@code kandidat-stufe-niedriger} und {@code kandidat-quelle-abweichend} sowie
+     * je Blockart {@code kandidat-bereich-abweichend-<blockart>}. Ursache (gemessen): Alle Faelle sind Bloecke der Art
+     * "nachgestellt" mit hoeherer Stufe als konstruiert und Quelle {@code bsnr}; ein voranstehendes Kontextwort eines
+     * Nachbarblocks oder einer Aufzaehlung liefert zusaetzlich Vorwaerts-Kontext (D-8). Niedrigere Stufe und
+     * abweichende Quelle kommen nicht vor (strikt 0). Gegenproben: allein gescannt liefert
+     * der BSNR-Erkenner keinen Fund. Danach werden alle Scan-Funde
+     * pseudonymisiert ({@link #pruefeErsetzenH}).
+     */
+    static void pruefeKvH(Lauf lauf, TextScanner scanner, int it, FallH fall) {
+        String text = fall.text();
+        Recognizer bsnr = STANDARD_ERKENNER.get(ERKENNER_BSNR);
+        List<Finding> kandidaten = bsnr.detect(text);
+        List<Finding> scan = scanner.scan(text);
+        Set<String> gesehen = new TreeSet<>();
+        for (int i = 0; i < fall.verworfene(); i++) {
+            lauf.klasse("baustein-verworfen");
+        }
+        for (int i = 0; i < fall.aufgegebene(); i++) {
+            lauf.klasse("baustein-aufgegeben");
+        }
+        for (BlockH block : fall.bloecke()) {
+            if (!block.bsnr() || block.konfidenz() < 0) {
+                continue;
+            }
+            boolean aufBereich = false;
+            boolean erwartetGefunden = false;
+            boolean hoeher = false;
+            boolean niedriger = false;
+            boolean andereQuelle = false;
+            for (Finding c : kandidaten) {
+                boolean gleicherBereich = c.start() == block.start() && c.end() == block.ende();
+                aufBereich |= gleicherBereich;
+                if (gleicherBereich) {
+                    hoeher |= c.confidence() > block.konfidenz();
+                    niedriger |= c.confidence() < block.konfidenz();
+                    andereQuelle |= !block.quelle().equals(c.source());
+                }
+                if (c.start() == block.start() && c.end() == block.ende() && c.confidence() == block.konfidenz()
+                        && block.quelle().equals(c.source())) {
+                    erwartetGefunden = true;
+                    String stufe = ConfidenceLevel.of(block.konfidenz()).name().toLowerCase(Locale.ROOT);
+                    String gruppe = GRUPPEN_NAMEN_H[block.gruppe()];
+                    gesehen.add("bsnr-fund");
+                    gesehen.add("bsnr-fund-" + BLOCK_NAMEN_H[block.blockart()]);
+                    gesehen.add("bsnr-wort-" + gruppe);
+                    gesehen.add("bsnr-wort-" + gruppe + "-" + stufe);
+                    gesehen.add("bsnr-stufe-" + stufe);
+                    gesehen.add("bsnr-quelle-" + block.quelle());
+                }
+            }
+            if (aufBereich && !erwartetGefunden) {
+                lauf.klasse("kandidat-bereich-abweichend");
+                lauf.klasse("kandidat-bereich-abweichend-" + BLOCK_NAMEN_H[block.blockart()]);
+                if (hoeher) {
+                    lauf.klasse("kandidat-stufe-hoeher");
+                }
+                if (niedriger) {
+                    lauf.klasse("kandidat-stufe-niedriger");
+                }
+                if (andereQuelle) {
+                    lauf.klasse("kandidat-quelle-abweichend");
+                }
+            }
+        }
+        for (GegenprobeH gegenprobe : fall.gegenproben()) {
+            gesehen.add("gegenprobe-" + gegenprobe.name());
+            if (!bsnr.detect(gegenprobe.text()).isEmpty()) {
+                lauf.verletzt("gegenprobe-mit-bsnr-fund", it);
+            }
+        }
+        for (String baustein : fall.bausteine()) {
+            gesehen.add("baustein-" + baustein);
+        }
+        List<KvnrBsnrHilfen.Bereich> eng = KvnrBsnrHilfen.kvnrFormEngTreffer(text);
+        gesehen.add(eng.isEmpty() ? "text-ohne-enge-kvnr-form" : "enge-form-im-block");
+        if (kvnrFormenAusserhalbH(text, fall.bloecke()) != 0) {
+            lauf.verletzt("kvnr-form-ausserhalb-der-bloecke", it);
+        }
+        for (Finding f : scan) {
+            if (FindingType.BSNR.equals(f.type())) {
+                gesehen.add("scan-bsnr-fund");
+                gesehen.add(BsnrRecognizer.SOURCE_REST.equals(f.source()) ? "scan-bsnr-restfund" : "scan-bsnr-voll");
+            }
+        }
+        for (String klasse : gesehen) {
+            lauf.klasse(klasse);
+        }
+        for (BlockH block : fall.bloecke()) {
+            pruefeBlockH(lauf, scan, block);
+        }
+        pruefeErsetzenH(lauf, it, text, scan);
+    }
+
+    private static void pruefeBlockH(Lauf lauf, List<Finding> scan, BlockH block) {
+        String art = BLOCK_NAMEN_H[block.blockart()];
+        lauf.klasse("bloecke-" + art);
+        boolean abgedeckt = imScanAbgedeckt(scan, block.start(), block.ende());
+        if (!block.bsnr()) {
+            FindingType erwartet = MISCH_TYPEN_H[block.blockart() - BLOCK_H_MISCH_LANR];
+            boolean typOk = false;
+            for (Finding f : scan) {
+                typOk |= f.start() <= block.start() && f.end() >= block.ende() && f.type() == erwartet;
+            }
+            if (!abgedeckt) {
+                lauf.klasse("misch-block-ohne-abdeckung");
+                lauf.klasse("misch-block-ohne-abdeckung-" + art);
+            } else if (!typOk) {
+                lauf.klasse("misch-typ-abweichend");
+                lauf.klasse("misch-typ-abweichend-" + art);
+            } else {
+                lauf.klasse("misch-typ-gleich-" + art);
+            }
+            return;
+        }
+        if (!block.grenze().isEmpty()) {
+            lauf.klasse("block-markiert");
+            lauf.klasse("block-markiert-" + block.grenze());
+            lauf.klasse(abgedeckt ? "markiert-mit-abdeckung" : "markiert-ohne-abdeckung");
+            lauf.klasse((abgedeckt ? "markiert-mit-abdeckung-" : "markiert-ohne-abdeckung-") + block.grenze());
+        } else if (!abgedeckt) {
+            lauf.klasse("block-ohne-scan-abdeckung");
+            lauf.klasse("block-ohne-scan-abdeckung-" + art);
+        }
+    }
+
+    /**
+     * Wie {@link #pruefeErsetzenF}, fuer Teil 1h: Jeder Fund ist vollstaendig durch einen Platzhalter ersetzt, derselbe
+     * Wert (je Typ) hat denselben Platzhalter, verschiedene Werte haben verschiedene (auch dieselbe Nummer mit und ohne
+     * Trenner), von keinem Fund steht ein Rest im Ausgabetext, und die Rueckuebersetzung ist zeichengleich ohne
+     * Meldung.
+     */
+    private static void pruefeErsetzenH(Lauf lauf, int it, String text, List<Finding> scan) {
+        PseudonymizationResult alle = PSEUDONYMIZER.pseudonymize(text, scan);
+        if (!alleFundeErsetzt(text, scan, alle.text())) {
+            lauf.verletzt("ak23-fund-nicht-vollstaendig-ersetzt", it);
+        }
+        ReidentificationResult zurueck = REIDENTIFIER.restore(alle.text(), alle.mapping());
+        if (!text.equals(zurueck.text())) {
+            lauf.verletzt("ak32-roundtrip-alle-funde-ungleich", it);
+        }
+        if (!zurueck.unresolved().isEmpty()) {
+            lauf.verletzt("ak32-roundtrip-meldung", it);
+        }
+        List<String> platzhalter = platzhalterJeFund(text, scan, alle.text());
+        if (platzhalter == null) {
+            lauf.verletzt("ak32-platzhalter-nicht-lesbar", it);
+            return;
+        }
+        Map<String, String> platzhalterJeWert = new LinkedHashMap<>();
+        Map<String, String> wertJePlatzhalter = new LinkedHashMap<>();
+        Map<String, String> kompaktJeWert = new LinkedHashMap<>();
+        boolean wiederholung = false;
+        boolean trennerVariante = false;
+        for (int i = 0; i < scan.size(); i++) {
+            Finding f = scan.get(i);
+            String wert = f.type().name() + "|" + f.originalValue();
+            String vorher = platzhalterJeWert.put(wert, platzhalter.get(i));
+            if (vorher != null && !vorher.equals(platzhalter.get(i))) {
+                lauf.verletzt("ak32-konsistenz", it);
+            }
+            String vorherWert = wertJePlatzhalter.put(platzhalter.get(i), wert);
+            if (vorherWert != null && !vorherWert.equals(wert)) {
+                lauf.verletzt("ak32-konsistenz", it);
+            }
+            if (FindingType.BSNR.equals(f.type())) {
+                wiederholung |= vorher != null;
+                String anderer = kompaktJeWert.put(kompaktF(f.originalValue()), wert);
+                trennerVariante |= anderer != null && !anderer.equals(wert);
+            }
+            if (!rest0F(text, scan, alle.text(), f)) {
+                lauf.verletzt("ak32-rest-eines-fundes-im-ausgabetext", it);
+            }
+        }
+        if (wiederholung) {
+            lauf.klasse("bsnr-gleicher-wert-gleicher-platzhalter");
+        }
+        if (trennerVariante) {
+            lauf.klasse("bsnr-mit-und-ohne-trenner-verschiedene-platzhalter");
+        }
+    }
+
+    // ------------------------------------------------------------------ Teil 1h: Tests (kvnr-bsnr-erkennung T-15)
+
+    /** Hashwert der Teil-1h-Textfolge (kvnr-bsnr-erkennung T-15, nach dem Anlegen des Generators gemessen). */
+    static final int HASH_TEIL_1H = 0x4585ecc9;
+
+    private static List<String> texteTeil1h() {
+        List<String> texte = new ArrayList<>();
+        for (FallH f : erzeugeKvH(SEED_TEXTE_KV_H)) {
+            texte.add(f.text());
+        }
+        return texte;
+    }
+
+    @Test
+    void t15_teil1hTextfolgeIstFestgehalten() {
+        List<String> texte = texteTeil1h();
+        assertEquals(HASH_TEIL_1H, texte.hashCode(), "Hashwert der Teil-1h-Textfolge, Startwert " + SEED_TEXTE_KV_H
+                + ", gemessen 0x" + Integer.toHexString(texte.hashCode()));
+    }
+
+    @Test
+    void t15_teil1hZweiLaeufeMitDemselbenStartwertErzeugenDieselbeTextfolge() {
+        List<String> a = texteTeil1h();
+        assertEquals(ANZAHL_TEXTE, a.size());
+        assertTextfolgeGleich(a, texteTeil1h(), SEED_TEXTE_KV_H, "Teil 1h: Textfolge");
+        assertTrue(erzeugeKvH(SEED_TEXTE_KV_H).equals(erzeugeKvH(SEED_TEXTE_KV_H)),
+                "Teil 1h: Bloecke, Gegenproben und Bausteine sind deterministisch");
+        assertNotEquals(HASH_TEIL_1G, a.hashCode(), "Teil 1h unterscheidet sich von Teil 1g");
+        assertNotEquals(HASH_TEIL_1F, a.hashCode(), "Teil 1h unterscheidet sich von Teil 1f");
+        assertNotEquals(HASH_TEIL_1E, a.hashCode(), "Teil 1h unterscheidet sich von Teil 1e");
+        assertNotEquals(HASH_TEIL_1D, a.hashCode(), "Teil 1h unterscheidet sich von Teil 1d");
+        assertNotEquals(HASH_TEIL_1C, a.hashCode(), "Teil 1h unterscheidet sich von Teil 1c");
+        assertNotEquals(HASH_TEIL_1B, a.hashCode(), "Teil 1h unterscheidet sich von Teil 1b");
+        assertNotEquals(HASH_TEIL_1, a.hashCode(), "Teil 1h unterscheidet sich von Teil 1");
+    }
+
+    /**
+     * Die Startwerte von Teil 1h sind von allen Startwerten der Teile 1 bis 1g verschieden (Plan T-15: eigene Seeds,
+     * numerisch von allen vorhandenen verschieden), und die Textfolge ist mit einem Startwert der Teile 1f und 1g
+     * nicht dieselbe.
+     */
+    @Test
+    void t15_teil1hStartwerteSindVonAllenVorhandenenVerschieden() {
+        List<Long> vorhanden = List.of(SEED_TEXTE, SEED_AUSWAHL, SEED_EINGABEN, SEED_TEXTE_KV, SEED_AUSWAHL_KV,
+                SEED_TEXTE_KV_C, SEED_AUSWAHL_KV_C, SEED_TEXTE_KV_D, SEED_AUSWAHL_KV_D, SEED_TEXTE_KV_E,
+                SEED_AUSWAHL_KV_E, SEED_TEXTE_KV_F, SEED_AUSWAHL_KV_F, SEED_TEXTE_KV_G, SEED_AUSWAHL_KV_G);
+        assertFalse(vorhanden.contains(SEED_TEXTE_KV_H), "Textseed von Teil 1h schon vergeben");
+        assertFalse(vorhanden.contains(SEED_AUSWAHL_KV_H), "Auswahlseed von Teil 1h schon vergeben");
+        assertNotEquals(SEED_TEXTE_KV_H, SEED_AUSWAHL_KV_H, "Text- und Auswahlseed gleich");
+    }
+
+    /**
+     * Die Textfolgen von Teil 1 bis 1g sind unveraendert (Plan Regel 6): Ihre Hashwerte werden hier noch einmal gegen
+     * die Konstanten geprueft, nachdem Teil 1h dazugekommen ist (kein Generator wurde veraendert).
+     */
+    @Test
+    void t15_bestandsHashesVonTeil1Bis1gSindUnveraendert() {
+        List<String> teil1 = new ArrayList<>();
+        for (Fall f : erzeuge(SEED_TEXTE)) {
+            teil1.add(f.text());
+        }
+        List<String> teil1b = new ArrayList<>();
+        for (Fall f : erzeugeKv(SEED_TEXTE_KV)) {
+            teil1b.add(f.text());
+        }
+        List<String> teil1c = new ArrayList<>();
+        for (FallC f : erzeugeKvC(SEED_TEXTE_KV_C)) {
+            teil1c.add(f.text());
+        }
+        assertEquals(HASH_TEIL_1, teil1.hashCode(), "Hashwert Teil 1");
+        assertEquals(HASH_TEIL_1B, teil1b.hashCode(), "Hashwert Teil 1b");
+        assertEquals(HASH_TEIL_1C, teil1c.hashCode(), "Hashwert Teil 1c");
+        assertEquals(HASH_TEIL_1D, texteTeil1d().hashCode(), "Hashwert Teil 1d");
+        assertEquals(HASH_TEIL_1E, texteTeil1e().hashCode(), "Hashwert Teil 1e");
+        assertEquals(HASH_TEIL_1F, texteTeil1f().hashCode(), "Hashwert Teil 1f");
+        assertEquals(HASH_TEIL_1G, texteTeil1g().hashCode(), "Hashwert Teil 1g");
+    }
+
+    private static void keineH(String eigenschaft) {
+        assertEquals(0, LAUF_KV_H.anzahl(eigenschaft), "Teil 1h: " + LAUF_KV_H.meldung(eigenschaft));
+    }
+
+    @Test
+    void t15_kvH_waechterUndGeneratorSindSauber() {
+        keineH("waechter-gueltiges-neunerfenster-ohne-00");
+        keineH("waechter-kvnr-synthetisch");
+        keineH("waechter-bsnr-synthetisch");
+        keineH("generator-doppelklammer");
+    }
+
+    /** AK-32: Roundtrip zeichengleich ohne Meldung, auch wenn alle Funde ersetzt werden. */
+    @Test
+    void t15_kvH_roundtripIstZeichengleichOhneMeldung() {
+        keineH("ak45-roundtrip-ungleich");
+        keineH("ak45-pseudonymisierung-wirft");
+        keineH("ak45-meldung");
+        keineH("ak32-roundtrip-alle-funde-ungleich");
+        keineH("ak32-roundtrip-meldung");
+        keineH("ausnahme-im-lauf");
+    }
+
+    @Test
+    void t15_kvH_scanInvarianteUndListenInvariante() {
+        keineH("ak1-scan-invariante");
+        keineH("ak1-liste-invariante");
+    }
+
+    /**
+     * Schutzgarantie ueber {@code STANDARD_ERKENNER}: Jede Position, die ein Kandidat eines Erkenners abdeckt, ist von
+     * einem Scan-Fund abgedeckt. In Teil 1h gibt es keinen Bestandsfund, der einen BSNR-Kandidaten schneidet; die
+     * Ausnahme fuer zugeschnittene Kandidaten wird nie gebraucht (exakt 0).
+     */
+    @Test
+    void t15_kvH_schutzgarantie_jederKandidatDerStandardErkennerIstImScanAbgedeckt() {
+        keineH("ak7a-kandidat-nicht-im-scan");
+        assertEquals(0, LAUF_KV_H.klasse_("kandidat-position-am-bestand-zugeschnitten"),
+                "Texte mit zugeschnittenem Kandidaten, Startwert " + SEED_TEXTE_KV_H);
+        assertEquals(0, LAUF_KV_H.klasse_("bereiche-wegen-zuschnitt"),
+                "Texte mit Bereichen wegen Zuschnitt, Startwert " + SEED_TEXTE_KV_H);
+    }
+
+    @Test
+    void t15_kvH_keinFremdtextImScanUndBereicheSindDieVerschmolzenenKandidaten() {
+        keineH("ak7e-fremdtext-im-scan");
+        keineH("ak7e-bereiche-nicht-verschmolzen");
+    }
+
+    /**
+     * AK-32: keine Ziffernkette eines Fundes im Ausgabetext, die Luecken bleiben zeichengleich, derselbe Wert hat
+     * denselben Platzhalter (Typ plus zeichengleicher Wert), verschiedene Werte (auch mit und ohne Trenner) haben
+     * verschiedene.
+     */
+    @Test
+    void t15_kvH_ausgabetextOhneRestEinesFundesUndPlatzhalterSindKonsistent() {
+        keineH("ak23-fund-nicht-vollstaendig-ersetzt");
+        keineH("ak32-rest-eines-fundes-im-ausgabetext");
+        keineH("ak32-platzhalter-nicht-lesbar");
+        keineH("ak32-konsistenz");
+    }
+
+    /** Gegenproben: allein gescannt liefert der BSNR-Erkenner keinen Fund. */
+    @Test
+    void t15_kvH_gegenprobenLiefernAlleinKeinenFund() {
+        keineH("gegenprobe-mit-bsnr-fund");
+    }
+
+    /**
+     * Plan T-15 (Regel 12): Ausserhalb der KVNR-Bloecke mit Kontextwort liegt in Teil 1h keine enge KVNR-Form
+     * (Grossbuchstabe, neun Ziffern, Wortgrenzen, gueltige Pruefziffer; sonst faende sie Teil 1b). Die Pruefung ist
+     * nicht leer: Texte mit einer engen Form im KVNR-Block Messwert 55, Untergrenze 38 (70 %); Texte ganz ohne enge
+     * Form 945, Untergrenze 661.
+     */
+    @Test
+    void t15_kvH_keineEngeKvnrFormAusserhalbDerBloeckeMitKontextwort() {
+        keineH("kvnr-form-ausserhalb-der-bloecke");
+        mindestens(LAUF_KV_H, "enge-form-im-block", 38);
+        mindestens(LAUF_KV_H, "text-ohne-enge-kvnr-form", 661);
+        for (FallH fall : erzeugeKvH(SEED_TEXTE_KV_H)) {
+            assertEquals(0, kvnrFormenAusserhalbH(fall.text(), fall.bloecke()), "KVNR-Form ausserhalb eines Blocks");
+        }
+    }
+
+    /**
+     * Mindestzahlen der BSNR-Klassen von Teil 1h. Messwerte bei festem Seed (T-15), je Text hoechstens einmal gezaehlt
+     * (ausser den Bloecken), Untergrenzen bei hoechstens 70 % des Messwerts. Fund mit der erwarteten Konfidenz und
+     * Quelle insgesamt 990 (693); je Blockart: direkt 782, Fuellwoerter 397, Umbruch 339, Aufzaehlung 267,
+     * nachgestellt 364, gesperrt 329, Formularfeld 223, Wiederholung 206 (547, 277, 237, 186, 254, 230, 156, 144);
+     * je Quelle: bsnr 966, Regionalcode unbekannt 451, Laenge abweichend 457 (676, 315, 319); je Stufe: sicher 807,
+     * wahrscheinlich 753, fraglich 743 (564, 527, 520).
+     */
+    @Test
+    void t15_kvH_fuzzPruftNichtInsLeere_fundeJeBlockartQuelleUndStufe() {
+        mindestens(LAUF_KV_H, "bsnr-fund", 693);
+        String[] arten = {"direkt", "fuellwoerter", "umbruch", "aufzaehlung", "nachgestellt", "sperr", "formular",
+            "wiederholung"};
+        int[] minArt = {547, 277, 237, 186, 254, 230, 156, 144};
+        for (int i = 0; i < arten.length; i++) {
+            mindestens(LAUF_KV_H, "bsnr-fund-" + arten[i], minArt[i]);
+        }
+        mindestens(LAUF_KV_H, "bsnr-quelle-bsnr", 676);
+        mindestens(LAUF_KV_H, "bsnr-quelle-bsnr-regionalcode-unbekannt", 315);
+        mindestens(LAUF_KV_H, "bsnr-quelle-bsnr-laenge-abweichend", 319);
+        mindestens(LAUF_KV_H, "bsnr-stufe-sicher", 564);
+        mindestens(LAUF_KV_H, "bsnr-stufe-wahrscheinlich", 527);
+        mindestens(LAUF_KV_H, "bsnr-stufe-fraglich", 520);
+    }
+
+    /**
+     * Mindestzahlen je Kontextwortgruppe aus D-8 und Stufe (Messwerte, Untergrenzen 70 %): BSNR 683 (478), sicher 409
+     * (286), wahrscheinlich 326 (228), fraglich 273 (191); NBSNR 212 (148), 97 (67), 71 (49), 87 (60);
+     * Betriebsstaettennummer 348 (243), 177 (123), 128 (89), 132 (92); Nebenbetriebsstaettennummer 350 (245), 164
+     * (114), 112 (78), 148 (103); Betriebsstaette mit Nachsatzwort 576 (403), 336 (235), 222 (155), 250 (175);
+     * Nebenbetriebsstaette mit Nachsatzwort 329 (230), 160 (112), 123 (86), 135 (94); Kompositum 131 (91), 41 (28)
+     * wahrscheinlich, 97 (67) fraglich; gesperrt 329 (230), 236 (165) wahrscheinlich, 118 (82) fraglich.
+     */
+    @Test
+    void t15_kvH_fuzzPruftNichtInsLeere_kontextwortgruppenJeStufe() {
+        String[] gruppen = {"bsnr", "nbsnr", "betriebsstaettennummer", "nebenbetriebsstaettennummer",
+            "betriebsstaette-vorwort", "nebenbetriebsstaette-vorwort"};
+        int[][] min = {{478, 286, 228, 191}, {148, 67, 49, 60}, {243, 123, 89, 92}, {245, 114, 78, 103},
+            {403, 235, 155, 175}, {230, 112, 86, 94}};
+        String[] stufen = {"sicher", "wahrscheinlich", "fraglich"};
+        for (int i = 0; i < gruppen.length; i++) {
+            mindestens(LAUF_KV_H, "bsnr-wort-" + gruppen[i], min[i][0]);
+            for (int s = 0; s < stufen.length; s++) {
+                mindestens(LAUF_KV_H, "bsnr-wort-" + gruppen[i] + "-" + stufen[s], min[i][s + 1]);
+            }
+        }
+        mindestens(LAUF_KV_H, "bsnr-wort-kompositum", 91);
+        mindestens(LAUF_KV_H, "bsnr-wort-kompositum-wahrscheinlich", 28);
+        mindestens(LAUF_KV_H, "bsnr-wort-kompositum-fraglich", 67);
+        mindestens(LAUF_KV_H, "bsnr-wort-sperr", 230);
+        mindestens(LAUF_KV_H, "bsnr-wort-sperr-wahrscheinlich", 165);
+        mindestens(LAUF_KV_H, "bsnr-wort-sperr-fraglich", 82);
+    }
+
+    /**
+     * Mindestzahlen der Gegenproben und Positivproben (Messwerte je Name: Abkuerzung 58, Fremdwort 77, Kontextwort ohne
+     * Nummer 80, Leerzeile 90, Nummer ohne Kontext 74, vier Fuellwoerter 66, zerlegter Umlaut 86, Ziffernzahl 83;
+     * Untergrenze je 40) und der allgemeinen Klassen (Messwerte, Untergrenzen 70 %): Bloecke je Blockart (Zahl der
+     * Bloecke, nicht der Texte): direkt 1 496 (1 047), Fuellwoerter 491 (343), Umbruch 429 (300), Aufzaehlung 908
+     * (635), nachgestellt 557 (389), gesperrt 394 (275), Formularfeld 246 (172), Wiederholung 448 (313), LANR 640
+     * (448), IK 358 (250), KVNR 383 (268); Wiederholung gleich 110 (77) und verschieden 105 (73); derselbe Wert
+     * derselbe Platzhalter 141 (98), mit und ohne Trenner verschiedene 108 (75); Scan-Funde 1 000 (700) und BSNR im
+     * Scan 990 (693); LANR 609 (426), IK 515 (360), fraglich 217 (151), manuelle Funde 952 (666), echte Teilmengen
+     * 913 (639), zusammengelegt 10 (7), Teilueberlappung 10 (7), Zeichen ausserhalb der BMP 107 (74), Fund in
+     * anderem Fund 31 (21), gleicher Bereich wie IP 11 (7).
+     */
+    @Test
+    void t15_kvH_fuzzPruftNichtInsLeere_gegenprobenBloeckeUndAllgemeineKlassen() {
+        for (String name : GEGENPROBEN_H) {
+            mindestens(LAUF_KV_H, "gegenprobe-" + name, 40);
+            mindestens(LAUF_KV_H, "baustein-positiv-" + name, 40);
+        }
+        String[] arten = {"direkt", "fuellwoerter", "umbruch", "aufzaehlung", "nachgestellt", "sperr", "formular",
+            "wiederholung", "misch-lanr", "misch-ik", "misch-kvnr"};
+        int[] minBloecke = {1047, 343, 300, 635, 389, 275, 172, 313, 448, 250, 268};
+        for (int i = 0; i < arten.length; i++) {
+            mindestens(LAUF_KV_H, "bloecke-" + arten[i], minBloecke[i]);
+        }
+        mindestens(LAUF_KV_H, "baustein-wiederholung-gleich", 77);
+        mindestens(LAUF_KV_H, "baustein-wiederholung-verschieden", 73);
+        mindestens(LAUF_KV_H, "bsnr-gleicher-wert-gleicher-platzhalter", 98);
+        mindestens(LAUF_KV_H, "bsnr-mit-und-ohne-trenner-verschiedene-platzhalter", 75);
+        mindestens(LAUF_KV_H, "scan-fund", 700);
+        mindestens(LAUF_KV_H, "scan-bsnr-fund", 693);
+        mindestens(LAUF_KV_H, "scan-bsnr-voll", 693);
+        mindestens(LAUF_KV_H, "kv-fund-lanr", 426);
+        mindestens(LAUF_KV_H, "kv-fund-ik", 360);
+        mindestens(LAUF_KV_H, "kv-fraglich", 151);
+        mindestens(LAUF_KV_H, "manueller-fund", 666);
+        mindestens(LAUF_KV_H, "echte-teilmenge-der-scan-funde", 639);
+        mindestens(LAUF_KV_H, "zusammengelegter-fund", 7);
+        mindestens(LAUF_KV_H, "teilueberlappung-verschiedener-erkenner", 7);
+        mindestens(LAUF_KV_H, "zeichen-ausserhalb-bmp", 74);
+        mindestens(LAUF_KV_H, "kv-in-anderem-fund", 21);
+        mindestens(LAUF_KV_H, "kv-gleicher-bereich-ip", 7);
+        assertEquals(0, LAUF_KV_H.klasse_("scan-bsnr-restfund"), "Restfunde: kein Bestandsfund in Teil 1h");
+    }
+
+    /**
+     * AK-32, AK-33: Der Zaehler "Block ohne Scan-Abdeckung" ist strikt 0 fuer jeden nicht markierten BSNR-Block von
+     * Teil 1h, insgesamt und nach Blockart. Ebenso ist {@code misch-block-ohne-abdeckung} strikt 0: Kein LANR-, IK-
+     * oder KVNR-Fund geht verloren. Der Typ der Mischbloecke ist in allen Faellen der erwartete (Messwert: LANR 640,
+     * IK 358, KVNR 383 gleich, 0 abweichend; Untergrenzen 448, 250, 268). Ein Wert ungleich 0 ist ein Befund, keine
+     * Erwartung zum Anpassen.
+     */
+    @Test
+    void t15_kvH_blockOhneScanAbdeckung_istStriktNull_bsnrUndMischbloecke() {
+        assertEquals(0, LAUF_KV_H.klasse_("block-ohne-scan-abdeckung"),
+                "BSNR-Bloecke ohne Scan-Abdeckung (strikt 0), Startwert " + SEED_TEXTE_KV_H);
+        for (int i = 0; i < ANZAHL_BSNR_BLOCKARTEN_H; i++) {
+            assertEquals(0, LAUF_KV_H.klasse_("block-ohne-scan-abdeckung-" + BLOCK_NAMEN_H[i]),
+                    "Blockart " + BLOCK_NAMEN_H[i]);
+        }
+        assertEquals(0, LAUF_KV_H.klasse_("misch-block-ohne-abdeckung"),
+                "Mischbloecke ohne Scan-Abdeckung (strikt 0), Startwert " + SEED_TEXTE_KV_H);
+        assertEquals(0, LAUF_KV_H.klasse_("misch-typ-abweichend"), "Mischbloecke mit anderem Typ");
+        mindestens(LAUF_KV_H, "misch-typ-gleich-misch-lanr", 448);
+        mindestens(LAUF_KV_H, "misch-typ-gleich-misch-ik", 250);
+        mindestens(LAUF_KV_H, "misch-typ-gleich-misch-kvnr", 268);
+    }
+
+    /**
+     * Die markierten Bloecke (Grenze 14e: das gesperrt geschriebene Kontextwort kann ueber eine Luecke mit einem
+     * Einzelbuchstaben davor oder dahinter verbunden sein) werden einzeln gezaehlt, damit nichts verdeckt wird.
+     * Messwerte bei festem Seed: 2 markierte Bloecke (0,1 % aller BSNR-Bloecke), beide mit Scan-Abdeckung, keiner ohne.
+     * Eine Aenderung der Zahlen ist ein Befund.
+     */
+    @Test
+    void t15_kvH_markierteBloecke_sindEinzelnGezaehlt() {
+        assertEquals(2, LAUF_KV_H.klasse_("block-markiert"), "markierte Bloecke");
+        assertEquals(2, LAUF_KV_H.klasse_("block-markiert-sperr-einzelbuchstabe"), "markierte Bloecke (Sperrschrift)");
+        assertEquals(0, LAUF_KV_H.klasse_("markiert-ohne-abdeckung"), "markierte Bloecke ohne Abdeckung");
+        assertEquals(2, LAUF_KV_H.klasse_("markiert-mit-abdeckung"), "markierte Bloecke mit Abdeckung");
+        assertEquals(LAUF_KV_H.klasse_("block-markiert"), LAUF_KV_H.klasse_("markiert-ohne-abdeckung")
+                + LAUF_KV_H.klasse_("markiert-mit-abdeckung"), "jeder markierte Block ist einmal eingeordnet");
+    }
+
+    /**
+     * Der Generator von Teil 1h verwirft einen Baustein samt Trenner und zieht neu, wenn der Waechter der
+     * Testdatenregeln oder die Pruefung "keine enge KVNR-Form ausserhalb der Bloecke" anschlaegt (gezaehlt ohne
+     * Zufallszahlen, der Hash bleibt gleich). Messwerte bei festem Seed: 294 verworfene Versuche, kein Baustein, der
+     * nach allen Versuchen wegfaellt. Ausserdem {@code kandidat-bereich-abweichend}: 116 Bloecke, auf deren Bereich der
+     * BSNR-Erkenner einen Kandidaten mit anderer Konfidenz oder Quelle als der Konstruktion erwartet liefert. Getrennt
+     * festgehalten: Stufe hoeher als konstruiert 116, Stufe niedriger 0, Quelle abweichend 0; je Blockart nur
+     * "nachgestellt" mit 116, alle anderen 0. Ursache: Bei einem nachgestellten Kontextwort liefert das voranstehende
+     * Kontextwort eines Nachbarblocks oder einer Aufzaehlung zusaetzlich Vorwaerts-Kontext (D-8); die Stufe steigt
+     * (0,60 auf 0,80 oder 0,90; 0,80 auf 0,90), die Nummer ist damit mindestens so gut geschuetzt wie erwartet.
+     * Eine Aenderung der Zahlen ist ein Befund (der Generator oder der Erkenner hat sich geaendert), keine Erwartung
+     * zum Anpassen.
+     */
+    @Test
+    void t15_kvH_verworfeneBausteineUndAbweichendeKandidaten_sindGezaehlt() {
+        assertEquals(294, LAUF_KV_H.klasse_("baustein-verworfen"), "verworfene Versuche, Startwert " + SEED_TEXTE_KV_H);
+        assertEquals(0, LAUF_KV_H.klasse_("baustein-aufgegeben"), "aufgegebene Bausteine, Startwert "
+                + SEED_TEXTE_KV_H);
+        assertEquals(116, LAUF_KV_H.klasse_("kandidat-bereich-abweichend"),
+                "Kandidat mit abweichender Konfidenz/Quelle");
+        assertEquals(116, LAUF_KV_H.klasse_("kandidat-stufe-hoeher"), "Kandidat mit hoeherer Stufe als konstruiert");
+        assertEquals(0, LAUF_KV_H.klasse_("kandidat-stufe-niedriger"), "Kandidat mit niedrigerer Stufe");
+        assertEquals(0, LAUF_KV_H.klasse_("kandidat-quelle-abweichend"), "Kandidat mit abweichender Quelle");
+        assertEquals(116, LAUF_KV_H.klasse_("kandidat-bereich-abweichend-nachgestellt"),
+                "abweichende Kandidaten der Blockart nachgestellt");
+        for (String art : BLOCK_NAMEN_H) {
+            if (!"nachgestellt".equals(art)) {
+                assertEquals(0, LAUF_KV_H.klasse_("kandidat-bereich-abweichend-" + art),
+                        "abweichende Kandidaten einer anderen Blockart als nachgestellt");
+            }
+        }
+    }
+
+    /** Ziffernzahl, Kontextwort und Quelle jedes Blocks stimmen mit dem Text und einer unabhaengigen Referenz. */
+    @Test
+    void t15_kvH_generatorBloeckeStimmenMitDemTextUeberein() {
+        int markiert = 0;
+        int bloecke = 0;
+        for (FallH fall : erzeugeKvH(SEED_TEXTE_KV_H)) {
+            for (BlockH block : fall.bloecke()) {
+                bloecke++;
+                markiert += block.grenze().isEmpty() ? 0 : 1;
+                if (!block.bsnr()) {
+                    continue;
+                }
+                String nummer = fall.text().substring(block.start(), block.ende());
+                String ziffern = ziffernH(nummer);
+                if (BsnrRecognizer.SOURCE_LAENGE_ABWEICHEND.equals(block.quelle())) {
+                    assertTrue(ziffern.length() >= 6 && ziffern.length() <= 12 && ziffern.length() != 9,
+                            "Laenge der abweichenden Nummer");
+                } else {
+                    assertEquals(9, ziffern.length(), "Ziffernzahl");
+                    assertEquals(BsnrRecognizer.SOURCE.equals(block.quelle()), regionBekanntH(ziffern),
+                            "Quelle gegen unabhaengige Regionalcode-Referenz");
+                }
+                if (block.wortStart() >= 0) {
+                    assertEquals(GRUPPE_SPERR_H, block.gruppe(), "Gruppe der Sperrschrift");
+                    String wort = fall.text().substring(block.wortStart(), block.wortEnde());
+                    String buchstaben = wort.replaceAll("[^A-Za-z]", "").toLowerCase(Locale.ROOT);
+                    assertTrue("bsnr".equals(buchstaben) || "nbsnr".equals(buchstaben), "Buchstaben der Sperrschrift");
+                }
+            }
+        }
+        assertEquals(LAUF_KV_H.klasse_("block-markiert"), markiert, "markierte Bloecke: Generator gegen Lauf");
+        assertTrue(markiert * 100 < bloecke, "Markierung bleibt die Ausnahme: " + markiert + " von " + bloecke);
+    }
+
+    private static String ziffernH(String nummer) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < nummer.length(); i++) {
+            char c = nummer.charAt(i);
+            if (c >= '0' && c <= '9') {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Unabhaengige Referenz der Regionalcodes (Anlage 1 der KBV-Richtlinie, Nachtrag der Hauptsitzung vom 23.11.2026:
+     * 01 bis 03, 06 bis 21, 24, 25, 27, 28, 31, 37 bis 73, 78 bis 81, 83, 85 bis 91, 93 bis 96, 98; bei 35 und 75
+     * gelten die Stellen 3 und 4), geschrieben ohne Aufruf des Produkts.
+     */
+    private static boolean regionBekanntH(String neun) {
+        int erste = Integer.parseInt(neun.substring(0, 2));
+        int zahl = erste == 35 || erste == 75 ? Integer.parseInt(neun.substring(2, 4)) : erste;
+        return (zahl >= 1 && zahl <= 3) || (zahl >= 6 && zahl <= 21) || zahl == 24 || zahl == 25 || zahl == 27
+                || zahl == 28 || zahl == 31 || (zahl >= 37 && zahl <= 73) || (zahl >= 78 && zahl <= 81) || zahl == 83
+                || (zahl >= 85 && zahl <= 91) || (zahl >= 93 && zahl <= 96) || zahl == 98;
+    }
+
+    /** Der Scan ist deterministisch: zwei Laeufe liefern auf jedem Text von Teil 1h dieselbe Fundliste. */
+    @Test
+    void t15_kvH_scanIstDeterministisch() {
+        TextScanner scanner = TextScanner.standard();
+        int abweichend = 0;
+        for (FallH fall : erzeugeKvH(SEED_TEXTE_KV_H)) {
+            abweichend += scanner.scan(fall.text()).equals(scanner.scan(fall.text())) ? 0 : 1;
+        }
+        assertEquals(0, abweichend, "Teil 1h: Texte mit abweichender Fundliste im zweiten Lauf");
+    }
+
+    // ------------------------------------------------------------------ Teil 1h: Selbsttests
+
+    private static FallH fallH(String text, List<BlockH> bloecke) {
+        BsnrSynthetischWaechter.assertBsnrSynthetisch(text);
+        return new FallH(text, bloecke, List.of(), List.of());
+    }
+
+    private static BlockH bsnrBlockH(int start, int ende) {
+        return new BlockH(BLOCK_H_DIREKT, 0, KONF_DIREKT_H, BsnrRecognizer.SOURCE, start, ende, -1, -1, "");
+    }
+
+    /** Der Erkenner an der Stelle {@code ERKENNER_BSNR} ist der BSNR-Erkenner, und {@code standard()} fuehrt ihn. */
+    @Test
+    void t15_kvH_selbsttest_erkennerIndexZeigtAufDenBsnrErkenner() {
+        assertTrue(STANDARD_ERKENNER.get(ERKENNER_BSNR) instanceof BsnrRecognizer, "Erkenner an Index 7");
+    }
+
+    /**
+     * Selbsttest der Zaehler: Ein abgedeckter Block, ein nicht markierter Block ohne Abdeckung, ein markierter Block
+     * ohne Abdeckung, ein Mischblock ohne Abdeckung und ein Mischblock mit anderem Typ werden je in der richtigen
+     * Klasse gezaehlt (die strikten Zaehler laufen nicht ins Leere).
+     */
+    @Test
+    void t15_kvH_selbsttest_zaehlerErkennenBlockOhneAbdeckungMarkierteUndMischbloecke() {
+        String nummer = SynthetischeKvNummern.BSNR_BEKANNT;
+        String text = "BSNR " + nummer + " Ende";
+        int ende = 5 + nummer.length();
+        BlockH gut = bsnrBlockH(5, ende);
+        BlockH leer = bsnrBlockH(ende + 1, ende + 4);
+        Lauf lauf = new Lauf(SEED_TEXTE_KV_H);
+        pruefeKvH(lauf, TextScanner.standard(), 0, fallH(text, List.of(gut)));
+        assertEquals(0, lauf.klasse_("block-ohne-scan-abdeckung"), "abgedeckter Block");
+        assertEquals(1, lauf.klasse_("bsnr-fund-direkt"), "Kandidat mit 0,90 und Quelle bsnr auf der Nummer");
+        assertEquals(1, lauf.klasse_("bsnr-quelle-bsnr"), "Quelle bsnr");
+        pruefeKvH(lauf, TextScanner.standard(), 1, fallH(text, List.of(leer)));
+        assertEquals(1, lauf.klasse_("block-ohne-scan-abdeckung"), "nicht markierter Block ohne Abdeckung");
+        assertEquals(1, lauf.klasse_("block-ohne-scan-abdeckung-direkt"), "nach Blockart");
+        pruefeKvH(lauf, TextScanner.standard(), 2, fallH(text, List.of(leer.markiert("test"))));
+        assertEquals(1, lauf.klasse_("block-ohne-scan-abdeckung"), "markierter Block zaehlt nicht dort");
+        assertEquals(1, lauf.klasse_("markiert-ohne-abdeckung"), "markierter Block ohne Abdeckung");
+        assertEquals(1, lauf.klasse_("block-markiert"), "markierter Block gezaehlt");
+        BlockH mischLeer = new BlockH(BLOCK_H_MISCH_LANR, -1, -1, "", ende + 1, ende + 4, -1, -1, "");
+        pruefeKvH(lauf, TextScanner.standard(), 3, fallH(text, List.of(mischLeer)));
+        assertEquals(1, lauf.klasse_("misch-block-ohne-abdeckung"), "Mischblock ohne Abdeckung");
+        BlockH mischTyp = new BlockH(BLOCK_H_MISCH_LANR, -1, -1, "", 5, ende, -1, -1, "");
+        pruefeKvH(lauf, TextScanner.standard(), 4, fallH(text, List.of(mischTyp)));
+        assertEquals(1, lauf.klasse_("misch-typ-abweichend"), "Mischblock mit anderem Typ");
+        assertEquals(0, lauf.anzahl("ak23-fund-nicht-vollstaendig-ersetzt"), "Ersetzen vollstaendig");
+        assertEquals(0, lauf.anzahl("ak32-konsistenz"), "Platzhalter konsistent");
+    }
+
+    /** Ein Scanner, der den BSNR-Fund verliert, laesst den strikten Zaehler anschlagen. */
+    @Test
+    void t15_kvH_selbsttest_scannerOhneBsnrFundWirdGemeldet() {
+        String nummer = SynthetischeKvNummern.BSNR_BEKANNT;
+        String text = "BSNR " + nummer + " Ende";
+        Lauf lauf = new Lauf(SEED_TEXTE_KV_H);
+        TextScanner ohneBsnr = new TextScanner(List.of(new LanrRecognizer()));
+        pruefeKvH(lauf, ohneBsnr, 0, fallH(text, List.of(bsnrBlockH(5, 5 + nummer.length()))));
+        assertEquals(1, lauf.klasse_("block-ohne-scan-abdeckung"), "Block ohne Abdeckung im Scanner ohne BSNR");
+    }
+
+    /** Eine Gegenprobe, die einen Fund liefert, wird gemeldet; die Positivprobe mit Kontextwort liefert ihn. */
+    @Test
+    void t15_kvH_selbsttest_gegenprobeMitFundWirdGemeldet() {
+        String nummer = SynthetischeKvNummern.BSNR_BEKANNT;
+        String ohne = "Nummer " + nummer;
+        String mit = "BSNR " + nummer;
+        BsnrSynthetischWaechter.assertBsnrSynthetisch(ohne);
+        BsnrSynthetischWaechter.assertBsnrSynthetisch(mit);
+        Lauf lauf = new Lauf(SEED_TEXTE_KV_H);
+        pruefeKvH(lauf, TextScanner.standard(), 0,
+                new FallH(mit, List.of(), List.of(new GegenprobeH("selbsttest", ohne)), List.of()));
+        assertEquals(0, lauf.anzahl("gegenprobe-mit-bsnr-fund"), "Gegenprobe ohne Kontextwort: kein Fund");
+        pruefeKvH(lauf, TextScanner.standard(), 1,
+                new FallH(mit, List.of(), List.of(new GegenprobeH("selbsttest", mit)), List.of()));
+        assertEquals(1, lauf.anzahl("gegenprobe-mit-bsnr-fund"), "Gegenprobe mit Kontextwort: Fund wird gemeldet");
+    }
+
+    /**
+     * Selbsttest der KVNR-Pruefung: Eine enge KVNR-Form (gueltig, geschlossen, grossgeschrieben) ausserhalb eines
+     * KVNR-Blocks wird gezaehlt, eine im Block nicht, ein Block einer anderen Art zaehlt nicht als KVNR-Block.
+     */
+    @Test
+    void t15_kvH_selbsttest_kvnrFormAusserhalbEinesKvnrBlocksWirdGezaehlt() {
+        String g = SynthetischeKvNummern.KVNR_GUELTIG;
+        String text = "KVNR " + g + " und " + g;
+        BsnrSynthetischWaechter.assertBsnrSynthetisch(text, 2);
+        int ersterStart = 5;
+        int zweiterStart = text.lastIndexOf(g);
+        BlockH ersterBlock = new BlockH(BLOCK_H_MISCH_KVNR, -1, -1, "", ersterStart, ersterStart + g.length(), -1, -1,
+                "");
+        BlockH zweiterBlock = new BlockH(BLOCK_H_MISCH_KVNR, -1, -1, "", zweiterStart, zweiterStart + g.length(), -1,
+                -1, "");
+        BlockH lanrBlock = new BlockH(BLOCK_H_MISCH_LANR, -1, -1, "", ersterStart, ersterStart + g.length(), -1, -1,
+                "");
+        assertEquals(2, kvnrFormenAusserhalbH(text, List.of()), "kein Block");
+        assertEquals(1, kvnrFormenAusserhalbH(text, List.of(ersterBlock)), "ein KVNR-Block");
+        assertEquals(0, kvnrFormenAusserhalbH(text, List.of(ersterBlock, zweiterBlock)), "beide Formen in Bloecken");
+        assertEquals(2, kvnrFormenAusserhalbH(text, List.of(lanrBlock)), "ein LANR-Block ist kein KVNR-Block");
+    }
+
+    /**
+     * Selbsttest der Markierung: Ein Einzelbuchstabe vor dem gesperrt geschriebenen Kontextwort (durch eine Luecke nach
+     * D-2 getrennt) markiert, ein Wort davor oder der Textanfang nicht; ein Block ohne Sperrschrift wird nie markiert.
+     */
+    @Test
+    void t15_kvH_selbsttest_markierungErkenntDenEinzelbuchstabenVorDerSperrschrift() {
+        String sperr = "B. S. N. R.";
+        String nummer = SynthetischeKvNummern.BSNR_BEKANNT;
+        for (String vor : List.of("x ", "x\t", "x. ", "x-")) {
+            String text = vor + sperr + " " + nummer;
+            BsnrSynthetischWaechter.assertBsnrSynthetisch(text);
+            BlockH block = new BlockH(BLOCK_H_SPERR, GRUPPE_SPERR_H, KONF_WEITER_H, BsnrRecognizer.SOURCE,
+                    text.length() - nummer.length(), text.length(), vor.length(), vor.length() + sperr.length(), "");
+            assertTrue(GRENZE_SPERR_EINZELBUCHSTABE.equals(grenzklasseH(text, block)), "Einzelbuchstabe davor");
+        }
+        for (String vor : List.of("Hallo ", "", "AB ", "x, ")) {
+            String text = vor + sperr + " " + nummer;
+            BsnrSynthetischWaechter.assertBsnrSynthetisch(text);
+            BlockH block = new BlockH(BLOCK_H_SPERR, GRUPPE_SPERR_H, KONF_WEITER_H, BsnrRecognizer.SOURCE,
+                    text.length() - nummer.length(), text.length(), vor.length(), vor.length() + sperr.length(), "");
+            assertTrue(grenzklasseH(text, block).isEmpty(), "kein Einzelbuchstabe davor");
+        }
+        String text = "x " + sperr + " " + nummer;
+        BsnrSynthetischWaechter.assertBsnrSynthetisch(text);
+        assertTrue(grenzklasseH(text, bsnrBlockH(text.length() - nummer.length(), text.length())).isEmpty(),
+                "Block ohne Sperrschrift");
+    }
+
+    /**
+     * Selbsttest der Nummernbildung: {@code bildeBsnr} liefert Nummern mit bekanntem Regionalcode, die nach LANR und IK
+     * ungueltig sind, {@code bildeBsnrUnbekannt} Nummern mit unbekanntem Regionalcode (Referenz oben), beide
+     * bestehen den BSNR-Waechter.
+     */
+    @Test
+    void t15_kvH_selbsttest_nummernbildungErfuelltDieRegeln() {
+        Random r = new Random(SEED_AUSWAHL_KV_H);
+        for (int i = 0; i < 500; i++) {
+            String bekannt = SynthetischeKvNummern.bildeBsnr(r);
+            String unbekannt = SynthetischeKvNummern.bildeBsnrUnbekannt(r);
+            for (String nummer : List.of(bekannt, unbekannt)) {
+                assertEquals(9, nummer.length(), "neun Ziffern");
+                assertFalse(SynthetischeKvNummern.lanrGueltigReferenz(nummer), "nach LANR ungueltig");
+                assertFalse(SynthetischeKvNummern.ikGueltigReferenz(nummer), "nach IK ungueltig");
+                BsnrSynthetischWaechter.assertBsnrSynthetisch("BSNR " + nummer);
+            }
+            assertTrue(regionBekanntH(bekannt), "bekannter Regionalcode");
+            assertFalse(regionBekanntH(unbekannt), "unbekannter Regionalcode");
+        }
     }
 }

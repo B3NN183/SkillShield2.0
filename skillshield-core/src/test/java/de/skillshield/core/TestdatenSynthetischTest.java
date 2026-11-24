@@ -689,12 +689,27 @@ class TestdatenSynthetischTest {
      * Ist die neunstellige Folge eine BSNR-Form nach A-6: {@code 00000} an Stelle 3 bis 7, oder die eng gefasste
      * Sonderkennung (Praefix 35 oder 75, Schluessel der Anlage 1 an Stelle 3 und 4, {@code 00000} an Stelle 5 bis 9;
      * Nachtrag zu T-13); die Sonderkennung muss nach dem LANR- und nach dem IK-Verfahren ungueltig sein (das
-     * prueft {@code BsnrSynthetischWaechter#istSonderkennungMitSchluessel}; sonst entstuende ein LANR- oder IK-Fund)?
+     * prueft {@code BsnrSynthetischWaechter#istSonderkennungMitSchluessel}; sonst entstuende ein LANR- oder IK-Fund).
+     *
+     * <p>Eine Folge mit {@code 00000} an Stelle 3 bis 7 ist nur zulaessig, wenn sie nach dem LANR- und nach dem
+     * IK-Verfahren ungueltig ist (sonst entstuende bei Kontextwort ein LANR- oder IK-Fund; Nachtrag 2 zu T-15) oder
+     * eine der ausdruecklich benannten Ausnahmen ist: {@code BSNR_NULL} (Nullnummer, nach beiden Verfahren
+     * zufaellig gueltig; nur fuer BSNR-Faelle ohne LANR- oder IK-Kontext, im Javadoc der Konstante begruendet) und
+     * {@code BSNR_LANR_GUELTIG} (Gleichstand BSNR/LANR im Formularfeld, G-D1; im Javadoc der Konstante begruendet).
+     * Jede weitere Ausnahme braucht eine Entscheidung und einen Eintrag hier.
      */
     static boolean istBsnrForm(String neunerFolge) {
-        return (neunerFolge.length() == 9 && neunerFolge.startsWith(BSNR_NULLBLOCK, 2))
-                || BsnrSynthetischWaechter.istSonderkennungMitSchluessel(neunerFolge);
+        if (neunerFolge.length() == 9 && neunerFolge.startsWith(BSNR_NULLBLOCK, 2)) {
+            return BSNR_AUSNAHMEN_GUELTIG.contains(neunerFolge)
+                    || (!SynthetischeKvNummern.lanrGueltigReferenz(neunerFolge)
+                            && !SynthetischeKvNummern.ikGueltigReferenz(neunerFolge));
+        }
+        return BsnrSynthetischWaechter.istSonderkennungMitSchluessel(neunerFolge);
     }
+
+    /** Die ausdruecklich benannten Nullblock-Folgen, die nach LANR oder IK gueltig sein duerfen (siehe oben). */
+    private static final Set<String> BSNR_AUSNAHMEN_GUELTIG =
+            Set.of(SynthetischeKvNummern.BSNR_NULL, SynthetischeKvNummern.BSNR_LANR_GUELTIG);
 
     private static boolean istAsciiBuchstabe(char c) {
         return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
@@ -1620,6 +1635,41 @@ class TestdatenSynthetischTest {
         assertFalse(istBsnrForm(ohneNullblock));
         assertFalse(istBsnrForm(bekannt.substring(0, 7)));
         assertFalse(istBsnrForm(bekannt + "0"));
+    }
+
+    /**
+     * Nachtrag 2 zu T-15: Eine Folge mit Nullblock an Stelle 3 bis 7, die nach dem LANR- oder IK-Verfahren gueltig ist,
+     * ist nur als benannte Ausnahme zulaessig. Die Folge wird zur Laufzeit gesucht (kein Literal): Praefix ab 10
+     * (nicht {@code 00}), Stellen 8 und 9 frei; ausser den beiden benannten Ausnahmen ist jede solche Folge ein
+     * Verstoss in der zentralen Klasse.
+     */
+    @Test
+    void selbsttest_bsnrForm_nullblockMitGueltigerLanrOderIk_nurAlsBenannteAusnahmeZulaessig() {
+        assertTrue(istBsnrForm(SynthetischeKvNummern.BSNR_NULL));
+        assertTrue(istBsnrForm(SynthetischeKvNummern.BSNR_LANR_GUELTIG));
+        int lanrGueltig = 0;
+        int ikGueltig = 0;
+        for (int praefix = 10; praefix <= 99; praefix++) {
+            for (int schluss = 0; schluss <= 99; schluss++) {
+                String folge = praefix + BSNR_NULLBLOCK + (schluss < 10 ? "0" : "") + schluss;
+                if (SynthetischeKvNummern.BSNR_LANR_GUELTIG.equals(folge)) {
+                    continue;
+                }
+                boolean lanr = SynthetischeKvNummern.lanrGueltigReferenz(folge);
+                boolean ik = SynthetischeKvNummern.ikGueltigReferenz(folge);
+                lanrGueltig += lanr ? 1 : 0;
+                ikGueltig += ik ? 1 : 0;
+                if (lanr || ik) {
+                    assertFalse(istBsnrForm(folge), "Nullblock-Folge, nach LANR oder IK gueltig, ist keine BSNR-Form");
+                    assertEquals(List.of(Art.ZENTRALE_OHNE_PRAEFIX_00), arten(ZENTRALE_DATEI, folge, Set.of()));
+                } else {
+                    assertTrue(istBsnrForm(folge), "Nullblock-Folge, nach LANR und IK ungueltig, ist eine BSNR-Form");
+                }
+            }
+        }
+        // Die Suche ist nicht leer: es gibt weitere solche Folgen (sonst prueft der Test nichts)
+        assertTrue(lanrGueltig > 0, "gefundene LANR-gueltige Nullblock-Folgen: " + lanrGueltig);
+        assertTrue(ikGueltig > 0, "gefundene IK-gueltige Nullblock-Folgen: " + ikGueltig);
     }
 
     @Test

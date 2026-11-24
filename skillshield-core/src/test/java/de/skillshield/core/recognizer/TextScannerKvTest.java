@@ -377,6 +377,9 @@ class TextScannerKvTest {
 
     @Test
     void bsnr_ohneKontextwortEntstehtKeinFund_gegenprobeMitKontextwort() {
+        // T-15 (vorgemerkt aus security T-14): Waechter fuer beide Texte, auch fuer den ohne Fund.
+        BsnrSynthetischWaechter.assertBsnrSynthetisch("Nummer " + BSNR_BEKANNT);
+        BsnrSynthetischWaechter.assertBsnrSynthetisch("BSNR " + BSNR_BEKANNT);
         assertTrue(scan("Nummer " + BSNR_BEKANNT).isEmpty(), "Fund ohne Kontextwort");
         assertEquals(1, scan("BSNR " + BSNR_BEKANNT).size());
     }

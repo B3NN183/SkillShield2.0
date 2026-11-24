@@ -64,6 +64,17 @@ import java.util.TreeMap;
  * Kandidaten getrennt; ueber einer Position bleibt genau ein Fund, der Typ folgt der Konfliktregel (hoehere
  * Konfidenz, bei Gleichstand der Typname). Ein Kontextwort einer anderen Art aendert keinen Fund der Typen E-Mail,
  * IP, URL und Pfad.
+ *
+ * <p>Bekannte Grenzen der BSNR im Scan (Teil 2; Einzelheiten im Javadoc von {@code KvNumberScanner}, je Grenze ein
+ * Test {@code bekannteGrenze...} in {@code BsnrGrenzenTest}): G-K14 gilt auch fuer {@code bsnr-rest} (ein Rest von
+ * einer oder zwei Ziffern neben einem Bestandsfund bleibt stehen); bei {@code <Kontextwort> <IPv4>/<gruppierte
+ * Nummer>} (bestand schon bei der LANR) liefert der Scan, wenn IP-Ziffern und Nummer zusammen eine Kette von mehr als
+ * zwoelf Ziffern bilden, den IP-Fund und einen Restfund ueber die erste Gruppe, die letzte Gruppe bleibt im
+ * Klartext (eine geschlossene Nummer ist abgedeckt); bei Gleichstand der
+ * Konfidenz bei gleichem Bereich gewinnt BSNR vor IK, KVNR und LANR, KVNR vor LANR, IP vor allen KV-Arten (G-D1: der
+ * Typ kann "falsch" sein, die Position ist geschuetzt). Ein zusammengelegter Fund kann durch einen teilweise
+ * ueberlappenden BSNR-Kandidaten von "sicher" auf "wahrscheinlich" fallen (K-4); ein spaeterer Filter nach Stufe
+ * muss das beruecksichtigen.
  */
 public final class TextScanner {
 
