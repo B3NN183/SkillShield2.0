@@ -167,6 +167,8 @@ public final class Texte {
     public static final String TITEL_RUECKFRAGE = "Rückfrage";
     /** Titel des Fehlerdialogs. */
     public static final String TITEL_FEHLER = "Fehler";
+    /** Titel des Hauptfensters (AK-1): genau dieser Text, nie mit Inhalt. */
+    public static final String FENSTERTITEL = "SkillShield";
 
     /** Höchstzahl der angezeigten Zeilen der Liste "Nicht zurückübersetzt"; der Rest wird nur gezählt. */
     public static final int MAX_LISTENZEILEN = 500;

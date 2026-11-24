@@ -44,6 +44,8 @@
   </dependencies>
 
   <build>
+    <!-- Die startbare JAR heisst skillshield.jar (OF-1); Shade ersetzt sie in package durch die Fassung mit allem. -->
+    <finalName>skillshield</finalName>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -53,6 +55,107 @@
             <java.awt.headless>${ui.headless}</java.awt.headless>
           </systemPropertyVariables>
         </configuration>
+        <executions>
+          <!-- Normaler Lauf in "test": ohne die *IT-Klassen, die die fertige JAR brauchen. -->
+          <execution>
+            <id>default-test</id>
+            <configuration>
+              <excludes>
+                <exclude>**/*IT.java</exclude>
+              </excludes>
+            </configuration>
+          </execution>
+          <!-- Zweiter Lauf nach "package": Tests, die skillshield.jar in einer zweiten JVM starten (AK-1, AK-44, AK-51). -->
+          <execution>
+            <id>jar-tests</id>
+            <phase>integration-test</phase>
+            <goals>
+              <goal>test</goal>
+            </goals>
+            <configuration>
+              <includes>
+                <include>**/*IT.java</include>
+              </includes>
+              <systemPropertyVariables>
+                <java.awt.headless>${ui.headless}</java.awt.headless>
+                <skillshield.jar>${project.build.directory}/skillshield.jar</skillshield.jar>
+                <skillshield.cmd>${project.build.directory}/SkillShield.cmd</skillshield.cmd>
+                <skillshield.testclasses>${project.build.testOutputDirectory}</skillshield.testclasses>
+              </systemPropertyVariables>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>startbare-jar</id>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <filters>
+                <filter>
+                  <artifact>*:*</artifact>
+                  <excludes>
+                    <!-- Signaturreste und Modulbeschreibungen (auch die mehrfachversionierten) gehoeren nicht hinein -->
+                    <exclude>META-INF/*.SF</exclude>
+                    <exclude>META-INF/*.DSA</exclude>
+                    <exclude>META-INF/*.RSA</exclude>
+                    <exclude>module-info.class</exclude>
+                    <exclude>META-INF/versions/*/module-info.class</exclude>
+                  </excludes>
+                </filter>
+                <filter>
+                  <artifact>com.formdev:flatlaf</artifact>
+                  <excludes>
+                    <!-- Native Bibliotheken: FlatLaf wuerde sie auf die Platte entpacken (AK-44); der Start schaltet
+                         sie ab, deshalb gehoeren sie nicht in die JAR. -->
+                    <exclude>com/formdev/flatlaf/natives/**</exclude>
+                  </excludes>
+                </filter>
+              </filters>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <manifestEntries>
+                    <Main-Class>de.skillshield.app.SkillShieldApp</Main-Class>
+                    <Multi-Release>true</Multi-Release>
+                  </manifestEntries>
+                </transformer>
+                <!-- Bewusst ohne ApacheLicense-/ApacheNotice-Transformer: Der Lizenz-Transformer verwirft jede
+                     META-INF/LICENSE (die Lizenz von FlatLaf ginge verloren), der Notice-Transformer erzeugt ohne
+                     NOTICE-Quelle eine leere Datei. FlatLaf liefert META-INF/LICENSE, aber keine NOTICE-Datei. -->
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-resources-plugin</artifactId>
+        <executions>
+          <!-- SkillShield.cmd (Doppelklick-Start) kommt neben die JAR -->
+          <execution>
+            <id>startskript-kopieren</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${project.build.directory}</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>src/main/start</directory>
+                  <filtering>false</filtering>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

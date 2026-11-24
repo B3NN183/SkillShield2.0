@@ -40,6 +40,133 @@ Die Tests der Module `skillshield-ui` und `skillshield-app` laufen standardmäß
 `ui.headless=true`); Tests mit echtem Fenster werden dabei als übersprungen gemeldet. Mit Bildschirm:
 `mvn verify -Dui.headless=false`.
 
+Aus `mvn verify` entsteht außerdem die startbare Datei `skillshield-app\target\skillshield.jar` (siehe
+„Programm starten“). Die Tests, die diese JAR in einer zweiten JVM prüfen (Klassen `*IT`), laufen in einem zweiten
+Surefire-Lauf (`jar-tests`, Phase `integration-test`) nach dem Packen; dafür gibt es kein zusätzliches Plugin.
+
+## Programm starten
+
+**Voraussetzung:** Java 21 oder neuer, empfohlen Eclipse Temurin 21 (die JRE genügt):
+
+```
+winget install EclipseAdoptium.Temurin.21.JRE
+```
+
+**Start per Doppelklick:** Nach `mvn verify` liegen im Ordner `skillshield-app\target` die Dateien `skillshield.jar`
+und `SkillShield.cmd`. `SkillShield.cmd` doppelklicken. Das Fenster „SkillShield“ öffnet sich; die Eingabeaufforderung
+soll sich dabei sofort wieder schließen (erwartetes Verhalten, siehe Sichtprüfung). Das Skript nimmt keine Argumente an
+und setzt die Optionen `-XX:-UsePerfData -XX:+DisableAttachMechanism -XX:ErrorFile=NUL -XX:-CreateCoredumpOnCrash`
+(siehe unten); die Umgebungsvariablen `_JAVA_OPTIONS`, `JAVA_TOOL_OPTIONS` und `JDK_JAVA_OPTIONS` leert es vorher, weil
+sie diese Optionen aufheben oder ergänzen könnten. Sind mehrere Java-Versionen installiert, nimmt es die erste `javaw.exe`
+im PATH mit Java 21 oder neuer. Die Datei funktioniert auch ohne Dateizuordnung für `.jar` und findet die JAR relativ zu
+sich selbst. Für die Weitergabe genügt es, **beide Dateien in denselben Ordner** zu kopieren. Ist kein Java 21 oder neuer
+installiert, erklärt `SkillShield.cmd` das in einem Textfenster und nennt den Installationsbefehl.
+
+**Start von der Eingabeaufforderung (ein Befehl):** Empfohlen ist `SkillShield.cmd`. Wer die JAR selbst startet, nimmt
+dieselben Optionen:
+
+```
+java -XX:-UsePerfData -XX:+DisableAttachMechanism -XX:ErrorFile=NUL -XX:-CreateCoredumpOnCrash -jar skillshield-app\target\skillshield.jar
+```
+
+Ist Java älter als 21, meldet die JVM selbst einen Fehler (englisch, vor dem Start des Programms; das kann
+SkillShield nicht abfangen). Ohne Bildschirm (z. B. auf einem Server oder in einem Prüfprozess) beendet sich das
+Programm mit Exit-Code 2 und der einzigen Zeile „SkillShield benötigt eine grafische Oberfläche.“.
+
+Das Programm selbst legt keine Dateien an und speichert keine Einstellungen (auch nicht die Fenstergröße), führt kein
+Protokoll und entpackt keine Bibliotheken; auf die Konsole schreibt es nichts. Alles, was es sich merkt, liegt im
+Arbeitsspeicher. Unabhängig davon können Java und Windows Spuren hinterlassen: Die JVM legt beim Start sonst einen
+Ordner `hsperfdata_<Benutzer>` im Temp-Ordner an (die Option `-XX:-UsePerfData` verhindert das), und Windows kann
+Teile des Arbeitsspeichers in Auslagerungs- und Ruhezustandsdatei schreiben (siehe Grenzen).
+Plattform ist Windows. Unter Linux/X11 schreibt Swing jede Markierung eines Textfeldes in die Systemauswahl (PRIMARY);
+das lässt sich in der Oberfläche nicht abfangen, deshalb ist Linux nicht unterstützt.
+
+### Anleitung für Anwender
+
+SkillShield ersetzt vertrauliche Angaben in einem Text (zum Beispiel E-Mail-Adressen, IP-Adressen, Pfade,
+Versichertennummern) durch Platzhalter wie `[[EMAIL_1]]`, **bevor** Sie den Text an eine KI geben. Die Antwort der KI
+übersetzt das Programm danach zurück. Das Programm arbeitet ohne Netzzugriff.
+
+**Ablauf in fünf Schritten**
+
+1. **Text eingeben:** Text in Bereich 1 einfügen oder tippen, dann „Scannen“ (Strg+Enter).
+2. **Funde prüfen:** Bereich 2 listet, was das Programm erkannt hat, mit Typ und Sicherheit (sicher, wahrscheinlich,
+   fraglich). Jeder Fund ist ein Kontrollkästchen: Angewählte Funde werden ersetzt. Fehlt eine Stelle, markieren Sie
+   sie in Bereich 1 und wählen „Markierung als Fund hinzufügen“ (Strg+M).
+3. **Für KI kopieren:** Bereich 3 zeigt den Text mit Platzhaltern. „Für KI kopieren“ (Strg+Umschalt+C) legt genau diesen
+   Text in die Zwischenablage. **Lesen Sie ihn vorher.**
+4. **KI fragen:** Den kopierten Text in die KI einfügen und deren Antwort kopieren.
+5. **Zurückübersetzen:** Die Antwort in Bereich 4 einfügen, „Zurückübersetzen“ (Strg+Umschalt+R). Das Ergebnis darunter
+   enthält wieder die Originalwerte; „Rückübersetzten Text kopieren“ legt es in die Zwischenablage. Das geht erst nach
+   „Für KI kopieren“.
+
+**Tastatur**
+
+| Taste | Wirkung |
+|-------|---------|
+| Strg+Enter | Scannen |
+| Strg+Umschalt+C | Für KI kopieren (immer der ganze Text aus Bereich 3) |
+| Strg+Umschalt+R | Zurückübersetzen |
+| Strg+M | Markierung als Fund hinzufügen |
+| Alt+S, A, M, K, R, T, Z, E | Scannen, Alle anwählen, Markierung als Fund hinzufügen, Für KI kopieren, Zurückübersetzen, Rückübersetzten Text kopieren, Zurücksetzen, Beenden (der Buchstabe ist in der Beschriftung unterstrichen; Windows zeigt die Unterstriche erst, wenn Sie Alt drücken) |
+| Alt+1 bis Alt+4 | Springt in Bereich 1 bis 4 |
+| Tab / Umschalt+Tab | Nächstes / voriges Element |
+| Leertaste in der Tabelle | Ist **eine** Zeile gewählt, schaltet sie das Kontrollkästchen um. Sind **mehrere** Zeilen gewählt, wählt sie alle gewählten Zeilen **an**, nie ab (Abwählen nur einzeln). |
+
+Gesperrte Schaltflächen nennen den Grund als Hinweis, wenn Sie mit der Maus darauf zeigen.
+
+**Was geschützt wird und was nicht**
+
+- Das Programm erkennt, was seine Regeln kennen: E-Mail-Adressen, IP-Adressen, Pfade, Versicherten-, Betriebsstätten-
+  und Arztnummern und Ähnliches. **Es erkennt nicht alles.** Namen, Adressen, Geburtsdaten und ICD-10-Codes werden noch
+  nicht erkannt. Nummern mit ungewöhnlichen Trennzeichen oder Zeilenumbrüchen mittendrin und Nummern ohne passendes
+  Kontextwort können unerkannt bleiben. Ein Wert, der an einer nicht erkannten Stelle steht, bleibt im Klartext, auch wenn
+  derselbe Wert an anderer Stelle ersetzt wird. **Lesen Sie deshalb vor dem Kopieren immer den Text für die KI (Bereich 3)
+  und markieren Sie fehlende Stellen von Hand.**
+- **Markieren von Hand:** Jedes Vorkommen der markierten Zeichenfolge im Text wird geschützt (auch „Meyer“ in
+  „Meyerhof“). Schreibvarianten (Groß-/Kleinschreibung, andere Trennzeichen, andere Unicode-Normalform) sind eine eigene
+  Zeichenfolge und müssen einzeln markiert werden. Das Hinzufügen kann bereits abgewählte Funde zu einem Fund vom Typ
+  „Manuell“ zusammenfassen; wer diesen Fund wieder abwählt, gibt auch den darin enthaltenen markierten Namen frei.
+- **Die Zuordnung** (welcher Platzhalter für welchen Originalwert steht) liegt nur im Arbeitsspeicher. Sie endet beim
+  Beenden, bei einem neuen Scan und bei „Zurücksetzen“ (jeweils mit Rückfrage, wenn sie noch gebraucht würde).
+  **Übersetzen Sie Antworten immer nur zum zuletzt kopierten Text zurück.** Haben Sie nach dem Kopieren die Auswahl
+  geändert, kopieren Sie erneut. Platzhalter in der Antwort, die das Programm nicht kennt, erscheinen in der Liste
+  „Nicht zurückübersetzt“ (höchstens 500 Zeilen werden gezeigt, der Rest wird nur gezählt).
+- **Grenzen der Größe:** Eingabe und KI-Antwort dürfen höchstens 1.000.000 Zeichen lang sein. Zeilen mit mehr als 50.000
+  Zeichen werden nicht umbrochen (waagerechter Rollbalken); ein mehrzeiliger Text, der nur insgesamt darüber liegt,
+  bleibt nach dem ersten Überschreiten ohne Umbruch.
+
+**Zwischenablage**
+
+- „Für KI kopieren“ legt genau den Text aus Bereich 3 als reinen Text ab, sonst nichts. Eine Teilmarkierung in Bereich
+  3 mit Strg+C kopiert trotzdem den **ganzen** Text für die KI (jedes Kopieren dort ist „Für KI kopieren“). Aus der
+  Tabelle kann nichts kopiert werden. Jedes Kopieren aus einem Feld über die Tastatur läuft über die Programmlogik; ob
+  ein Rechtsklick in einem Feld an SkillShield vorbei kopieren lässt, wird in der Sichtprüfung (Punkt S-11) geprüft.
+- Beim **Beenden** und beim **Zurücksetzen** leert das Programm die Zwischenablage, wenn noch Text aus SkillShield
+  darin liegt. Beim Beenden wird auch ein nicht lesbarer Inhalt (z. B. ein kopiertes Bild) mitgeleert; er geht dann
+  verloren. Lässt sich die Zwischenablage nicht leeren (z. B. weil ein anderes Programm sie sperrt), fragt ein Dialog
+  „konnte nicht geleert werden“ nach: „Erneut versuchen“ oder „Trotzdem beenden“. Beim Zurücksetzen kann diese Meldung
+  auch erscheinen, wenn Sie die Zwischenablage selbst geleert haben oder ein Bild darin liegt.
+- **Grenzen:** Den Zwischenablageverlauf von Windows (Win+V) und die Cloud-Zwischenablage kann das Programm nicht
+  leeren. Abmelden, Herunterfahren und Beenden über den Task-Manager umgehen das Leeren und verwerfen die Zuordnung ohne
+  Rückfrage. Klartext liegt im Arbeitsspeicher. Stürzt die JVM ab, schreibt sie normalerweise ein Absturzprotokoll
+  `hs_err_pid*.log` und unter Windows Server (z. B. Terminalserver-Sitzungen) auch ein Speicherabbild
+  `hs_err_pid*.mdmp` in den Startordner; beides kann Klartext enthalten. `-XX:ErrorFile=NUL` unterdrückt das Protokoll,
+  `-XX:-CreateCoredumpOnCrash` das Speicherabbild; beides gilt nur beim Start über `SkillShield.cmd` oder mit allen
+  oben genannten Optionen. Außerhalb des Programms bleiben: eine vom Administrator eingerichtete
+  Windows-Fehlerberichterstattung (WER-LocalDumps), die Auslagerungsdatei, die Ruhezustandsdatei (`hiberfil.sys`) und
+  Starts ohne das Skript bzw. ohne diese Optionen.
+
+**Beenden** läuft immer auf demselben Weg (Schaltfläche „Beenden“, Schließen-Kreuz, Alt+F4): Rückfrage, wenn noch eine
+Zuordnung besteht, Zwischenablage leeren, alle Felder verwerfen, Prozess beenden.
+
+**Barrierefreiheit (Screenreader):** Alle Bedienelemente haben zugängliche Namen. Windows reicht sie nur über die
+Java Access Bridge an NVDA oder JAWS weiter, und die ist standardmäßig aus. Einschalten einmalig je Benutzer mit
+`jabswitch -enable` (liegt im `bin`-Ordner des Java-Verzeichnisses), danach Screenreader und SkillShield neu starten.
+**Wichtig:** Danach kann jede Software, die auf die Java Access Bridge zugreift, den Inhalt der Felder und der Tabelle
+lesen, also auch den Klartext. Schalten Sie sie nur ein, wenn Sie das brauchen und dem Rechner vertrauen
+(`jabswitch -disable` schaltet sie wieder aus).
+
 ## Lizenzen von Fremdbibliotheken
 
 | Bibliothek | Version | Lizenz | Verwendung |
@@ -47,8 +174,19 @@ Die Tests der Module `skillshield-ui` und `skillshield-app` laufen standardmäß
 | FlatLaf (`com.formdev:flatlaf`) | 3.6.1 | Apache License 2.0 | Look-and-Feel der Oberfläche, nur Laufzeit von `skillshield-app` |
 | JUnit 5 | 5.14.4 | Eclipse Public License 2.0 | nur Tests |
 
-Apache 2.0 verlangt bei Weitergabe die Lizenz- und NOTICE-Datei; sie werden mit der startbaren JAR ausgeliefert
-(Umsetzung im Task „Startprogramm“).
+Apache 2.0 verlangt bei Weitergabe die Lizenz- und NOTICE-Datei: Die startbare JAR enthält `META-INF/LICENSE` (Lizenztext
+von FlatLaf). FlatLaf 3.6.1 liefert keine NOTICE-Datei, also gibt es auch keine zusammenzuführen. FlatLaf wird ohne seine nativen
+Bibliotheken eingepackt und ohne native Bibliothek betrieben (`flatlaf.useNativeLibrary=false`), damit nichts auf die
+Platte entpackt wird; der Fensterrahmen kommt vom Betriebssystem.
+
+## Build-Plugins
+
+Alle Plugin-Versionen stehen in der Wurzel-`pom.xml` und sind fest gepinnt. Für die startbare JAR kam das
+**maven-shade-plugin 3.6.0** (Apache License 2.0) hinzu; es läuft nur im Build und ist nicht Teil des Produkts. Für die
+`*IT`-Tests wird das bereits vorhandene maven-surefire-plugin ein zweites Mal ausgeführt, `SkillShield.cmd` kopiert das
+maven-resources-plugin neben die JAR. Neben `skillshield.jar` legt Shade die unveränderte Fassung als
+`original-skillshield.jar` ab; weitergegeben wird nur `skillshield.jar`. Für die Weitergabe bauen Sie mit
+`mvn clean verify`: Nur nach `clean` ist sicher, dass keine Reste eines früheren Builds im Ordner `target` liegen.
 
 ## Module und Abhängigkeitsrichtung
 

@@ -1445,3 +1445,118 @@ Fokus auf die Eingabe; T-8 ruft es nach dem Sichtbarmachen.
 - Sichtprüfung (nur am echten Gerät): Auf deutscher Tastatur (auch über RDP/Citrix) dürfen AltGr-Eingaben (AltGr+E,
   +M, +Q, +2, +3, +7 bis +0, +ß, ++, +<) weder „Beenden“ noch „Markieren“ noch einen Fokuswechsel auslösen. Headless
   belegt für Strg+Alt und Strg+Alt+AltGr; die Maske „Alt+AltGr ohne Strg“ löst Mnemonics aus und ist nur am Gerät prüfbar.
+
+---
+
+## Nachtrag zu T-8 (Umsetzungsstand Startprogramm, startbare JAR, Spurenfreiheit)
+
+Ergänzt die bestehenden Nachträge (deren Text bleibt unverändert). `anforderung.md` und `skillshield-core/src` bleiben
+unverändert. Neu: ein Plugin (maven-shade-plugin 3.6.0), keine neue Laufzeitabhängigkeit.
+
+### Aufbau
+
+- `ui.logik.Texte.FENSTERTITEL` (`SkillShield`) neu; `ui.swing.HauptFenster` (`JFrame`): Titel nur diese Konstante,
+  Startgröße 1024 × 768, Mindestgröße `HauptPanel.MINDESTGROESSE`, `DO_NOTHING_ON_CLOSE`, `windowClosing` ruft den
+  übergebenen Beenden-Ablauf. **Abweichung von der Signatur im Plan** (`HauptFenster(panel, sitzung, beenden)`):
+  Der Konstruktor ist `HauptFenster(HauptPanel, Runnable)`; die Sitzung braucht das Fenster nicht, weil der Ablauf
+  `sitzung.beendenAnfordern()` im `Runnable` steckt (eine Quelle für Kreuz, Alt+F4 und Schaltfläche).
+- `app.SkillShieldApp`: `main` (ruft `starte(System.err)`, `System.exit` nur bei Code ungleich 0), `starte` (setzt
+  `flatlaf.useNativeLibrary=false` und `Locale.GERMANY`, installiert den zentralen Handler **vor** der
+  Headless-Prüfung, ohne Bildschirm fester Text + Code 2, sonst `invokeLater(fensterOeffnen)`),
+  `fehlerhandlerInstallieren`, `oberflaecheEinrichten` (FlatLaf hell, deutsche `OptionPane`-Texte), `bauen(Clipboard,
+  Dialoge, Runnable prozessEnde)` (Fabrikmethode ohne Fenster: Adapter, Sitzung, Panel, gemeinsamer Ablauf) und
+  `beendenAblauf` (`beendenAnfordern()`; nur bei `true`: `felderVerwerfen()`, dann `prozessEnde`). `bauen` nimmt
+  `Dialoge` statt `Supplier<Component>` (Plan: nur beschrieben, keine Signatur), damit der Test ohne Bildschirm eine
+  Attrappe einsetzen kann; im Programm ist es `SwingDialoge` mit dem Fenster als Eltern.
+- Prozessende: `System.exit(0)` nach `dispose()` (steht nicht auf der Verbotsliste des Quelltext-Wächters; die
+  Wächtertests blieben unverändert, auch die Ausnahme für `System.err` mit genau einer Stelle). Ein Shutdown-Hook
+  (`Runtime.getRuntime`) wurde **nicht** eingebaut (steht auf der Verbotsliste, und die Vormerkung war „optional“).
+- `Toolkit.getDefaultToolkit().getSystemClipboard()` steht im gesamten Produktivcode genau einmal
+  (`SkillShieldApp.systemZwischenablage`); Test zählt über alle Module.
+- Scheitert das Öffnen des Fensters mit einer Ausnahme, zeigt der zentrale Handler den festen Text (Klassenname, nie
+  die Meldung) und der Prozess endet mit Code 1, statt unsichtbar weiterzulaufen.
+
+### Startbare JAR (OF-1, Kap. 6)
+
+- `skillshield-app/pom.xml`: `finalName` `skillshield`; Shade (Phase `package`) mit `Main-Class`, `Multi-Release: true`,
+  Filtern für `META-INF/*.SF|DSA|RSA`, `module-info.class` und `META-INF/versions/*/module-info.class`.
+  **Abweichung (Kap. 6 nannte `ApacheLicenseResourceTransformer` und `ApacheNoticeResourceTransformer`):** Beide
+  entfallen. Der Lizenz-Transformer **verwirft** jede `META-INF/LICENSE` (im ersten Bau fehlte die Lizenz von FlatLaf in
+  der JAR, `StartbareJarIT` prüft sie jetzt), der Notice-Transformer erzeugte ohne NOTICE-Quelle eine leere Datei;
+  FlatLaf 3.6.1 liefert nur `META-INF/LICENSE`, die ohne Transformer unverändert in die JAR kommt.
+  **Abweichung (zusätzlich zum Plan):**
+  `com/formdev/flatlaf/natives/**` wird nicht eingepackt; FlatLaf läuft ohne native Bibliothek, und ohne die Dateien kann
+  nichts entpackt werden (AK-44 doppelt gesichert). Shade legt die dünne Fassung als `original-skillshield.jar` daneben.
+- `skillshield-app/src/main/start/SkillShield.cmd` (CRLF) wird vom maven-resources-plugin (Phase `package`) neben die JAR
+  kopiert. **Abweichung vom Plan** (`@start "" javaw -jar "%~dp0skillshield.jar"` als einzige Zeile): zusätzlich Prüfung
+  auf vorhandene JAR, auf `javaw.exe` im PATH und auf Java ab Version 21 mit verständlicher Meldung (Installationsbefehl)
+  und `pause`; bei zu altem Java nennt die Meldung die gefundene Version. Nur ASCII, keine Argumentweitergabe, keine
+  Umleitung in Dateien, kein Netz. Ob die Version unter einer fremden Java-Ausgabe (andere Sprache, Hersteller-Zusatz)
+  richtig erkannt wird, ist nur am Gerät prüfbar (S-1).
+  **Härtung (Durchlauf 2, CWE-427):** `NoDefaultCurrentDirectoryInExePath=1` direkt nach `setlocal` (cmd sucht nicht im
+  aktuellen Ordner); `where.exe` wird mit vollem Pfad
+  (`%SystemRoot%\System32`) und `$PATH:javaw.exe` gerufen (nur PATH, nie der aktuelle Ordner).
+  **Durchlauf 3:** Es werden **alle** Fundstellen in PATH-Reihenfolge geprüft (Unterroutine `:pruefe`; der Pfad geht über
+  die Variable `KANDIDAT`, nicht als `call`-Argument, weil `call` `%` und `^` ein zweites Mal auswertet). Je Fundstelle
+  wird die Version mit der `java.exe` **aus demselben Ordner** ermittelt (Ausgabe über `for /f` mit `tokens=2,3`, Zeile
+  „… version "21.x" …“; ohne `findstr`, daher kein Aufruf eines Systemwerkzeugs ohne Pfad), die Hauptversion muss
+  nur aus Ziffern bestehen (sonst wird die Fundstelle übersprungen); genau die erste `javaw.exe` mit Hauptversion ab 21
+  wird mit vollem, in Anführungszeichen gesetztem Pfad gestartet. Ist keine dabei, meldet das Skript „zu alt“ mit der
+  zuletzt gefundenen Version, sonst „nicht gefunden“ (Grund: Auf einem Gerät stand ein JDK 17 vor Temurin 21 im PATH).
+  `setlocal DisableDelayedExpansion`; `_JAVA_OPTIONS`, `JAVA_TOOL_OPTIONS` und `JDK_JAVA_OPTIONS` werden geleert
+  (`_JAVA_OPTIONS` hebt Kommandozeilenoptionen auf, die beiden anderen könnten Agenten oder Abbilder hinzufügen). Die
+  heiklen Zeilen sind im Skript mit `rem` erklärt. Die Startzeile setzt `-XX:-UsePerfData` (kein `hsperfdata_<Benutzer>`
+  im Temp-Ordner), `-XX:+DisableAttachMechanism`, `-XX:ErrorFile=NUL` (kein `hs_err_pid*.log` im Startordner; mit einem
+  absichtlichen JVM-Absturz unter Windows belegt) und `-XX:-CreateCoredumpOnCrash` (kein Speicherabbild
+  `hs_err_pid*.mdmp`, das Windows Server standardmäßig in den Startordner schreibt; gemessen 357 MB mit Klartext-Markern).
+  Das Skript ist in einer Scratch-Kopie (Ordnername mit Leerzeichen, `&`, Klammern, `%`, `!`, `^`; Startzeile durch
+  `echo` ersetzt) für die Fälle „Java 21 gefunden“, „JDK 17 vor Temurin 21 im PATH“, „zu alt“ und „kein Java“ geprüft.
+  `SkillShield.cmd` selbst wurde nicht ausgeführt.
+- Wurzel-`pom.xml`: Eigenschaft und `pluginManagement`-Eintrag `maven-shade-plugin` 3.6.0 (fest gepinnt).
+
+### Nachweis in einer zweiten JVM (Plan: `SpurenfreiheitTest`)
+
+- **Abweichung:** Die Tests heißen `SpurenfreiheitIT` und `StartbareJarIT` und laufen in einem zweiten Surefire-Lauf
+  `jar-tests` (Phase `integration-test`, nach `package`), weil sie die fertige JAR brauchen. Der erste Lauf
+  (`default-test`) schließt `*IT` aus. Kein Failsafe (ein neues Plugin wäre unnötig). Wer `-Dtest=...` angibt, überstimmt
+  die Ein- und Ausschlüsse; wer die ITs ohne JAR startet, bekommt einen Fehler statt eines stillen Überspringens.
+- `SpurenfreiheitIT` startet die **gebaute JAR** (nicht den Klassenpfad des Tests) mit den Optionen der zweiten JVM
+  (`ZweiteJvm`: `-Djava.awt.headless=true -XX:-UsePerfData -XX:+DisableAttachMechanism -XX:ErrorFile=NUL` (nur unter
+  Windows, NUL gibt es sonst nicht) `-XX:-CreateCoredumpOnCrash`; zusätzlich `TEMP`, `TMP` und `USERPROFILE` der
+  zweiten JVM auf die leeren Ordner, damit ein Rückfall bei `-XX:-UsePerfData` auffällt, weil `hsperfdata` dem
+  Temp-Ordner folgt), leeren Arbeits-, Temp- und Home-Verzeichnissen: Code 2, Standardausgabe leer, Standardfehler genau
+  der feste Text, alle drei Verzeichnisse danach leer. Zweiter Fall: `SitzungsProbe` (Testklasse) mit JAR + Testklassen:
+  Oberfläche wie im Start eingerichtet, vollständige Sitzung mit Marker (Scan, Kopieren, Rückübersetzen, Beenden über den
+  gemeinsamen Ablauf mit Leeren der Zwischenablage) und erzwungenen Fehlern im Hintergrund-Thread und auf dem
+  Ereignis-Thread über den zentralen Handler: Code 0, Standardausgabe und -fehler leer, keine Spuren.
+- Der Prozessstart steckt gekapselt in der Testklasse `ZweiteJvm` (nur Testcode; der Wächter prüft `src/main`).
+- `StartbareJarIT`: Manifest, enthaltene Gruppen, Lizenz (`META-INF/LICENSE` von FlatLaf), keine doppelten Einträge,
+  keine Testklassen, kein JUnit, kein `SynthetischeKvNummern`, keine Signaturen, keine `module-info`, keine Natives;
+  `SkillShield.cmd` liegt neben der JAR, die Startzeile enthält die JVM-Optionen, `NoDefaultCurrentDirectoryInExePath`
+  ist gesetzt, `DisableDelayedExpansion` ist gesetzt, die drei JVM-Umgebungsvariablen werden geleert, es gibt keinen
+  Aufruf von `where`, `findstr`, `java` oder `javaw` ohne vollen Pfad und keine Argumentweitergabe; die Zeilenenden
+  sind durchgehend CRLF (jedes LF hat ein CR davor, kein einzelnes CR). Der Selbsttest der Spurensuche prüft Arbeits-, Temp- und Home-Ordner (auch verschachtelt, mit
+  vereinheitlichten Trennzeichen unter Windows).
+- Fehlerpfad „Fenster lässt sich nicht öffnen“: `SkillShieldApp.fensterGeschuetztOeffnen(Runnable, IntConsumer)` kapselt
+  den Fenster-Schritt; `System.exit` steht nur noch in `prozessBeendenMit` (Code 0 beim Beenden, 1 hier, 2 ohne
+  Bildschirm über `main`). Der Test ersetzt Schritt und Prozessende und prüft fester Text, kein Marker, Code 1.
+  `flatlaf.useNativeLibrary` wird nur noch in `starte` gesetzt (vor dem ersten Laden von FlatLaf).
+- Ohne Bildschirm nicht belegbar und im Standardlauf **übersprungen** (nicht bestanden): `HauptFensterTest` (Titel,
+  Größen, Schließverhalten, Fenster nie sichtbar); mit `-Dui.headless=false` aktivierbar.
+
+### Restgrenzen
+
+- Das Prozessende nach dem Beenden und das echte Fenster mit FlatLaf unter Windows sind nur in der Sichtprüfung belegt
+  (`sichtpruefung.md`, S-1, S-10). Der Prozess endet im Headless-Nachweis über `System.exit` der Probe, nicht über ein
+  echtes Fenster.
+- Ein Absturz der Anzeige beim Melden eines Fehlers wird still verworfen (Handler), also ohne sichtbare Meldung.
+- Außerhalb des Programms (README, Grenzen): vom Administrator eingerichtete Windows-Fehlerberichterstattung
+  (WER-LocalDumps), Auslagerungsdatei, Ruhezustandsdatei `hiberfil.sys` und, ohne die JVM-Optionen des Startskripts,
+  `hs_err_pid*.log`, `hs_err_pid*.mdmp` und `hsperfdata_<Benutzer>`.
+- `original-skillshield.jar` ist nur nach `mvn clean verify` die unveränderte Fassung des aktuellen Builds; für die
+  Weitergabe ist `mvn clean verify` zu nehmen (README).
+- Kein Shutdown-Hook: Abmelden, Herunterfahren und Task-Manager umgehen das Leeren der Zwischenablage (README, G-5/G-8).
+- Die Rückfrage-Texte der JVM bei zu altem Java (vor dem Start) sind englisch und nicht abfangbar (OF-4).
+- `original-skillshield.jar` liegt neben `skillshield.jar` im Zielordner und gehört nicht zur Weitergabe.
+- A-6 bleibt unverändert: Die dokumentierten OWASP-Aufrufe nutzen `package -DskipTests`; Shade ist ein Build-Plugin und wird
+  vom OWASP-Check nicht erfasst (bekannte Grenze, README).
