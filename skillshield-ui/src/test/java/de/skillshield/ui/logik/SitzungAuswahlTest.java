@@ -70,6 +70,8 @@ class SitzungAuswahlTest {
         assertEquals("[[EMAIL_2]]", zeilen.get(1).platzhalter());
         assertEquals("[[EMAIL_1]]", zeilen.get(2).platzhalter());
         assertEquals(sitzung.textFuerKi(), ausZeilen(DREI_MAILS, zeilen));
+        assertEquals(Texte.ZUORDNUNG_ERST_NACH_KOPIEREN, sitzung.statusleiste().zuordnung());
+        sitzung.fuerKiKopieren();
         assertEquals("Zuordnung: 2 Platzhalter (nur im Arbeitsspeicher)", sitzung.statusleiste().zuordnung());
     }
 
@@ -122,8 +124,7 @@ class SitzungAuswahlTest {
 
             assertEquals(erwartet.text(), sitzung.textFuerKi(), "Maske " + maske);
             assertEquals(ausZeilen(ALLE_STUFEN, sitzung.zeilen()), sitzung.textFuerKi(), "Maske " + maske);
-            assertEquals("Zuordnung: " + erwartet.mapping().size() + " Platzhalter (nur im Arbeitsspeicher)",
-                    sitzung.statusleiste().zuordnung(), "Maske " + maske);
+            assertEquals(Texte.ZUORDNUNG_ERST_NACH_KOPIEREN, sitzung.statusleiste().zuordnung(), "Maske " + maske);
         }
     }
 
@@ -154,7 +155,7 @@ class SitzungAuswahlTest {
         assertEquals(ALLE_STUFEN, sitzung.textFuerKi());
         assertEquals("4 Funde, 0 angewählt, 1 fraglich. 4 Funde werden nicht ersetzt.",
                 sitzung.statusleiste().meldung());
-        assertEquals("Zuordnung: 0 Platzhalter (nur im Arbeitsspeicher)", sitzung.statusleiste().zuordnung());
+        assertEquals(Texte.ZUORDNUNG_ERST_NACH_KOPIEREN, sitzung.statusleiste().zuordnung());
         assertTrue(sitzung.bedienzustand().istAktiv(Funktion.FUER_KI_KOPIEREN));
         assertTrue(sitzung.bedienzustand().istAktiv(Funktion.ALLE_ANWAEHLEN));
     }
@@ -229,6 +230,7 @@ class SitzungAuswahlTest {
         String platzhalter = sitzung.zeilen().get(0).platzhalter();
         assertTrue(sitzung.textFuerKi().contains(platzhalter));
         // Der Kern schuetzt den Literaltext zusaetzlich (TEXT-Platzhalter); die Zuordnung hat daher zwei Eintraege.
+        sitzung.fuerKiKopieren();
         assertEquals("Zuordnung: 2 Platzhalter (nur im Arbeitsspeicher)", sitzung.statusleiste().zuordnung());
     }
 

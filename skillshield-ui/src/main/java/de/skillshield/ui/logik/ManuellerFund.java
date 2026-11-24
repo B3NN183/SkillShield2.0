@@ -15,15 +15,17 @@ import java.util.Objects;
  * <p>Regeln: Ein Surrogatpaar am Rand der Markierung wird ganz einbezogen; eine leere oder nur aus Leerraum
  * bestehende Markierung wird abgelehnt. Schneidet die markierte Stelle bestehende Funde (auch abgewählte), ersetzt
  * ein einziger neuer Fund die Vereinigung aller beteiligten Bereiche. Jedes weitere zeichengleiche Vorkommen
- * (von links nach rechts, nicht überlappend, ohne Wortgrenzen) wird so behandelt: (a) schneidet es keinen Fund,
- * wird es ein neuer Fund; (b) liegt es vollständig in angewählten Funden, ist es schon geschützt und nichts ändert
- * sich; (c) sonst (es schneidet einen abgewählten Fund oder ragt aus einem angewählten heraus) entsteht ein neuer
- * Fund über die Vereinigung aus dem Vorkommen und allen Funden, die es schneidet. Neue Funde der Fälle (c) und der
- * markierten Stelle, die sich berühren oder überlappen, werden zu einem verschmolzen. Danach steht kein Vorkommen
- * der markierten Zeichenfolge mehr ganz oder teilweise im Klartext. Alle neuen Funde haben den Typ {@code TEXT},
- * Konfidenz 1,0 und sind angewählt; die übrigen Zeilen behalten ihren Auswahlzustand. Die Ergebnisliste ist nach
- * Start sortiert und überlappungsfrei, sofern der Bestand es war (so liefert ihn der Kern). Der Aufwand ist linear
- * in Text und Fundzahl.
+ * (von links nach rechts, auch sich mit früheren Vorkommen überlappende, ohne Wortgrenzen) wird so behandelt:
+ * (a) schneidet es keinen Fund, wird es ein neuer Fund; (b) liegt es vollständig in angewählten Funden, ist es
+ * schon geschützt und nichts ändert sich; (c) sonst (es schneidet einen abgewählten Fund oder ragt aus einem
+ * angewählten heraus) entsteht ein neuer Fund über die Vereinigung aus dem Vorkommen und allen Funden, die es
+ * schneidet. Neue Funde der Fälle (c) und der markierten Stelle, die sich berühren oder überlappen, werden zu einem
+ * verschmolzen. Danach steht kein Vorkommen der markierten Zeichenfolge mehr ganz oder teilweise im Klartext. Alle
+ * neuen Funde haben den Typ {@code TEXT}, Konfidenz 1,0 und sind angewählt; die übrigen Zeilen behalten ihren
+ * Auswahlzustand. Die Ergebnisliste ist nach Start sortiert und überlappungsfrei, sofern der Bestand es war (so
+ * liefert ihn der Kern). Der Aufwand ist linear in Text und Fundzahl (Suche nach Knuth-Morris-Pratt). Zählweise:
+ * Jedes Vorkommen, auch ein überlappendes, das neuen Schutz bringt (Fall a oder c), zählt als eigene Stelle; ein
+ * vollständig geschütztes (Fall b) zählt als bereits geschützt.
  *
  * <p>Kein Klartext in Ausnahmen: Geprüft werden nur Zahlen.
  */
@@ -157,7 +159,8 @@ final class ManuellerFund {
         int zeiger = 0;
         int stellen = 1;
         int geschuetzt = 0;
-        int treffer = text.indexOf(wert);
+        Suche suche = new Suche(text, wert);
+        int treffer = suche.naechster();
         while (treffer >= 0) {
             int trefferEnde = treffer + wert.length();
             if (treffer != von && !trenntPaar(text, treffer, trefferEnde)) {
@@ -205,7 +208,7 @@ final class ManuellerFund {
                     stellen++;
                 }
             }
-            treffer = text.indexOf(wert, trefferEnde);
+            treffer = suche.naechster();
         }
         aus.addAll(stand.subList(zeiger, stand.size()));
 
@@ -219,6 +222,61 @@ final class ManuellerFund {
             }
         }
         return new Ergebnis(alle, stellen, geschuetzt, ersetzt, false);
+    }
+
+    /**
+     * Sucht alle Vorkommen eines Wertes im Text von links nach rechts, auch sich überlappende (Knuth-Morris-Pratt).
+     * Der Aufwand ist linear in Text- plus Wertlänge, unabhängig davon, wie viele Vorkommen sich überlappen; ein
+     * wiederholtes {@code String.indexOf} ab {@code treffer + 1} wäre bei langen, periodischen Werten quadratisch.
+     */
+    private static final class Suche {
+        private final String text;
+        private final String wert;
+        /** {@code rueckfall[i]}: Länge des längsten echten Präfixes von {@code wert[0..i]}, der zugleich Suffix ist. */
+        private final int[] rueckfall;
+        private int position;
+        private int uebereinstimmung;
+
+        Suche(String text, String wert) {
+            this.text = text;
+            this.wert = wert;
+            this.rueckfall = new int[wert.length()];
+            int k = 0;
+            for (int i = 1; i < wert.length(); i++) {
+                while (k > 0 && wert.charAt(i) != wert.charAt(k)) {
+                    k = rueckfall[k - 1];
+                }
+                if (wert.charAt(i) == wert.charAt(k)) {
+                    k++;
+                }
+                rueckfall[i] = k;
+            }
+        }
+
+        /** Beginn des nächsten Vorkommens (jeweils größer als beim vorigen) oder -1. */
+        int naechster() {
+            while (position < text.length()) {
+                char c = text.charAt(position);
+                while (uebereinstimmung > 0 && wert.charAt(uebereinstimmung) != c) {
+                    uebereinstimmung = rueckfall[uebereinstimmung - 1];
+                }
+                if (wert.charAt(uebereinstimmung) == c) {
+                    uebereinstimmung++;
+                }
+                position++;
+                if (uebereinstimmung == wert.length()) {
+                    uebereinstimmung = rueckfall[uebereinstimmung - 1];
+                    return position - wert.length();
+                }
+            }
+            return -1;
+        }
+
+        /** Nur Zahlen, nie Text. */
+        @Override
+        public String toString() {
+            return "Suche[position=" + position + ", wert=" + wert.length() + "]";
+        }
     }
 
     /**

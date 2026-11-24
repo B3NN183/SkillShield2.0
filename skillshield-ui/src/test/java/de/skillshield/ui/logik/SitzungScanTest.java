@@ -181,7 +181,7 @@ class SitzungScanTest {
         scannen(sitzung, ALLE_STUFEN);
 
         assertEquals("4 Funde, 4 angewählt, 1 fraglich.", sitzung.statusleiste().meldung());
-        assertEquals("Zuordnung: 4 Platzhalter (nur im Arbeitsspeicher)", sitzung.statusleiste().zuordnung());
+        assertEquals(Texte.ZUORDNUNG_ERST_NACH_KOPIEREN, sitzung.statusleiste().zuordnung());
     }
 
     @Test
@@ -273,6 +273,8 @@ class SitzungScanTest {
         assertEquals(List.of(Rueckfrage.NEUER_SCAN), dialoge.fragen);
         assertEquals(ScanZustand.GUELTIG, sitzung.scanZustand());
         assertEquals(1, sitzung.zeilen().size());
+        assertEquals(Texte.ZUORDNUNG_ERST_NACH_KOPIEREN, sitzung.statusleiste().zuordnung());
+        sitzung.fuerKiKopieren();
         assertEquals("Zuordnung: 1 Platzhalter (nur im Arbeitsspeicher)", sitzung.statusleiste().zuordnung());
     }
 
@@ -319,7 +321,7 @@ class SitzungScanTest {
         assertFalse(b.istAktiv(Funktion.ALLE_ANWAEHLEN));
         assertEquals(Texte.KEINE_FUNDE, b.sperrgrund().get(Funktion.ALLE_ANWAEHLEN));
         assertEquals("0 Funde, 0 angewählt, 0 fraglich.", sitzung.statusleiste().meldung());
-        assertEquals("Zuordnung: 0 Platzhalter (nur im Arbeitsspeicher)", sitzung.statusleiste().zuordnung());
+        assertEquals(Texte.ZUORDNUNG_ERST_NACH_KOPIEREN, sitzung.statusleiste().zuordnung());
     }
 
     @Test
@@ -356,8 +358,10 @@ class SitzungScanTest {
         scannen(sitzung, "nur " + MARKER);
 
         assertEquals(List.of(Rueckfrage.NEUER_SCAN), dialoge.fragen);
-        assertEquals("Zuordnung: 1 Platzhalter (nur im Arbeitsspeicher)", sitzung.statusleiste().zuordnung());
+        assertEquals(Texte.ZUORDNUNG_ERST_NACH_KOPIEREN, sitzung.statusleiste().zuordnung());
         assertEquals("nur [[EMAIL_1]]", sitzung.textFuerKi());
+        sitzung.fuerKiKopieren();
+        assertEquals("Zuordnung: 1 Platzhalter (nur im Arbeitsspeicher)", sitzung.statusleiste().zuordnung());
     }
 
     // ---------------------------------------------------------------- Fehler (AK-30/AK-50, A-5)
@@ -598,6 +602,8 @@ class SitzungScanTest {
     void zuordnungsanzeigeFolgtDemScanUndBleibtBeiAenderungDerEingabe() {
         assertEquals("Keine Zuordnung", sitzung.statusleiste().zuordnung());
         scannen(sitzung, "Mail " + MARKER);
+        assertEquals(Texte.ZUORDNUNG_ERST_NACH_KOPIEREN, sitzung.statusleiste().zuordnung());
+        sitzung.fuerKiKopieren();
         assertEquals("Zuordnung: 1 Platzhalter (nur im Arbeitsspeicher)", sitzung.statusleiste().zuordnung());
         sitzung.eingabeGeaendert();
         assertEquals("Zuordnung: 1 Platzhalter (nur im Arbeitsspeicher)", sitzung.statusleiste().zuordnung());

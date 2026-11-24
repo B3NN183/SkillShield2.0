@@ -122,6 +122,7 @@ class ManuellerFundTest {
         assertEquals(kern.text(), sitzung.textFuerKi());
         assertFalse(sitzung.textFuerKi().contains("Mustermann"));
         assertEquals(zeilen.get(0).platzhalter(), kern.text().substring(0, zeilen.get(0).platzhalter().length()));
+        sitzung.fuerKiKopieren();
         assertEquals("Zuordnung: 2 Platzhalter (nur im Arbeitsspeicher)", sitzung.statusleiste().zuordnung());
     }
 
@@ -147,7 +148,7 @@ class ManuellerFundTest {
     }
 
     @Test
-    void vorkommenWerdenZeichengenauOhneWortgrenzenUndNichtUeberlappendGesucht() {
+    void vorkommenWerdenZeichengenauOhneWortgrenzenGesuchtAuchUeberlappende() {
         String text = "Meyer Meyerhof meyer aaaa";
 
         ManuellerFund.Ergebnis meyer = hinzu(text, List.of(), "Meyer");
@@ -155,9 +156,12 @@ class ManuellerFundTest {
 
         ManuellerFund.Ergebnis aa = ManuellerFund.hinzufuegen(text, List.of(), text.indexOf("aaaa"),
                 text.indexOf("aaaa") + 2);
-        // "aa" in "aaaa": zwei nicht ueberlappende Treffer (der erste ist die Markierung selbst)
-        assertEquals(2, aa.hinzugefuegt());
+        // "aa" in "aaaa", Markierung die ersten beiden Zeichen: die Vorkommen 1 und 2 (ueberlappend) ergeben mit der
+        // Markierung einen Fund ueber alles; jedes Vorkommen, das neuen Schutz bringt, zaehlt als Stelle.
+        assertEquals(3, aa.hinzugefuegt());
         assertEquals(0, aa.bereitsGeschuetzt());
+        assertEquals(1, aa.zeilen().size());
+        assertEquals("aaaa", aa.zeilen().get(0).fund().originalValue());
     }
 
     @Test
@@ -235,7 +239,7 @@ class ManuellerFundTest {
         assertEquals("mustermann@example.org Ende", ergebnis.zeilen().get(0).fund().originalValue());
     }
 
-    // ---------------------------------------------------------------- AK-25: weitere Vorkommen ueberspringen
+    // ---------------------------------------------------------------- AK-25: weitere Vorkommen und bestehende Funde
 
     @Test
     void einVorkommenGanzInEinemAngewaehltenFundIstBereitsGeschuetztUndDerFundBleibtUnveraendert() {
@@ -305,13 +309,113 @@ class ManuellerFundTest {
                 Arrays.fill(gedeckt, zeile.fund().start(), zeile.fund().end(), true);
             }
         }
+        // alle Vorkommen, auch sich ueberlappende
         int treffer = text.indexOf(markiert);
         while (treffer >= 0) {
             for (int p = treffer; p < treffer + markiert.length(); p++) {
                 assertTrue(gedeckt[p], "Zeichen " + p + " ungeschuetzt");
             }
-            treffer = text.indexOf(markiert, treffer + markiert.length());
+            treffer = text.indexOf(markiert, treffer + 1);
         }
+    }
+
+    // ---------------------------------------------------------------- Nachtrag 2 zu T-3: ueberlappende Vorkommen
+
+    @Test
+    void einUeberlappendesVorkommenBleibtNichtAlsRandBruchstueckLesbar_ababa() {
+        String text = "ababa";
+
+        ManuellerFund.Ergebnis ergebnis = ManuellerFund.hinzufuegen(text, List.of(), 0, 3);
+
+        assertEquals(1, ergebnis.zeilen().size());
+        assertEquals("ababa", ergebnis.zeilen().get(0).fund().originalValue());
+        assertEquals(2, ergebnis.hinzugefuegt(), "Markierung und ueberlappendes Vorkommen zaehlen je als Stelle");
+        assertEquals(0, ergebnis.bereitsGeschuetzt());
+        pruefeKeinVorkommenImKlartext(text, ergebnis.zeilen(), "aba");
+        pruefeGueltigUndRoundtrip(text, ergebnis.zeilen());
+        Sitzung sitzung = gescannt(text);
+        sitzung.markierungHinzufuegen(0, 3);
+        assertEquals("[[TEXT_1]]", sitzung.textFuerKi());
+    }
+
+    @Test
+    void einUeberlappendesVorkommenNachDerMarkierungWirdGeschuetzt_AnnaAnanas() {
+        String text = "Anna ananas";
+        int ana = text.indexOf("ana");
+        assertEquals(5, ana, "Vorbedingung");
+
+        ManuellerFund.Ergebnis ergebnis = ManuellerFund.hinzufuegen(text, List.of(), ana, ana + 3);
+
+        // "ana" steht bei 5 (Markierung) und bei 7 (ueberlappend, "ananas"); "Anna" hat grosses A und "nna".
+        assertEquals(List.of("anana"), ergebnis.zeilen().stream().map(z -> z.fund().originalValue()).toList());
+        assertEquals(2, ergebnis.hinzugefuegt());
+        assertFalse(textMit(text, ergebnis).contains("nas"), "kein Rand-Bruchstueck der Wiederholung im Klartext");
+        pruefeKeinVorkommenImKlartext(text, ergebnis.zeilen(), "ana");
+        pruefeGueltigUndRoundtrip(text, ergebnis.zeilen());
+    }
+
+    @Test
+    void dreiGleicheZeichenMitZweiMarkiertenErgebenEinenFundUeberAlles_aaa() {
+        String text = "aaa";
+
+        ManuellerFund.Ergebnis ergebnis = ManuellerFund.hinzufuegen(text, List.of(), 0, 2);
+
+        assertEquals(1, ergebnis.zeilen().size());
+        assertEquals("aaa", ergebnis.zeilen().get(0).fund().originalValue());
+        assertEquals(2, ergebnis.hinzugefuegt());
+        pruefeGueltigUndRoundtrip(text, ergebnis.zeilen());
+    }
+
+    @Test
+    void einUeberlappendesVorkommenDasEinenAbgewaehltenFundSchneidetWirdVereinigt() {
+        String text = "xababa abab";
+        Finding abgewaehlt = automatisch(FindingType.EMAIL, text, "ba ab");
+        List<FundZeile> bestand = zeilen(false, abgewaehlt);
+
+        ManuellerFund.Ergebnis ergebnis = ManuellerFund.hinzufuegen(text, bestand, 1, 4);
+
+        pruefeKeinVorkommenImKlartext(text, ergebnis.zeilen(), "aba");
+        pruefeGueltigUndRoundtrip(text, ergebnis.zeilen());
+        assertTrue(ergebnis.zeilen().stream().allMatch(FundZeile::angewaehlt));
+    }
+
+    @Test
+    void einUeberlappendesVorkommenInEinemAngewaehltenFundIstBereitsGeschuetzt() {
+        String text = "abababX";
+        Finding fund = automatisch(FindingType.EMAIL, text, "babX");
+
+        // Markierung [0,3); das Vorkommen [2,5) liegt vollstaendig in der Markierung und dem angewaehlten Fund [3,7).
+        ManuellerFund.Ergebnis ergebnis = ManuellerFund.hinzufuegen(text, zeilen(true, fund), 0, 3);
+
+        assertEquals(1, ergebnis.hinzugefuegt());
+        assertEquals(1, ergebnis.bereitsGeschuetzt());
+        assertEquals(0, ergebnis.ersetzt());
+        assertEquals(2, ergebnis.zeilen().size());
+        assertSame(fund, ergebnis.zeilen().get(1).fund());
+        pruefeKeinVorkommenImKlartext(text, ergebnis.zeilen(), "aba");
+        pruefeGueltigUndRoundtrip(text, ergebnis.zeilen());
+    }
+
+    @Test
+    void ueberlappendeVorkommenInEinerMillionZeichenBleibenLinear() {
+        String text = "a".repeat(1_000_000);
+
+        long beginn = System.nanoTime();
+        ManuellerFund.Ergebnis lang = ManuellerFund.hinzufuegen(text, List.of(), 400_000, 400_000 + 500_000);
+        ManuellerFund.Ergebnis kurz = ManuellerFund.hinzufuegen(text, List.of(), 10, 12);
+        long dauerMs = (System.nanoTime() - beginn) / 1_000_000;
+
+        assertTrue(dauerMs < 5_000, "Dauer in ms: " + dauerMs);
+        assertEquals(1, lang.zeilen().size());
+        assertEquals(text.length(), lang.zeilen().get(0).fund().end());
+        assertEquals(1, kurz.zeilen().size());
+        assertEquals(0, kurz.zeilen().get(0).fund().start());
+        assertEquals(text.length(), kurz.zeilen().get(0).fund().end());
+    }
+
+    private static String textMit(String text, ManuellerFund.Ergebnis ergebnis) {
+        List<Finding> funde = ergebnis.zeilen().stream().map(FundZeile::fund).toList();
+        return new Pseudonymizer().pseudonymize(text, funde).text();
     }
 
     @Test
@@ -702,9 +806,10 @@ class ManuellerFundTest {
     void dieZuordnungFolgtDemManuellenFundUndDieStatusleisteBleibtOhneKlartext() {
         String text = "Beispielname schreibt an Beispielname";
         Sitzung sitzung = gescannt(text);
-        assertEquals("Zuordnung: 0 Platzhalter (nur im Arbeitsspeicher)", sitzung.statusleiste().zuordnung());
+        assertEquals(Texte.ZUORDNUNG_ERST_NACH_KOPIEREN, sitzung.statusleiste().zuordnung());
 
         sitzung.markierungHinzufuegen(0, 12);
+        sitzung.fuerKiKopieren();
 
         assertEquals("Zuordnung: 1 Platzhalter (nur im Arbeitsspeicher)", sitzung.statusleiste().zuordnung());
         assertFalse(sitzung.statusleiste().toString().contains("Beispielname"));

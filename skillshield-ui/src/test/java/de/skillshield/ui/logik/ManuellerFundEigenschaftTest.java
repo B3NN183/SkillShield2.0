@@ -93,8 +93,8 @@ class ManuellerFundEigenschaftTest {
     }
 
     /**
-     * Nach dem Hinzufuegen liegt jedes Vorkommen der markierten Zeichenfolge (nicht ueberlappende Suche von links,
-     * ohne Treffer, die ein Surrogatpaar trennen) vollstaendig in angewaehlten Funden. Die Pruefung geht ueber
+     * Nach dem Hinzufuegen liegt jedes Vorkommen der markierten Zeichenfolge (auch sich ueberlappende; ohne
+     * Treffer, die ein Surrogatpaar trennen) vollstaendig in angewaehlten Funden. Die Pruefung geht ueber
      * Positionen im Originaltext und kann deshalb nicht an Platzhaltertexten scheitern.
      */
     private static void pruefeAlleVorkommenGeschuetzt(String text, int start, int ende, boolean[] gedeckt) {
@@ -118,7 +118,8 @@ class ManuellerFundEigenschaftTest {
                     assertTrue(gedeckt[p], "Vorkommen an " + treffer + " steht im Klartext");
                 }
             }
-            treffer = text.indexOf(wert, trefferEnde);
+            // ab treffer + 1: auch sich ueberlappende Vorkommen (Nachtrag 2 zu T-3)
+            treffer = text.indexOf(wert, treffer + 1);
         }
     }
 

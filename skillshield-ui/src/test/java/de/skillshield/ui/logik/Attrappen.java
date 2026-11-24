@@ -43,24 +43,46 @@ final class Attrappen {
         }
     }
 
-    /** Zwischenablage, die jeden Zugriff zaehlt. */
+    /**
+     * Zwischenablage-Attrappe im Arbeitsspeicher: zaehlt jeden Zugriff, merkt sich den Inhalt und jeden abgelegten
+     * Text; gesperrt: nichts wird angenommen, gelesen oder geleert. Nie die Systemzwischenablage.
+     */
     static final class TestZwischenablage implements Zwischenablage {
         int zugriffe;
+        int leerAufrufe;
+        boolean gesperrt;
+        /** Wie die echte AWT bei gesperrter Ablage: Lesen und Ablegen klappen, nur das Leeren scheitert. */
+        boolean nurLeerenGesperrt;
+        /** Aktueller Inhalt; {@code null}, wenn leer. */
+        String inhalt;
+        final List<String> gesetzt = new ArrayList<>();
 
         @Override
-        public void setzeText(String text) {
+        public boolean setzeText(String text) {
             zugriffe++;
+            if (gesperrt) {
+                return false;
+            }
+            gesetzt.add(text);
+            inhalt = text;
+            return true;
         }
 
         @Override
         public Optional<String> leseText() {
             zugriffe++;
-            return Optional.empty();
+            return gesperrt ? Optional.empty() : Optional.ofNullable(inhalt);
         }
 
         @Override
-        public void leeren() {
+        public boolean leeren() {
             zugriffe++;
+            leerAufrufe++;
+            if (gesperrt || nurLeerenGesperrt) {
+                return false;
+            }
+            inhalt = null;
+            return true;
         }
     }
 }

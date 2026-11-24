@@ -870,3 +870,202 @@ Zählung ("... 3 Funde, 3 angewählt, 0 fraglich."); die Struktur von `Statuslei
 Unicode-Normalform (NFC/NFD), andere Trennzeichen oder anderer Leerraum zählen nicht als weiteres Vorkommen. Wird
 ohne ein folgendes kombinierendes Zeichen markiert, bleibt dieses hinter dem Platzhalter stehen. Für den
 Anwendertext (README-Abschnitt in T-8) vormerken: Schreibvarianten eines Namens einzeln markieren.
+
+---
+
+## Nachtrag 2 zu T-3 (überlappende Vorkommen, Hinweis H-3 von security; vor T-4)
+
+Ergänzt den „Nachtrag zu T-3“ (der Text dort bleibt unverändert). Anlass: Bei nicht überlappender Suche blieb ein
+Vorkommen, das sich mit einem früheren Treffer überlappt, als Rand-Bruchstück lesbar (`ababa`, Markierung [0,3) →
+`[[TEXT_1]]ba`; `Anna ananas`, Markierung „ana“ [5,8) → `…[[TEXT_1]]nas`).
+
+- **Regel:** Die Suche der weiteren Vorkommen ist **überlappend**: Nach jedem Treffer wird ab `treffer + 1` weiter
+  gesucht. Ein Vorkommen, das sich mit einem früheren neuen Fund überlappt, wird wie Fall c behandelt (Vereinigung,
+  Verschmelzen mit den neuen Funden der markierten Stelle und des Falls c). Surrogat-Regel unverändert.
+- **Zusage jetzt für alle Vorkommen:** Nach dem Hinzufügen steht **kein** Vorkommen der markierten Zeichenfolge mehr
+  ganz oder teilweise im Klartext, auch kein sich überlappendes (`aaa` mit Markierung [0,2) ergibt einen Fund über alles).
+  Die Einschränkung „im Sinn der nicht überlappenden Suche“ im Nachtrag zu T-3 **entfällt**; ebenso der Satz, dass nur
+  das sich selbst überlappende Muster eine Sonderstellung habe.
+- **Zählweise der Meldung:** Jedes Vorkommen, auch ein überlappendes, das neuen Schutz bringt (Fall a oder c), zählt als
+  eigene „Stelle“ in `hinzugefuegt`, obwohl Verschmelzen die Funde zusammenfasst (`ababa`: „2 Stellen als Fund
+  hinzugefügt.“, ein Fund). Ein vollständig in angewählten Funden liegendes Vorkommen (Fall b) zählt als „bereits
+  geschützt“. `ersetzt` zählt unverändert nur bestehende (nicht neue) Funde. Die Meldung bleibt wahr: Jede gezählte
+  Stelle war vorher (ganz oder teilweise) ungeschützt.
+- **Umsetzung:** Suche nach Knuth-Morris-Pratt (linear in Text- plus Markierungslänge, auch bei langen periodischen
+  Markierungen; wiederholtes `indexOf` ab `treffer + 1` wäre dort quadratisch).
+- **Vormerken für T-6/T-8 (Hinweis H-3 von security, Anwendertext):** Das Hinzufügen kann abgewählte Funde zu einem
+  `TEXT`-Fund zusammenfassen (Fall c, auch bei der markierten Stelle). Wer diesen neuen Fund später wieder abwählt,
+  gibt den darin liegenden markierten Namen frei, nicht nur den früher abgewählten Bereich. Das gehört in den
+  Anwendertext (README und, soweit sinnvoll, Hinweis in der Oberfläche).
+
+---
+
+## Nachtrag zu T-4 (Umsetzungsstand, Schnittstellenänderung)
+
+- **`Zwischenablage.setzeText` liefert `boolean`** (Plan: `void`). Grund: Nimmt die Zwischenablage den Text nicht an
+  (von einem anderen Programm gesperrt), darf „Text für KI kopiert“ nicht gemeldet werden; sonst fügt der Anwender
+  den alten Inhalt der Zwischenablage (womöglich den Originaltext) bei der KI ein. Bei `false` zeigt `Sitzung`
+  Statusmeldung und Fehlerdialog mit dem festen Text `Texte.ZWISCHENABLAGE_NICHT_VERFUEGBAR`, merkt sich nichts und
+  friert die Zuordnung nicht ein. T-6 (`HauptPanel`) ruft nur die `Sitzung`-Methoden auf und ist nicht betroffen.
+- **`AwtZwischenablage`** liegt in `de.skillshield.ui.swing` (nicht in `logik`), bekommt die `Clipboard` von außen und
+  versucht Lesen, Ablegen und Leeren bei gesperrter Zwischenablage (`IllegalStateException`) bis zu dreimal im
+  Abstand von 50 ms (die Wartezeit ist durch ein paketinternes `Pause`-Objekt kapselbar); jede andere Ausnahme beendet
+  den Zugriff sofort, danach still aufgeben (G-8).
+- **Zwischenablage-Regel (D-6, AK-34)** steht in `Sitzung.eigenenZwischenablageInhaltLeeren()` (paketintern); T-5 ruft
+  sie bei Zurücksetzen und Beenden auf. Ist die Zwischenablage nicht lesbar oder enthält keinen Text, bleibt der
+  Vergleichstext für einen späteren Versuch erhalten; bei fremdem Inhalt oder nach dem Leeren wird er verworfen.
+- **Hinweis A-2 in der Statusleiste:** Weicht die Live-Zuordnung von der eingefrorenen ab, hängt die Meldung nach
+  Auswahländerung und manuellem Hinzufügen `Texte.AUSWAHL_NACH_KOPIEREN_GEAENDERT` an die Zählung an.
+
+---
+
+## Nachtrag 2 zu T-4 (Durchlauf 2 nach FAIL von reviewer und security)
+
+Ergänzt den „Nachtrag zu T-4“ (der Text dort bleibt unverändert). `anforderung.md` bleibt unverändert; S-2 weicht
+von AK-36/AK-37 ab (Entscheidung der Hauptsitzung, Richtung „keine still falschen Originalwerte“).
+
+### S-1 Zwischenablage nach gescheitertem Ablegen (`AwtZwischenablage`)
+
+- **Ursache:** `SunClipboard.setContents` trägt den neuen Inhalt Java-intern ein, bevor die native Zwischenablage
+  geöffnet wird. Bei gesperrter Zwischenablage fliegt `IllegalStateException`, der Inhalt bleibt aber Java-intern
+  stehen; `isDataFlavorAvailable`/`getData` liefern danach einen nie abgelegten Text.
+- **Umsetzung:** Je Ablegeversuch (Ablegen und Leeren) legt der Adapter einen eigenen `ClipboardOwner` an
+  (`lostOwnership`) und merkt den zuletzt **erfolgreich** abgelegten Text. Erfolg: Besitz = ja, Vertrauen
+  wiederhergestellt, Text gemerkt (beim Leeren: verworfen). Misserfolg: Zustand „nicht vertrauenswürdig“. In diesem
+  Zustand liest `leseText` die Zwischenablage **nicht**: Solange das Programm Besitzer ist, liefert es den gemerkten
+  Text, nach Besitzverlust leer („unbekannt“). Besitz und gemerkter Text werden verworfen, sobald `lostOwnership`
+  des **jüngsten** Versuchs eintrifft; verspätete Meldungen älterer Besitzer sind wirkungslos (Identitätsprüfung
+  unter `synchronized`; `lostOwnership` kommt über die Ereigniswarteschlange, also auf einem anderen Thread).
+- **Warum je Versuch ein Besitzer:** Bei einem gemeinsamen Besitzerobjekt würde eine verspätete Meldung nach einem
+  erneuten Ablegen den Besitz fälschlich beenden. Der Token des gescheiterten Versuchs ist bewusst der aktuelle: Seine
+  Meldung kommt nur bei echtem Verlust; die Meldung des davor erfolgreichen Besitzers (die die AWT auch bei einem
+  Fehlschlag auslöst) wird ignoriert.
+- **Schnittstelle `Zwischenablage`:** Keine Erweiterung nötig. „Kein Text“ und „unbekannt“ bleiben beide
+  `Optional.empty()`; für die Leeren-Regel heißt beides „nichts tun, Vergleichstext behalten“. Das Javadoc nennt das
+  jetzt ausdrücklich.
+- **Bleibende Grenze:** Zwischen einem fremden Kopieren und dem Eintreffen von `lostOwnership` liefert der Adapter im
+  Zustand „nicht vertrauenswürdig“ noch den gemerkten Text; die Leeren-Regel könnte in diesem Fenster (Millisekunden)
+  den fremden Inhalt leeren. Das Fenster besteht nur nach einem gescheiterten Ablegen.
+- **Tests:** `AwtZwischenablageTest` (Attrappe `SunNah` trägt den Inhalt vor dem scheiternden Ablegen ein: gemerkter
+  Text nach Fehlschlag, verspätete Meldungen, Besitzverlust, anderer Thread, Wiederherstellung des Vertrauens,
+  gescheitertes und erfolgreiches Leeren, kein Vorbesitz); `ZwischenablageMitAwtTest` (Folge Ergebnis kopieren,
+  gescheitertes „Für KI kopieren“, Leeren-Regel: Klartext wird geleert; bei Besitzverlust bleibt der fremde Inhalt).
+
+### S-2 „Zurückübersetzen“ nur nach „Für KI kopieren“ im aktuellen Scan
+
+- **Regel:** Die Funktion `ZURUECKUEBERSETZEN` ist nur aktiv, wenn im aktuellen Scan erfolgreich für die KI kopiert
+  wurde (eingefrorene Zuordnung), die Antwort nicht leer ist und kein Scan läuft. `zurueckuebersetzen` ist sonst ein
+  No-op (keine Meldung, kein Ergebnis, keine Änderung). Ein neuer Scan (`scanAbgeschlossen`) hebt das Einfrieren auf.
+  Eine Eingabeänderung (`VERALTET`) lässt die eingefrorene Zuordnung bestehen: Die Antwort zum kopierten Text bleibt
+  übersetzbar, bis neu gescannt wird.
+- **Sperrgründe (Reihenfolge):** Scan läuft: `Texte.SCAN_LAEUFT`; noch kein Scan: `Texte.ERST_SCANNEN`; nicht kopiert:
+  **„Erst den Text für die KI kopieren. Zurückübersetzt wird immer die Antwort zum zuletzt kopierten Text.“**
+  (`Texte.ERST_KOPIEREN`); Antwort leer: `Texte.ANTWORT_FEHLT`.
+- **Zuordnungsanzeige (Statusleiste rechts):** kein Scan: „Keine Zuordnung“ (unverändert); Scan, aber noch nicht
+  kopiert: **„Zuordnung: erst nach dem Kopieren für die KI“** (`Texte.ZUORDNUNG_ERST_NACH_KOPIEREN`); kopiert:
+  „Zuordnung: n Platzhalter (nur im Arbeitsspeicher)“ (n der eingefrorenen Zuordnung). Die Rückfrage vor einem neuen
+  Scan (`Rueckfrage.NEUER_SCAN`) hängt weiter an der (live folgenden oder eingefrorenen) Zuordnung mit mindestens
+  einem Platzhalter und ist unverändert.
+- **Bestehende Tests:** Wo ohne vorheriges Kopieren zurückübersetzt oder „Zuordnung: n …“ nach einem Scan erwartet
+  wurde, wird jetzt vorher kopiert bzw. die neue Anzeige erwartet; der Eigenschaftstest kopiert in jedem Lauf. Die
+  Aussagen (Kerngleichheit, Roundtrip, A-2) bleiben.
+- **Verbleibende Grenze:** Eine Antwort zu einem **früher** kopierten Text, die nach erneutem Kopieren
+  zurückübersetzt wird, kann nicht erkannt werden (gleiche Platzhalternamen). **Für T-8 (Anwendertext) vormerken:
+  „Antworten immer nur zum zuletzt kopierten Text zurückübersetzen.“**
+
+### S-3 Hinweis bei geänderten Platzhaltern
+
+- `Sitzung` merkt die zuletzt beim Kopieren eingefrorene Zuordnung auch über einen neuen Scan hinweg
+  (`zuletztKopierteZuordnung`, nur im Arbeitsspeicher). Beim erfolgreichen „Für KI kopieren“ hängt die Meldung
+  **„Achtung: Die Platzhalter haben sich gegenüber dem zuvor kopierten Text geändert. Antworten auf den früheren Text
+  nicht mehr zurückübersetzen.“** (`Texte.PLATZHALTER_GEAENDERT`) an, wenn ein Platzhalter der früheren Zuordnung in
+  der neuen fehlt oder dort für einen anderen Wert steht. Nur zusätzliche Platzhalter, identische Zuordnung, das
+  erste Kopieren überhaupt und gescheiterte Kopieren (Merkstand unverändert) lösen keinen Hinweis aus. Gilt auch beim
+  ersten Kopieren nach einem neuen Scan. **T-5 (Zurücksetzen):** `zuletztKopierteZuordnung` mit verwerfen (enthält
+  Originalwerte).
+
+### S-4 Länge der KI-Antwort
+
+- Eine Antwort über `Sitzung.MAX_ZEICHEN` (1.000.000, gleiche Zählung `String.length()` wie beim Scan) wird mit
+  **„Die Antwort ist zu lang (höchstens 1.000.000 Zeichen). Es wurde nicht zurückübersetzt.“**
+  (`Texte.antwortZuLang`) abgelehnt; nur die Statusmeldung ändert sich, Ergebnis und Zustand bleiben. Genau
+  1.000.000 Zeichen werden übersetzt.
+- **Für T-6 vormerken:** Die Liste „Nicht zurückübersetzt“ kann bis zu rund 125 000 Einträge haben (Platzhalter von
+  mindestens 8 Zeichen in einer Antwort von 1.000.000 Zeichen). Die Anzeige muss damit umgehen (Zeilen kürzen, mit
+  Zählhinweis „… und n weitere“).
+
+### S-5 Dokumentation (keine Codeänderung)
+
+Unter Windows entstehen aus dem einen `stringFlavor` mehrere native Textformate (UNICODE TEXT, TEXT, ggf. weitere)
+mit demselben Inhalt. Alles, was kopiert wird, auch das rückübersetzte Ergebnis im Klartext, kann im Windows-
+Zwischenablageverlauf und in der Cloud-Zwischenablage landen (G-5). **Für den Anwendertext in T-8 vormerken.** Ein
+Ausschlussformat für den Verlauf (`ExcludeClipboardContentFromMonitorProcessing`) bleibt ein mögliches späteres
+Härtungsthema; in diesem Feature nicht umgesetzt.
+
+### Reviewer-Mängel und Hinweise
+
+- **R-1:** Javadoc in `ManuellerFund` neu umbrochen (alle Zeilen ≤ 120).
+- **R-2:** Die Rückübersetzung ist über einen paketinternen Konstruktor von `Sitzung` austauschbar
+  (`BiFunction<String, PlaceholderMapping, ReidentificationResult>`; der öffentliche Konstruktor nutzt den
+  `Reidentifier` des Kerns). Der Fehlerzweig nutzt einen eigenen festen Text statt `Texte.FEHLER` („Es wurde nichts
+  kopiert.“ passte nicht): **„Beim Zurückübersetzen ist ein Fehler aufgetreten. Die Antwort wurde nicht
+  zurückübersetzt.“** (`Texte.RUECKUEBERSETZEN_FEHLGESCHLAGEN`) in der Statusleiste und, mit angehängtem Klassennamen
+  der Ausnahme, im Dialog (`Texte.rueckuebersetzenFehlerMeldung`). Getestet: Meldung, Dialog, kein Ausnahmetext,
+  Ergebnis, Zustand, Bedienzustand und Text für die KI unverändert.
+- **Zwischenablage-Regel ausgelagert:** `ZwischenablageRegel` (paketintern, `logik`) enthält Vergleichstext, Ablegen
+  ohne Meldungsanteil und die Leeren-Regel; `Sitzung.eigenenZwischenablageInhaltLeeren()` delegiert. Keine
+  Verhaltensänderung; die vorhandenen Regeltests laufen unverändert über `Sitzung`.
+- **Kommentar KMP:** `rueckfall[i]` in `ManuellerFund` erklärt. **Test:** `textKopieren` bei gesperrter
+  Zwischenablage (`SitzungKopierenTest`).
+- **Bekannte Ungenauigkeit (H-1 von security, keine Codeänderung):** Die Zählung „bereits geschützt“ kann ein
+  Vorkommen zählen, das erst durch diesen Aufruf ganz abgedeckt wurde. Der Schutz ist vollständig; nur die Zahl in der
+  Meldung kann um dieses Vorkommen abweichen.
+
+---
+
+## Nachtrag 3 zu T-4 (Durchlauf 3 nach FAIL von security)
+
+Ergänzt die Nachträge zu T-4 (deren Text bleibt unverändert).
+
+### S-1 Leeren der Zwischenablage darf nicht still scheitern
+
+- **Ursache:** `ZwischenablageRegel` verwarf den gemerkten Text nach `leeren()` immer. Mit der echten AWT fällt eine
+  Sperre beim Lesen nicht auf (solange das Programm Besitzer ist, wird aus dem Java-internen Stand gelesen); das
+  Leeren scheiterte dann unbemerkt, der Klartext blieb liegen.
+- **Umsetzung:** `Zwischenablage.leeren()` liefert `boolean` (Erfolg); `AwtZwischenablage` gibt das Ergebnis des
+  Ablegens des formatlosen `Transferable` zurück. `ZwischenablageRegel` verwirft den gemerkten Text nur nach
+  erfolgreichem Leeren oder bei nachweislich fremdem Inhalt; bei gescheitertem Leeren (und bei einer Ausnahme der
+  Zwischenablage) bleibt er für einen späteren Versuch erhalten.
+- **Tests:** `ZwischenablageMitAwtTest` (echte `AwtZwischenablage` auf `SunNah`): Ergebnis kopieren, Regel bei
+  gesperrter Ablage (Leeren versucht und gescheitert), Regel bei freier Ablage (leer), danach kein weiterer Zugriff;
+  dieselbe Folge nach gescheitertem „Für KI kopieren“. `ZwischenablageRegelTest`: Attrappe mit `nurLeerenGesperrt`
+  (Lesen klappt, Leeren scheitert); der Fall „gesperrt beim Lesen“ bleibt. `AwtZwischenablageTest`: Rückgabewert von
+  `leeren()`.
+
+### H-2 Rennlücke bei `lostOwnership`
+
+Je `Besitz` ein Flag `verloren`; `besitzer = true` und das Merken des Textes nur, wenn dieser Besitz nicht schon
+verloren ist. Test: `SunNah.sofortVerlust` löst `lostOwnership` synchron während `setContents` aus.
+
+### H-5 Misstrauen nach Besitzverlust aufheben
+
+Beim `lostOwnership` des jüngsten Versuchs wird das Misstrauen aufgehoben: Die AWT hat den internen Stand dann
+verworfen, `leseText()` liest wieder wirklich (T-6, Einfügen). S-1 aus Durchlauf 2 bleibt geschlossen: Der nie
+abgelegte Text steht dann nicht mehr im internen Stand (Test mit fremdem Bild: weiterhin leer; mit fremdem Text:
+dieser Text). Sicherheitshalber bleibt es beim Misstrauen (fail-closed), wenn der Verlust schon vor der Auswertung
+eines **gescheiterten** Ablegens eintrifft; dann bleibt `leseText()` leer bis zum nächsten erfolgreichen Ablegen.
+
+### Reviewer-Hinweis
+
+Klassenkommentar von `Sitzung`: Invariante von `zuletztKopierteZuordnung` ergänzt.
+
+### Nur Dokumentation (keine Codeänderung)
+
+- **H-4:** `zuletztKopierteZuordnung` hält Originalwerte des vorigen Textes über einen neuen Scan hinaus im
+  Arbeitsspeicher (kleine Abweichung von D-5). Sie wird nur für den Hinweis-Vergleich gelesen, nie zur
+  Rückübersetzung, und in T-5 bei Zurücksetzen/Beenden verworfen. Mögliche spätere Härtung: einen Vergleichsabdruck
+  (Hash je Platzhalter) statt der Werte merken.
+- **H-1 (für README/T-8 vormerken):** Zwischen einem fremden Kopieren und dem verarbeiteten Besitzverlust kann die
+  Leeren-Regel fremden Inhalt leeren (Datenverlust beim Anwender, kein Leck).
+- **H-3 (für den Anwendertext in T-8):** Der Hinweis `PLATZHALTER_GEAENDERT` vergleicht nur mit der unmittelbar
+  vorigen Kopie (nicht transitiv). Die Regel bleibt: nur die Antwort zum zuletzt kopierten Text zurückübersetzen.

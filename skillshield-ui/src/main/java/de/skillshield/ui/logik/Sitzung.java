@@ -3,9 +3,12 @@ package de.skillshield.ui.logik;
 import de.skillshield.core.model.ConfidenceLevel;
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.pseudonymize.PlaceholderMapping;
+import de.skillshield.core.pseudonymize.PlaceholderSyntax;
 import de.skillshield.core.pseudonymize.PseudonymizationResult;
 import de.skillshield.core.pseudonymize.Pseudonymizer;
 import de.skillshield.core.recognizer.TextScanner;
+import de.skillshield.core.reidentify.ReidentificationResult;
+import de.skillshield.core.reidentify.Reidentifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumMap;
@@ -15,6 +18,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 /**
@@ -28,9 +32,14 @@ import java.util.function.Function;
  * und bewertet nichts selbst (AK-53). Meldungen entstehen nur aus {@link Texte} und Zahlen; {@link #toString()}
  * enthält nie Text.
  *
- * <p>Stand T-3: Scan, Auswahl, Live-Ergebnis, manuelles Hinzufügen, Statusleiste und Bedienzustand. Kopieren,
- * Rückübersetzung und die Rückfragen beim Zurücksetzen und Beenden folgen in T-4 und T-5; bis dahin folgt die
- * aktive Zuordnung immer dem Live-Ergebnis.
+ * <p>Stand T-4: Scan, Auswahl, Live-Ergebnis, manuelles Hinzufügen, Kopieren, Rückübersetzung, Statusleiste und
+ * Bedienzustand. Zurücksetzen, Beenden und die Rückfragen dazu folgen in T-5. Die aktive Zuordnung (für die
+ * Statusleiste und Rückfragen) folgt dem Live-Ergebnis, bis aus Bereich 3 kopiert wird; dann ist sie auf das kopierte
+ * Ergebnis eingefroren (Abweichung A-2, Kap. 3.5), bis neu gescannt wird. Zurückübersetzt wird nur mit einer
+ * eingefrorenen Zuordnung (S-2), also nur die Antwort zum zuletzt kopierten Text.
+ *
+ * <p>Invariante von {@code zuletztKopierteZuordnung}: Sie überlebt einen neuen Scan und wird nur für den Hinweis
+ * "Platzhalter geändert" verglichen, nie zur Rückübersetzung benutzt; Zurücksetzen und Beenden (T-5) verwerfen sie.
  */
 public final class Sitzung {
 
@@ -52,10 +61,11 @@ public final class Sitzung {
     }
 
     private final Function<String, List<Finding>> scanner;
-    // Zwischenablage wird ab T-4 benutzt (Kopieren); der Konstruktor bleibt dadurch stabil.
-    private final Zwischenablage zwischenablage;
+    private final ZwischenablageRegel zwischenablage;
     private final Dialoge dialoge;
     private final Pseudonymizer pseudonymizer = new Pseudonymizer();
+    /** Rückübersetzung; im Test austauschbar, im Programm der {@link Reidentifier} des Kerns. */
+    private final BiFunction<String, PlaceholderMapping, ReidentificationResult> restore;
     private final List<Runnable> beobachter = new ArrayList<>();
 
     private ScanZustand zustand = ScanZustand.KEIN_SCAN;
@@ -67,7 +77,20 @@ public final class Sitzung {
     private List<Finding> funde = List.of();
     private boolean[] angewaehlt = new boolean[0];
     private Live live = Live.LEER;
+    /** Aktive Zuordnung; {@code null}, solange kein Scan erfolgreich war. */
     private PlaceholderMapping zuordnung;
+    /**
+     * {@code true}, wenn {@link #zuordnung} beim Kopieren aus Bereich 3 eingefroren wurde (A-2). Nur dann ist
+     * "Zurückübersetzen" möglich (S-2); ein neuer Scan hebt das Einfrieren auf.
+     */
+    private boolean zuordnungEingefroren;
+    /**
+     * Die zuletzt beim Kopieren für die KI eingefrorene Zuordnung, auch über einen neuen Scan hinweg; nur für den
+     * Hinweis, dass sich Platzhalter geändert haben (S-3). Nur im Arbeitsspeicher, nie ausgegeben.
+     */
+    private PlaceholderMapping zuletztKopierteZuordnung;
+    private boolean antwortLeer = true;
+    private Rueckuebersetzung rueckuebersetzung;
     private String meldung = Texte.BEREIT;
 
     /**
@@ -76,9 +99,16 @@ public final class Sitzung {
      * @param dialoge        Rückfragen und Fehlerdialog
      */
     public Sitzung(Function<String, List<Finding>> scanner, Zwischenablage zwischenablage, Dialoge dialoge) {
+        this(scanner, zwischenablage, dialoge, new Reidentifier()::restore);
+    }
+
+    /** Wie der öffentliche Konstruktor, mit austauschbarer Rückübersetzung (für Tests des Fehlerzweigs). */
+    Sitzung(Function<String, List<Finding>> scanner, Zwischenablage zwischenablage, Dialoge dialoge,
+            BiFunction<String, PlaceholderMapping, ReidentificationResult> restore) {
         this.scanner = Objects.requireNonNull(scanner, "scanner");
-        this.zwischenablage = Objects.requireNonNull(zwischenablage, "zwischenablage");
+        this.zwischenablage = new ZwischenablageRegel(Objects.requireNonNull(zwischenablage, "zwischenablage"));
         this.dialoge = Objects.requireNonNull(dialoge, "dialoge");
+        this.restore = Objects.requireNonNull(restore, "restore");
     }
 
     /** Sitzung mit dem Standard-Scanner des Kerns ({@code TextScanner.standard()}). */
@@ -164,6 +194,7 @@ public final class Sitzung {
         angewaehlt = alle;
         live = neuesLive;
         zuordnung = neuesLive.zuordnung();
+        zuordnungEingefroren = false;
         laufenderAuftrag = null;
         zustand = ScanZustand.GUELTIG;
         meldung = neueMeldung;
@@ -281,12 +312,12 @@ public final class Sitzung {
         Live neuesLive = berechne(text, neueFunde, neueAuswahl);
         // Hinzufüge-Meldung und aktuelle Zählung (AK-20) stehen zusammen in der Meldungszeile.
         String neueMeldung = Texte.hinzugefuegt(hinzu.hinzugefuegt(), hinzu.bereitsGeschuetzt(), hinzu.ersetzt())
-                + " " + zaehlung(neueFunde, neueAuswahl);
+                + " " + zaehlung(neueFunde, neueAuswahl) + auswahlHinweis(neuesLive);
         // Festschreiben: nur noch Zuweisungen, nichts kann mehr scheitern.
         funde = List.copyOf(neueFunde);
         angewaehlt = neueAuswahl;
         live = neuesLive;
-        zuordnung = neuesLive.zuordnung();
+        zuordnungFolgtLive(neuesLive);
         meldung = neueMeldung;
         informieren();
     }
@@ -294,6 +325,177 @@ public final class Sitzung {
     /** Text für die KI (Bereich 3): der Text mit den angewählten Funden als Platzhalter; leer ohne gültigen Scan. */
     public String textFuerKi() {
         return zustand == ScanZustand.GUELTIG ? live.text() : "";
+    }
+
+    // ------------------------------------------------------------------ Kopieren und Rückübersetzung
+
+    /**
+     * "Für KI kopieren": legt den ganzen Text aus Bereich 3 ({@link #textFuerKi()}) als reinen Text in die
+     * Zwischenablage (AK-31) und friert die aktive Zuordnung auf dieses Ergebnis ein (A-2). Ohne gültigen Scan
+     * geschieht nichts (AK-30). Ist kein Fund angewählt (auch bei null Funden), wird vorher mit
+     * {@link Rueckfrage#UNVERAENDERT_KOPIEREN} gefragt (AK-32); bei "Abbrechen" ändert sich nichts. Nimmt die
+     * Zwischenablage den Text nicht an, meldet das Programm es und ändert nichts weiter. Die Rückfrage ist modal;
+     * hat sich währenddessen der Text für die KI geändert, wird nicht kopiert.
+     */
+    public void fuerKiKopieren() {
+        if (zustand != ScanZustand.GUELTIG) {
+            return;
+        }
+        String kopiertText = textFuerKi();
+        boolean unveraendert = keinFundAngewaehlt();
+        if (unveraendert) {
+            if (!dialoge.bestaetigt(Rueckfrage.UNVERAENDERT_KOPIEREN)) {
+                return;
+            }
+            if (zustand != ScanZustand.GUELTIG || !kopiertText.equals(textFuerKi())) {
+                return;
+            }
+        }
+        int ersetzt = angewaehlteZahl();
+        if (!ablegen(kopiertText)) {
+            return;
+        }
+        boolean geaendert = platzhalterGeaendert(zuletztKopierteZuordnung, live.zuordnung());
+        zuordnung = live.zuordnung();
+        zuordnungEingefroren = true;
+        zuletztKopierteZuordnung = zuordnung;
+        meldung = (unveraendert ? Texte.UNVERAENDERT_KOPIERT : Texte.kopiert(ersetzt))
+                + (geaendert ? " " + Texte.PLATZHALTER_GEAENDERT : "");
+        informieren();
+    }
+
+    /**
+     * {@code true}, wenn ein Platzhalter der früher kopierten Zuordnung in der neuen fehlt oder dort für einen
+     * anderen Wert steht (S-3). Zusätzliche Platzhalter allein ändern nichts an früheren Antworten.
+     */
+    private static boolean platzhalterGeaendert(PlaceholderMapping frueher, PlaceholderMapping neu) {
+        if (frueher == null) {
+            return false;
+        }
+        for (String platzhalter : frueher.placeholders()) {
+            if (!neu.resolve(platzhalter).equals(frueher.resolve(platzhalter))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Strg+C/X aus der Eingabe, der KI-Antwort oder dem Ergebnis: legt den markierten Ausschnitt ab und merkt ihn
+     * für die Zwischenablage-Regel (D-6). Ein leerer Ausschnitt tut nichts. Aus Bereich 3 kopiert die Ansicht über
+     * {@link #fuerKiKopieren()}, nie über diese Methode.
+     */
+    public void textKopieren(String teil) {
+        if (teil == null || teil.isEmpty()) {
+            return;
+        }
+        ablegen(teil);
+    }
+
+    /** Die Ansicht meldet, ob das Feld "KI-Antwort" leer ist; davon hängt "Zurückübersetzen" ab (AK-36). */
+    public void kiAntwortGeaendert(boolean leer) {
+        if (antwortLeer != leer) {
+            antwortLeer = leer;
+            informieren();
+        }
+    }
+
+    /**
+     * Übersetzt die KI-Antwort mit der beim Kopieren eingefrorenen Zuordnung zurück (AK-37, AK-38). Möglich ist das
+     * nur, wenn im aktuellen Scan bereits für die KI kopiert wurde (S-2); sonst, und während des Scans, geschieht
+     * nichts. Bei leerer Antwort meldet die Statusleiste {@link Texte#ANTWORT_FEHLT}, bei einer Antwort über
+     * {@link #MAX_ZEICHEN} {@link Texte#antwortZuLang} (S-4); beides ändert nur die Meldung. Berechnet wird vor dem
+     * Festschreiben; scheitert es, bleibt alles wie vorher, die Meldung ist
+     * {@link Texte#RUECKUEBERSETZEN_FEHLGESCHLAGEN} und der Dialog zeigt diesen Text mit dem Klassennamen der
+     * Ausnahme.
+     */
+    public void zurueckuebersetzen(String antwort) {
+        Objects.requireNonNull(antwort, "antwort");
+        if (!zuordnungEingefroren || zustand == ScanZustand.LAEUFT) {
+            return;
+        }
+        if (antwort.isEmpty()) {
+            meldung = Texte.ANTWORT_FEHLT;
+            informieren();
+            return;
+        }
+        if (antwort.length() > MAX_ZEICHEN) {
+            meldung = Texte.antwortZuLang(MAX_ZEICHEN);
+            informieren();
+            return;
+        }
+        Rueckuebersetzung neu;
+        try {
+            ReidentificationResult ergebnis = restore.apply(antwort, zuordnung);
+            int gesamt = PlaceholderSyntax.tokenize(antwort, 0, antwort.length(), zuordnung.typeNames()).size();
+            neu = new Rueckuebersetzung(ergebnis.text(), ergebnis.unresolved(), gesamt);
+        } catch (RuntimeException e) {
+            meldung = Texte.RUECKUEBERSETZEN_FEHLGESCHLAGEN;
+            informieren();
+            dialoge.fehler(Texte.rueckuebersetzenFehlerMeldung(e));
+            return;
+        }
+        String neueMeldung;
+        if (!neu.offen().isEmpty()) {
+            neueMeldung = Texte.nichtZurueckuebersetzt(neu.offen().size());
+        } else {
+            neueMeldung = neu.platzhalterGesamt() == 0 ? Texte.KEINE_PLATZHALTER : Texte.ALLE_ZURUECK;
+        }
+        rueckuebersetzung = neu;
+        meldung = neueMeldung;
+        informieren();
+    }
+
+    /** Ergebnis der letzten Rückübersetzung für Bereich 4; leer vor der ersten Rückübersetzung. */
+    public Optional<Rueckuebersetzung> rueckuebersetzung() {
+        return Optional.ofNullable(rueckuebersetzung);
+    }
+
+    /** "Rückübersetzten Text kopieren": legt genau den Ergebnistext ab (AK-39). Ohne Ergebnis geschieht nichts. */
+    public void ergebnisKopieren() {
+        if (rueckuebersetzung == null || rueckuebersetzung.text().isEmpty() || zustand == ScanZustand.LAEUFT) {
+            return;
+        }
+        if (ablegen(rueckuebersetzung.text())) {
+            meldung = Texte.ERGEBNIS_KOPIERT;
+            informieren();
+        }
+    }
+
+    /**
+     * Zwischenablage-Regel (D-6, AK-34), von Zurücksetzen und Beenden (T-5) aufgerufen: Enthält die Zwischenablage
+     * noch genau den zuletzt vom Programm kopierten Text, wird sie geleert, sonst bleibt sie unberührt. Ist sie
+     * nicht lesbar, gesperrt oder enthält keinen Text, geschieht nichts, ohne Meldung (G-8); der Vergleichstext
+     * bleibt dann für einen späteren Versuch erhalten. Nach dem Leeren oder wenn der Inhalt ein anderer ist, wird
+     * der Vergleichstext verworfen. Umgesetzt in {@link ZwischenablageRegel}.
+     */
+    void eigenenZwischenablageInhaltLeeren() {
+        zwischenablage.eigenenInhaltLeeren();
+    }
+
+    /** Legt Text ab und merkt ihn; scheitert das, melden Statusleiste und Dialog es ohne Textinhalt. */
+    private boolean ablegen(String inhalt) {
+        if (!zwischenablage.ablegen(inhalt)) {
+            meldung = Texte.ZWISCHENABLAGE_NICHT_VERFUEGBAR;
+            informieren();
+            dialoge.fehler(Texte.ZWISCHENABLAGE_NICHT_VERFUEGBAR);
+            return false;
+        }
+        return true;
+    }
+
+    private boolean keinFundAngewaehlt() {
+        return angewaehlteZahl() == 0;
+    }
+
+    private int angewaehlteZahl() {
+        int anzahl = 0;
+        for (boolean b : angewaehlt) {
+            if (b) {
+                anzahl++;
+            }
+        }
+        return anzahl;
     }
 
     // ------------------------------------------------------------------ Anzeige
@@ -314,10 +516,16 @@ public final class Sitzung {
         schalte(aktiv, sperrgrund, Funktion.FUND_UMSCHALTEN, hatFunde, ohneFunde);
         schalte(aktiv, sperrgrund, Funktion.MARKIERUNG_HINZUFUEGEN, gueltig, ohneScan);
         schalte(aktiv, sperrgrund, Funktion.FUER_KI_KOPIEREN, gueltig, ohneScan);
-        // Bis T-4 gibt es keine KI-Antwort und keine Rückübersetzung: beide Funktionen sind gesperrt.
-        schalte(aktiv, sperrgrund, Funktion.ZURUECKUEBERSETZEN, false,
-                zuordnung == null ? Texte.ERST_SCANNEN : Texte.ANTWORT_FEHLT);
-        schalte(aktiv, sperrgrund, Funktion.ERGEBNIS_KOPIEREN, false, Texte.ERST_ZURUECKUEBERSETZEN);
+        // Rückübersetzen: im aktuellen Scan wurde für die KI kopiert (eingefrorene Zuordnung, auch ohne Platzhalter,
+        // S-2) und die Antwort ist nicht leer (AK-36).
+        String ohneAntwort = laeuft ? Texte.SCAN_LAEUFT : zuordnung == null ? Texte.ERST_SCANNEN
+                : !zuordnungEingefroren ? Texte.ERST_KOPIEREN : Texte.ANTWORT_FEHLT;
+        schalte(aktiv, sperrgrund, Funktion.ZURUECKUEBERSETZEN, zuordnungEingefroren && !laeuft && !antwortLeer,
+                ohneAntwort);
+        boolean hatErgebnis = rueckuebersetzung != null && !rueckuebersetzung.text().isEmpty();
+        String ohneErgebnis = rueckuebersetzung == null ? Texte.ERST_ZURUECKUEBERSETZEN : Texte.ERGEBNIS_LEER;
+        schalte(aktiv, sperrgrund, Funktion.ERGEBNIS_KOPIEREN, hatErgebnis && !laeuft,
+                laeuft ? Texte.SCAN_LAEUFT : ohneErgebnis);
         schalte(aktiv, sperrgrund, Funktion.ZURUECKSETZEN, !laeuft, Texte.SCAN_LAEUFT);
         schalte(aktiv, sperrgrund, Funktion.BEENDEN, true, "");
         return new Bedienzustand(aktiv, sperrgrund);
@@ -325,7 +533,8 @@ public final class Sitzung {
 
     /** Statusmeldung links und Zuordnungsanzeige rechts (AK-4, AK-20, AK-40). */
     public Statusleiste statusleiste() {
-        String anzeige = zuordnung == null ? Texte.KEINE_ZUORDNUNG : Texte.zuordnung(zuordnung.size());
+        String anzeige = zuordnung == null ? Texte.KEINE_ZUORDNUNG
+                : zuordnungEingefroren ? Texte.zuordnung(zuordnung.size()) : Texte.ZUORDNUNG_ERST_NACH_KOPIEREN;
         return new Statusleiste(meldung, anzeige);
     }
 
@@ -370,7 +579,7 @@ public final class Sitzung {
         laufenderAuftrag = null;
         meldung = switch (zustand) {
             case VERALTET -> Texte.NEUER_SCAN_NOETIG;
-            case GUELTIG -> zaehlung(funde, angewaehlt);
+            case GUELTIG -> zaehlung(funde, angewaehlt) + auswahlHinweis(live);
             case KEIN_SCAN, LAEUFT -> Texte.BEREIT;
         };
     }
@@ -388,12 +597,28 @@ public final class Sitzung {
      */
     private void auswahlUebernehmen(boolean[] neueAuswahl) {
         Live neuesLive = berechne(text, funde, neueAuswahl);
-        String neueMeldung = zaehlung(funde, neueAuswahl);
+        String neueMeldung = zaehlung(funde, neueAuswahl) + auswahlHinweis(neuesLive);
         angewaehlt = neueAuswahl;
         live = neuesLive;
-        zuordnung = neuesLive.zuordnung();
+        zuordnungFolgtLive(neuesLive);
         meldung = neueMeldung;
         informieren();
+    }
+
+    /** Die aktive Zuordnung folgt dem Live-Ergebnis, solange sie nicht eingefroren ist (A-2). */
+    private void zuordnungFolgtLive(Live neuesLive) {
+        if (!zuordnungEingefroren) {
+            zuordnung = neuesLive.zuordnung();
+        }
+    }
+
+    /**
+     * Hinweis für die Statusmeldung, wenn die eingefrorene Zuordnung nicht mehr zur Live-Auswahl passt (A-2);
+     * sonst leer. Nur ein fester Text.
+     */
+    private String auswahlHinweis(Live neuesLive) {
+        return zuordnungEingefroren && !neuesLive.zuordnung().equals(zuordnung)
+                ? " " + Texte.AUSWAHL_NACH_KOPIEREN_GEAENDERT : "";
     }
 
     /** Berechnet alles, was aus Text, Funden und Auswahl folgt, ohne den Zustand zu ändern. */

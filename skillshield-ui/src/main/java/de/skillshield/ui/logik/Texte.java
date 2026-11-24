@@ -34,7 +34,62 @@ public final class Texte {
     /** Meldung bei leerer oder nur aus Leerraum bestehender Markierung (AK-26). */
     public static final String MARKIERUNG_FEHLT = "Bitte zuerst im Text eine Stelle markieren.";
 
+    /** Meldung nach dem Kopieren ohne ersetzte Stelle, nach bestätigter Rückfrage (AK-35). */
+    public static final String UNVERAENDERT_KOPIERT = "Text unverändert kopiert";
+    /** Meldung nach "Rückübersetzten Text kopieren" (AK-39). */
+    public static final String ERGEBNIS_KOPIERT = "Rückübersetzter Text kopiert.";
+    /** Meldung und Fehlertext, wenn die Zwischenablage nichts angenommen hat (gesperrt oder nicht verfügbar). */
+    public static final String ZWISCHENABLAGE_NICHT_VERFUEGBAR =
+            "Die Zwischenablage ist nicht verfügbar. Es wurde nichts kopiert.";
+    /** Hinweis, wenn die Auswahl nach dem Kopieren geändert wurde (Abweichung A-2, Kap. 3.5). */
+    public static final String AUSWAHL_NACH_KOPIEREN_GEAENDERT = "Die Auswahl wurde nach dem Kopieren geändert. "
+            + "Die Rückübersetzung gilt für den zuletzt kopierten Text; für den neuen Stand bitte erneut kopieren.";
+    /** Sperrgrund für "Zurückübersetzen", solange im aktuellen Scan noch nicht für die KI kopiert wurde (S-2). */
+    public static final String ERST_KOPIEREN =
+            "Erst den Text für die KI kopieren. Zurückübersetzt wird immer die Antwort zum zuletzt kopierten Text.";
+    /** Zuordnungsanzeige nach einem Scan, solange noch nicht für die KI kopiert wurde (S-2). */
+    public static final String ZUORDNUNG_ERST_NACH_KOPIEREN = "Zuordnung: erst nach dem Kopieren für die KI";
+    /** Hinweis, wenn sich die Platzhalter gegenüber dem zuvor kopierten Text geändert haben (S-3). */
+    public static final String PLATZHALTER_GEAENDERT = "Achtung: Die Platzhalter haben sich gegenüber dem zuvor "
+            + "kopierten Text geändert. Antworten auf den früheren Text nicht mehr zurückübersetzen.";
+    /** Meldung und Fehlertext, wenn die Rückübersetzung selbst scheitert. */
+    public static final String RUECKUEBERSETZEN_FEHLGESCHLAGEN =
+            "Beim Zurückübersetzen ist ein Fehler aufgetreten. Die Antwort wurde nicht zurückübersetzt.";
+    /** Liste "Nicht zurückübersetzt": alle Platzhalter der Antwort wurden aufgelöst (AK-38). */
+    public static final String ALLE_ZURUECK = "Alle Platzhalter wurden zurückübersetzt.";
+    /** Liste "Nicht zurückübersetzt": die Antwort enthält keinen Platzhalter (AK-38). */
+    public static final String KEINE_PLATZHALTER = "Die Antwort enthält keine Platzhalter.";
+    /** Sperrgrund für "Rückübersetzten Text kopieren" bei leerem Ergebnis (AK-39). */
+    public static final String ERGEBNIS_LEER = "Das Ergebnis ist leer.";
+    /** Grund in der Liste "Nicht zurückübersetzt": wohlgeformt, aber nicht in der Zuordnung. */
+    public static final String GRUND_UNBEKANNT = "unbekannt";
+    /** Grund in der Liste "Nicht zurückübersetzt": beschädigter Platzhalter. */
+    public static final String GRUND_BESCHAEDIGT = "beschädigt";
+
     private Texte() {
+    }
+
+    /** Meldung nach dem Kopieren für die KI (AK-35): "Text für KI kopiert (3 Stellen ersetzt)". */
+    public static String kopiert(int stellen) {
+        return "Text für KI kopiert (" + stellen + (stellen == 1 ? " Stelle" : " Stellen") + " ersetzt)";
+    }
+
+    /** Meldung nach der Rückübersetzung mit nicht auflösbaren Platzhaltern (AK-38); nur die Zahl, nie ein Text. */
+    public static String nichtZurueckuebersetzt(int anzahl) {
+        return anzahl == 1 ? "1 Platzhalter konnte nicht zurückübersetzt werden."
+                : anzahl + " Platzhalter konnten nicht zurückübersetzt werden.";
+    }
+
+    /**
+     * Zeile der Liste "Nicht zurückübersetzt" (AK-38): "[[KVNR_7]] an Position 121: unbekannt". Der Platzhalter ist der
+     * Ausschnitt aus der KI-Antwort (nur Klammern, ASCII-Zeichen und Unterstrich), nie ein Originalwert.
+     *
+     * @param platzhalter Ausschnitt aus der Antwort
+     * @param position    Position ab 1 gezählt
+     * @param grund       {@link #GRUND_UNBEKANNT} oder {@link #GRUND_BESCHAEDIGT}
+     */
+    public static String listenzeile(String platzhalter, int position, String grund) {
+        return platzhalter + " an Position " + position + ": " + grund;
     }
 
     /**
@@ -66,6 +121,12 @@ public final class Texte {
                 "Der Text ist zu lang (höchstens %,d Zeichen). Es wurde nicht gescannt.", hoechstens);
     }
 
+    /** Meldung bei zu langer KI-Antwort (S-4), mit der Obergrenze in deutscher Schreibweise. */
+    public static String antwortZuLang(int hoechstens) {
+        return String.format(Locale.GERMANY,
+                "Die Antwort ist zu lang (höchstens %,d Zeichen). Es wurde nicht zurückübersetzt.", hoechstens);
+    }
+
     /** Zuordnungsanzeige (AK-40); {@code n = 0} nach einem Scan ohne Platzhalter. */
     public static String zuordnung(int platzhalter) {
         return "Zuordnung: " + platzhalter + " Platzhalter (nur im Arbeitsspeicher)";
@@ -90,5 +151,10 @@ public final class Texte {
     /** Fester Text mit dem Klassennamen der Ausnahme, nie mit deren Meldung oder Stacktrace (AK-50). */
     public static String fehlerMeldung(Throwable fehler) {
         return FEHLER + " (" + fehler.getClass().getName() + ")";
+    }
+
+    /** Wie {@link #fehlerMeldung(Throwable)}, aber mit dem festen Text der Rückübersetzung. */
+    public static String rueckuebersetzenFehlerMeldung(Throwable fehler) {
+        return RUECKUEBERSETZEN_FEHLGESCHLAGEN + " (" + fehler.getClass().getName() + ")";
     }
 }
