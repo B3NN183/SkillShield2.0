@@ -3,6 +3,21 @@
 Offline-Werkzeug zur umkehrbaren Pseudonymisierung (Fachliches und Architektur: [Plan.md](Plan.md),
 Agentensteuerung: [CLAUDE.md](CLAUDE.md)). Diese Datei beschreibt, was zum Bauen und Prüfen nötig ist.
 
+## Stand und Schwerpunkt (24.11.2026)
+
+- **Einsatzzweck:** Der Schwerpunkt liegt auf internen IT-Tickets und Betriebsdokumentation. Sie werden
+  pseudonymisiert, damit eine KI an Beispielen lernt, wie Tickets und Dokumentation geschrieben werden.
+  Abrechnungsfälle sind vorerst nachrangig.
+- **Was heute erkannt wird:** Pfade, Webadressen, E-Mail-Adressen, IPv4-Adressen sowie die KV-Nummern
+  LANR, IK, KVNR und BSNR. Alles andere markiert der Anwender von Hand.
+- **Was noch nicht erkannt wird:** Passwörter und Tokens, Servernamen ohne Pfad, Datenbank-Verbindungen,
+  IPv6, Konten, Rollen und Gruppen, Datenbankobjekte, Telefonnummern, Personennamen, Programmnamen.
+- **Geplante Reihenfolge und Zielbild:** siehe
+  [docs/features/uebersicht-it-infrastruktur.md](docs/features/uebersicht-it-infrastruktur.md).
+  Die KV-Erkenner bleiben bestehen und werden vorerst nicht weiterentwickelt.
+- **Bekannter Fehler:** Datumsangaben wie `12.02.2026` werden als BSNR oder KVNR (Stufe „fraglich") ersetzt,
+  wenn ein KV-Kontextwort in der Nähe steht. Bis zur Behebung im Fenster einzeln abwählen.
+
 ## Voraussetzungen
 
 | Werkzeug | Version | Hinweis |

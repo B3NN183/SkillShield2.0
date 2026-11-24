@@ -41,6 +41,34 @@ UI-Standard: **Swing + FlatLaf** (vom Nutzer bestätigt); JavaFX nur als verworf
 14. **Roadmap** – MVP → v0.2 Tresor/Profile/Leak-Check → v0.3 Dateien → v0.4 Screenshots → v1.0 Paket + Freigabeunterlagen.
 15. **Annahmen & offene Entscheidungen** – Java-Version, Client-Umgebung, UI-Framework, KI-Anbieter, interne vs. externe Entwicklung.
 
+## Nachtrag vom 24.11.2026: Prioritätswechsel und Abweichungen vom ursprünglichen Plan
+
+Dieser Abschnitt geht dem Text darüber vor, wo beide sich widersprechen.
+
+- **Einsatzzweck (zu Kap. 1 und 6):** Wichtigster Einsatzzweck ist vorerst die Pseudonymisierung interner
+  IT-Tickets und Betriebsdokumentation, nicht die Abrechnung. Die KV-Erkenner LANR, IK, KVNR und BSNR sind
+  umgesetzt und bleiben bestehen; ICD-10-Codes, Arzt-/Patienten-/Praxisnamen und Geburtsdaten als eigener
+  Typ ruhen.
+- **Reihenfolge der Erkenner (zu Kap. 6 und 14):** 1. Passwörter und Geheimnisse, 2. Server, Hosts,
+  Datenbank-Verbindungszeichenfolgen, IPv6, 3. Konten, Rollen und Gruppen, 4. Datenbankobjekte,
+  5. Telefonnummern und Personennamen, 6. interne Programmnamen. Der genaue Schnitt in Features mit
+  Abhängigkeiten steht in `docs/features/uebersicht-it-infrastruktur.md`.
+- **Leitlinien (zu Kap. 2 und 7):** Strukturerhaltung hat Gewicht, weil die KI an realistischen Texten lernen
+  soll. Fehlalarme sind fast so schädlich wie fehlende Funde: Fachbegriffe, Versionsnummern, Datumsangaben,
+  Ticket- und Change-Nummern bleiben stehen. Für IT-Texte ersetzt das die frühere Linie „im Zweifel
+  ersetzen“.
+- **Profile (zu Kap. 4 und 6):** Die Namenskonventionen für Konten, Rollen, Gruppen, Server und
+  Datenbankobjekte sind organisationsabhängig und müssen konfigurierbar sein. SnakeYAML ist eine
+  Fremdbibliothek und nicht freigegeben. Vorgeschlagen, aber noch nicht vom Nutzer freigegeben, ist eine
+  einfache Textdatei, die mit Bordmitteln des JDK gelesen wird, ohne reguläre Ausdrücke (Übersicht,
+  Abschnitt 5).
+- **Stand der Umsetzung (zu Kap. 14):** Erkennungskern für Pfade, URLs, E-Mail, IPv4 und die vier
+  KV-Nummern; Pseudonymisierung und Rückübersetzung; Oberfläche (Swing + FlatLaf) mit Scan, Prüfen,
+  Markieren von Hand, Kopieren und Rückübersetzen; startbare JAR mit Startskript. Noch nicht umgesetzt:
+  Tresor, Profile, Leak-Check, Datei-Import/-Export, Screenshots/OCR, Installationspaket.
+- **Fremdbibliotheken (zu Kap. 4):** Bisher ist nur FlatLaf im Produkt. Jede weitere Bibliothek braucht
+  die ausdrückliche Freigabe des Nutzers.
+
 ## Verifikation
 - Dokument einmal komplett gegenlesen: alle 15 Kapitel vorhanden, keine Python-Reste.
 - Java-Codeskizzen syntaktisch plausibel (records, Interfaces).

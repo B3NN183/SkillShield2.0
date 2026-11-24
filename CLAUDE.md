@@ -4,11 +4,24 @@ Offline-Werkzeug zur umkehrbaren Pseudonymisierung von Texten, Dateien und Scree
 Kassenärztliche Vereinigung, bevor Inhalte an eine KI gegeben werden. Fachliche und technische Grundlage
 ist [Plan.md](Plan.md).
 
+**Schwerpunkt seit 24.11.2026:** interne IT-Tickets und Betriebsdokumentation (eine KI soll an
+pseudonymisierten Beispielen lernen, wie Tickets und Dokumentation geschrieben werden), nicht mehr
+Abrechnungsfälle. Die KV-Erkenner (KVNR, BSNR, LANR, IK) bleiben bestehen und werden vorerst nicht
+weiterentwickelt. Feature-Schnitt, Reihenfolge und Zielbild stehen in
+[docs/features/uebersicht-it-infrastruktur.md](docs/features/uebersicht-it-infrastruktur.md).
+
 - **Stack**: Java 21 (Temurin), Maven-Multi-Modul, Swing + FlatLaf, JUnit 5.
 - **Module**: `skillshield-core`, `skillshield-io`, `skillshield-vault`, `skillshield-ui`, `skillshield-app`.
 - **Basispaket**: `de.skillshield`.
 - **Build und Tests**: `mvn verify`.
 - **Grundsätze**: kein Netzwerk-Code im Produkt, kein Klartext in Logs, Testdaten nur synthetisch.
+- **Leitlinien für Erkenner**: Strukturerhaltung (ein ersetzter Wert bleibt als Server, Konto, Pfad usw.
+  erkennbar; Satzbau und Fachbegriffe bleiben unverändert). Fehlalarme sind fast so schädlich wie fehlende
+  Funde: Versionsnummern, Datumsangaben, Ticket- und Change-Nummern und Fachbegriffe werden nicht ersetzt.
+  Jedes Erkenner-Feature misst Fehlalarme an einem synthetischen Korpus und weist nach, dass bestehende
+  Funde unverändert bleiben (Vergleich alt gegen neu).
+- **Fremdbibliotheken**: keine neue Bibliothek und kein neues Build-Plugin ohne ausdrückliche Freigabe
+  des Nutzers.
 
 ## Ablauf pro Feature
 
