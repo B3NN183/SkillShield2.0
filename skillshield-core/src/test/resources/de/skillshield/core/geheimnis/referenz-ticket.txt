@@ -1,0 +1,11 @@
+Ticket #48213 – Berechtigungsfehler Abrechnungsexport
+Melder: Thomas Krüger (t.krueger@kv-beispiel.example), Tel. 0391 123-4567
+Betroffen: Benutzer KVBSP\tkrueger, Rolle ABR_Sachbearbeitung_RW, AD-Gruppe GG-ABR-Export-Lesen
+
+Seit dem Update auf Version 4.2 von ArvisPro kann der Export nach \\srv-fs02.kvbsp.local\Abrechnung\Export\Q3 nicht mehr geschrieben werden. Der Dienst läuft unter svc_abr_export auf SRV-APP07 (192.0.2.47), Logs unter D:\Apps\ArvisPro\logs\export.log und /var/log/arvis/batch.log auf dbsrv-ora01.
+
+Verbindung: jdbc:oracle:thin:@dbsrv-ora01.kvbsp.local:1521/ABRPROD, Schema ABR_STAGE, Tabelle T_EXPORT_QUEUE.
+Temporäres Passwort für svc_abr_export: Sommer2026!
+Doku: https://wiki.kvbsp.local/display/IT/Abrechnungsexport
+
+Lösung: Gruppe GG-ABR-Export-Schreiben ergänzt, Dienst neu gestartet. Siehe auch Change CHG0012345.

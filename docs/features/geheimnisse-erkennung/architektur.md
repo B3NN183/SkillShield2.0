@@ -722,3 +722,43 @@ Geheimnisse, Leitlinie Fehlalarme, keine Fremdbibliothek) ist eingehalten.
    dann einen Nachtrag.
 5. `docs/features/oberflaeche-mvp/kern-pruefsummen.txt` bleibt unverändert; für dieses Feature gelten neue Dateien
    „vorher/nachher“.
+
+## Nachtrag der Hauptsitzung (25.11.2026): Freigabe und Entscheidungen
+
+Der Nutzer hat das Feature freigegeben. Die offenen Punkte aus Kap. 15 hat die Hauptsitzung entschieden (der Nutzer
+überlässt ihr solche Detailentscheidungen):
+
+1. **Referenz-Ticket:** Der Wortlaut des Nutzers liegt vor. Die Hauptsitzung hat ihn mit den zwei Ersetzungen aus
+   D-17 (`kv-beispiel.de` → `kv-beispiel.example`, `10.20.30.47` → `192.0.2.47`) als
+   `skillshield-core/src/test/resources/de/skillshield/core/geheimnis/referenz-ticket.txt` abgelegt, sonst wörtlich.
+   Es wird nicht rekonstruiert; der engineer ändert den Wortlaut nicht. Beanstandet ein Wächter eine Stelle des
+   Tickets (z. B. die Rufnummer), hält der engineer an und meldet es.
+2. **Lückenregel** wie in Kap. 11 Punkt 1, mit der Grenze G-18. Keine PEM-Ausnahme.
+3. Die Präzisierungen in Kap. 11 Punkte 3 bis 12 gelten wie beschrieben.
+4. **Reihenfolge:** `datum-und-kontextvorrang` Teil A ist abgeschlossen (Tag `dk-t3-teil-a`) und liegt vor diesem
+   Feature. T-1 nimmt diesen Stand in die Kopie und in `kern-pruefsummen-vorher.txt` auf. Teil B ist zurückgestellt;
+   kommt er später, gilt Risiko 3 (Lückenregel erhalten, PASSWORT/TOKEN in dessen Differenztests ausnehmen).
+5. Die Messhilfe `DatumFolgeMessung` wählt die Bestandserkenner nach Klasse aus, nicht nach Stelle; sie verträgt
+   zusätzliche Erkenner in `standard()`.
+
+### Entscheidung nach der Vorabmessung T-1 (25.11.2026): Passwort am Ende einer URL (AK-28, G-4)
+
+Gemessen in T-1 und von security bestätigt: Der URL-Erkenner kürzt am Ende Satzzeichen (`!`, `.`, `)`, `,`). Endet
+ein Passwort in einer URL-Abfrage (`…&password=<Wert>`) auf solche Zeichen, liegen diese Zeichen heute außerhalb des
+URL-Funds und stehen im Klartext. Entscheidung in Richtung „möglichst viel schützen“: Der URL-Fund bleibt wie heute,
+und die Lückenregel ergänzt die Restzeichen als PASSWORT-Reststück (auch wenn es nur ein Zeichen ist). AK-28 gilt
+für diesen Fall in der Fassung „genau ein URL-Fund wie heute, dazu ein PASSWORT-Reststück über die Restzeichen des
+Werts; kein Zeichen des Werts im Klartext“. Die Zeile der Tabelle in Kap. 1.1 („kein PASSWORT-Fund“) gilt nur, wenn
+der URL-Fund den Wert ganz abdeckt. Dasselbe gilt für Verbindungszeichenfolgen in T-8. Die Fälle werden in T-4 bzw.
+T-8 mit eigenem Test belegt und im Bericht einzeln genannt.
+
+Der URL-Erkenner entfernt am Ende alle Zeichen aus `. , ; : ! ? ' "` sowie `)` und `]` bei Klammerüberschuss; die
+Tests in T-4 und T-8 decken alle diese Endzeichen ab, nicht nur die oben genannten.
+
+Offene Härtungen des Wächters `GeheimnisLiteralWaechterTest` (security, Schwere niedrig, nach T-1 nicht umgesetzt;
+beide setzen eine absichtlich gebaute Datei voraus): Dateien mit Binärendung und Nullbyte zusätzlich als Text
+prüfen; bei UTF-16 ohne BOM zusätzlich die Ein-Byte-Dekodierung prüfen. Nachzuholen in T-2, bevor Korpusdateien
+dazukommen.
+
+`SynthetischeGeheimnisse`: Die Anforderung definiert nur `P1`, `P2`, `P3`, `P6` und `P7`; „P1 bis P7“ in Kap. 6.2
+ist ungenau.
