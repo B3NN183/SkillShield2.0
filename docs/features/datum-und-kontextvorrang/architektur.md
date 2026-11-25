@@ -668,3 +668,35 @@ Abschnitt 3). Freigegeben ist deshalb nur **Teil A (Datumsangaben sind keine KV-
   von Teil A unverändert): Eine echte Nummer hinter einem Zeitraum oder hinter mehreren Datumsangaben
   (`BSNR <Zeitraum> <BSNR>`, `LANR <Datum> <Datum> <Datum> <LANR>`, `IK <Datum> <Datum>, <IK>`) hat heute
   keinen Fund. Als bekannte Grenze geführt; die KV-Erkenner ruhen.
+
+## Nachtrag 3 der Hauptsitzung vom 25.11.2026: Festlegungen nach der Prüfung von T-2
+
+- **Folgeänderungen neben einem entfallenen Datum (Klasse Z).** security hat an 700 000 Zufallstexten
+  gemessen: Fällt ein Datumssegment weg, können sich Funde ändern, mit denen es vorher zusammengelegt war
+  (Quelle `zusammengelegt` wird zur Quelle des verbleibenden Kandidaten; Konfidenz steigt oder bleibt,
+  sinkt nie; in seltenen Fällen wechselt der Typ eines aufgeteilten Mischfunds), ebenso Reststücke mit
+  `restQuelle()`; ein vorher verdeckter KV-Kandidat kann über einem Teil des Datums neu erscheinen. Ursache
+  ist die bestehende Konfliktauflösung, nicht der neue Code. **Kein Schutzverlust:** keine geschützte
+  Position außerhalb der Datumssegmente wurde frei. Die Erwartung „(Z) = 0" aus Kap. 7 gilt deshalb nur
+  für Texte ohne Datum.
+- **Maßstab für T-3:** Auf Mengen mit Datumssegmenten ist der Vergleich „Produkt gleich
+  `KvStandDatum.simuliert(DatumReferenz)`" maßgeblich (exakte Gleichheit; in allen Messungen von security
+  erfüllt). Daneben gilt als harte Bedingung: Keine Position außerhalb der Datumssegmente der Referenz
+  verliert ihren Schutz, keine Konfidenz sinkt, Roundtrip zeichengleich. Die Folgeänderungen werden als
+  Klasse Z mit exakten Zahlen je Menge festgehalten. Der bestehende Vergleich „ALT ohne Funde über
+  Datumssegmenten" bleibt für die 14 Bestandsmengen (dort keine Datumssegmente) unverändert.
+- **Folge für AK-1:** In seltenen Fällen bleibt ein gültiges Datum (ganz oder teilweise) Fund, wenn ein
+  längerer KV-Kandidat an einem Bestandsfund zugeschnitten wird und das Reststück genau das Datum ist. Das
+  schützt mehr, nicht weniger, und ist eine bekannte Grenze mit Test in T-3.
+- **Neue bekannte Grenze (Restrisiko des Features):** Eine Nummer mit sechs bis acht Ziffern, deren
+  Schreibweise genau eine gültige Datumsform ergibt (z. B. eine achtstellige Tippfehler-Nummer in
+  Punktgruppierung zwei-zwei-vier), gilt als Datum und bleibt ungeschützt. Gemessen: bei sechs Ziffern
+  rund 1 von 1 000 zufällig gruppierten Folgen, bei sieben und acht Ziffern rund 1 von 20 000; ab neun
+  Ziffern nie. Das ist der gewollte Kompromiss nach D-1; die Grenze steht im Javadoc von `KvNumberScanner`
+  und hat einen Test `bekannteGrenze…`.
+- **`KlartextFreiheitTest`** wird nicht um `KvDatum` ergänzt (paketprivat, anderes Paket); die einzige
+  Meldung ist die feste Meldung der Null-Prüfung und wird in `KvDatumTest` geprüft. Als Abweichung vom
+  Plan angenommen.
+- **Unabhängigkeit des Vergleichs:** `KvDatum` folgt im Aufbau der `DatumReferenz`; der Vergleich beider
+  belegt vor allem Kalenderrechnung und Aufwand. Die unabhängige Bestätigung der Formen stammt aus der
+  Regex-Spezifikation von security (315 Mio. Paare, keine Abweichung).

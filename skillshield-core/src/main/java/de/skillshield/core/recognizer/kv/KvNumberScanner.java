@@ -413,6 +413,28 @@ import java.util.Set;
  * BSNR-Kandidaten von "sicher" auf "wahrscheinlich" fallen (K-4; die Abdeckung wird groesser); ein spaeterer
  * Filter nach Stufe muss das beruecksichtigen.
  *
+ * <p><b>Datumsangaben (Feature datum-und-kontextvorrang, Teil A, Regel 1, D-1 bis D-6).</b> Ein Segment, das nach
+ * {@link KvDatum} genau ein gueltiges Datum ist (Formen und Kalender dort), oder bei dem ein Zeitraum aus zwei Daten
+ * beginnt und das hinter dem {@code -} endet, wird nicht ausgegeben. Das gilt fuer alle vier Arten und fuer jede
+ * Ausgabe: direkter Kontext, weiterer Kontext, Aufzaehlung und nachgestellter Kontext (auch Komma-Regel). Nur die
+ * Ausgabe entfaellt; der Zustand ist wie bei einem ausgegebenen Segment (D-4): {@code direkt} geht verloren,
+ * {@code woerter} und {@code umbrueche} werden zurueckgesetzt, die offenen Segmente werden geleert, und eine Nummer
+ * hinter dem Datum bleibt Aufzaehlung des Kontexts. Ein Segment mit genau neun Ziffern wird nie geprueft (A-2), ebenso
+ * keines mit Buchstaben am Anfang (KVNR-Form). Die Segmentwahl ist unveraendert; deshalb gilt (bekannte Grenzen, je
+ * Test {@code bekannteGrenze...} in {@code DatumGrenzenTest}): Ein Datum mit weiterem Ziffernblock in derselben Kette
+ * ({@code 14.03.1958 1234}, {@code 14.03.1958 08.30}, auch {@code 14.03.1958 08:30}, dessen Kette erst hinter
+ * {@code 08} endet) ist als Segment kein Datum und bleibt ein Fund (0,40, D-5); ebenso ein Datum, dessen Praefix mit
+ * einer angehaengten Ziffer genau neun Ziffern hat, und ein Zeitraum, dessen Praefix neun Ziffern erreicht
+ * ({@code 01.03.2026-1.3.2026}); ein Zeitraum mit weiterem Kettenteil dahinter ist kein Datum. Kein Datum sind
+ * Zahlen ohne Trenner, mit Leerzeichen oder gemischten Trennern, die Jahr-zuerst-Form mit {@code .} oder {@code /},
+ * ein zweistelliges Jahr mit {@code /} oder {@code -}, kalendarisch Unmoegliches, Jahre ausserhalb 1900 bis 2099 und
+ * {@code 29.02.00}. Ein gueltiges Datum, auch ein Geburtsdatum hinter {@code geb.}, bleibt damit im Klartext
+ * (gewollte Schutzminderung). Bekannt und vor diesem Feature vorhanden: Eine echte Nummer hinter einem Zeitraum oder
+ * hinter mehreren Datumsangaben hat nicht immer einen Fund. Ebenfalls bekannt (Restrisiko, Kompromiss nach D-1; Test
+ * {@code bekannteGrenze_nummerAlsDatumGeschrieben}): Eine Nummer mit sechs bis acht Ziffern, deren Schreibweise genau
+ * eine gueltige Datumsform ergibt (etwa eine achtstellige Nummer in Punktgruppierung zwei-zwei-vier), gilt als Datum
+ * und bleibt ungeschuetzt; ab neun Ziffern nie.
+ *
  * <p><b>Linearitaet.</b> Ein Durchlauf, keine Rekursion, kein regulaerer Ausdruck, kein Zuruecksetzen der
  * Leseposition der Hauptschleife. Jeder Lauf wird in einem Zug gelesen. Dabei fuehrt der Durchlauf nur ein Fenster
  * der letzten 28 Buchstaben des Laufs (laengere Teilstuecke koennen keinem Eintrag gleichen, das laengste Kontextwort
@@ -454,7 +476,11 @@ import java.util.Set;
  * koennen keinem Kontextwort gleichen)
  * und das Abbild der offenen Segmente (sechs Werte, Wiederherstellen O(1)); der Vergleich mit den
  * Kontextwoertern geschieht einmal je Folgenende mit hoechstens 27 Zeichen und acht Eintraegen.
- * Jedes offene Segment wird hoechstens einmal ausgegeben, weil das Ereignis die Folge leert. Der Vorgriff auf
+ * Jedes offene Segment wird hoechstens einmal ausgegeben, weil das Ereignis die Folge leert. Die Datumspruefung
+ * ({@link KvDatum}) laeuft einmal je ausgegebenem Segment, liest hoechstens 21 Zeichen des Segments und hinter dem
+ * Segmentende hoechstens sieben Zeichen (Rest des zweiten Datums eines Zeitraums und das Kettenende) mit einem lokalen
+ * Index, ohne die Leseposition der Hauptschleife zu beruehren; Segmente ueberlappen nicht, also ist der Aufwand
+ * konstant je Segment und O(n) gesamt. Der Vorgriff auf
  * Einzelbuchstabe liest nur den einen Lauf hinter einem Sperr-Trenner (bis zum zweiten Buchstaben oder Laufende) und
  * beginnt nie im Lauf des Nachsatz-Vorgriffs (dieser betrifft den Lauf hinter einem Vorwort-Lauf mit mehreren
  * Buchstaben, also ohne laufende Sperrfolge); jedes Zeichen wird damit in einer festen,
@@ -1027,7 +1053,17 @@ final class KvNumberScanner {
             }
         }
 
+        /**
+         * Gibt das Segment als Fund aus (einzige Stelle, an der {@code funde} wachsen). Datumsangaben sind keine
+         * KV-Nummern (Feature datum-und-kontextvorrang, Teil A): Ist das Segment kein Neun-Ziffern-Segment und nach
+         * {@link KvDatum} ein Datum, entfaellt nur die Ausgabe. Alle Zustandsaenderungen ({@code direktVerloren()},
+         * {@code woerter}, {@code umbrueche}, Leeren der offenen Segmente) liegen in den Aufrufern und geschehen
+         * wie bisher (D-4); {@code funde} wird nirgends gelesen.
+         */
         private void ausgeben(int start, int end, int anzahl, boolean mitDirektemKontext, double deckel) {
+            if (anzahl != NEUN && KvDatum.istDatumssegment(text, start, end)) {
+                return; // D-1, D-4: nur die Ausgabe entfaellt, der Zustand ist im Aufrufer schon wie bisher gesetzt
+            }
             double konfidenz;
             String quelle;
             char buchstabe = art.buchstabenform() && istAsciiBuchstabe(text.charAt(start)) ? text.charAt(start) : 0;

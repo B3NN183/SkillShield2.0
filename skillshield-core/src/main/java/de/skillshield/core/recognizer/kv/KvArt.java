@@ -60,6 +60,10 @@ import java.util.Set;
  * {@link #sourcePruefzifferUngueltig()}); abweichende Form (Buchstabe und 6 bis 12 Ziffern ausser neun oder reine
  * Ziffernfolge) 0,40 (Quelle {@link #sourceLaengeAbweichend()}). Die bekannten Grenzen der KVNR (G-K1 bis G-K17, G-D2)
  * stehen im Javadoc von {@code KvNumberScanner}.
+ *
+ * <p>Fuer alle vier Arten gleich (Feature datum-und-kontextvorrang, Teil A): Ein Segment, das genau ein gueltiges
+ * Datum ist oder einen Zeitraum aus zwei Daten beginnt, wird nicht ausgegeben ({@code KvDatum}, aufgerufen in
+ * {@code KvNumberScanner}); die Eigenschaften der Art (Typ, Woerter, Konfidenzen, Quellen) bleiben unveraendert.
  */
 enum KvArt {
 

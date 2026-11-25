@@ -34,8 +34,11 @@ import org.junit.jupiter.api.Test;
  */
 class DatumKontextvorrangDifferenzTest {
 
-    /** Ob das Produkt Teil A (Datumsangaben sind keine KV-Nummern) schon umsetzt; T-1: nein. */
-    static final boolean TEIL_A = false;
+    /**
+     * Ob das Produkt Teil A (Datumsangaben sind keine KV-Nummern) schon umsetzt; T-1: nein, seit T-2: ja
+     * (Umgestellt durch datum-und-kontextvorrang T-2: vorher {@code false}).
+     */
+    static final boolean TEIL_A = true;
 
     private static final List<String> KONTEXTWOERTER = List.of("LANR", "IK", "KVNR", "BSNR", "NBSNR",
             "Versichertennummer", "Arztnummer");

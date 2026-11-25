@@ -69,6 +69,10 @@ import java.util.List;
  * geschuetzt (D-6; BSNR vor IK, KVNR und LANR, IP vor allen).</li>
  * </ul>
  *
+ * <p>Datumsangaben sind keine Nummern (Feature datum-und-kontextvorrang, Teil A): Ein Segment, das genau ein gueltiges
+ * Datum ist (zum Beispiel {@code 14.03.1958}) oder ein Zeitraum aus zwei Daten beginnt, ist kein Fund; Einzelheiten,
+ * Formen und Grenzen im Javadoc von {@link KvNumberScanner} und {@code KvDatum}. Alles andere bleibt unveraendert.
+ *
  * <p>Vorrang des Bestands: Der Erkenner ist {@linkplain #nachrangig() nachrangig} wie der KVNR-Erkenner; der
  * {@code TextScanner} schneidet seine Kandidaten, die einen aufgeloesten Bestandsfund (E-Mail, IP, URL, Pfad)
  * ueberschneiden, auf die Teile ausserhalb zu (Reststuecke mit Quelle {@value #SOURCE_REST}). Auf Erkennerebene

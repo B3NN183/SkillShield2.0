@@ -25,6 +25,10 @@ import java.util.List;
  * (Rest 14cR). Ein Zeilenumbruch aus {@code CR}, unsichtbaren Zeichen und {@code LF} zaehlt als einer. Der Fund
  * umfasst nur die Ziffern samt inneren Trennern.
  *
+ * <p>Datumsangaben sind keine Nummern (Feature datum-und-kontextvorrang, Teil A): Ein Segment, das genau ein gueltiges
+ * Datum ist (zum Beispiel {@code 14.03.1958}) oder ein Zeitraum aus zwei Daten beginnt, ist kein Fund; Einzelheiten,
+ * Formen und Grenzen im Javadoc von {@link KvNumberScanner} und {@code KvDatum}. Alles andere bleibt unveraendert.
+ *
  * <p>Bekannte Grenzen (je ein Test {@code bekannteGrenze...}): 15R (CR mit Leerraum, Buchstabe oder nicht
  * unsichtbarem Zeichen vor LF sind zwei Umbrueche), 14cR (das Zwei-Buchstaben-Wort mit erweiterten Trennern, erweiterte
  * Trenner ausserhalb von zwei bis drei Leerraumzeichen, Punkt mit Tab), 14d und 14e mit erweiterten

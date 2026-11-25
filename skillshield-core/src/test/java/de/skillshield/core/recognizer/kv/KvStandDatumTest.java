@@ -6,9 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import de.skillshield.core.DatumMengen;
+import de.skillshield.core.DatumReferenz;
 import de.skillshield.core.SynthetischeDaten;
 import de.skillshield.core.SynthetischeKvNummern;
 import de.skillshield.core.model.Finding;
+import de.skillshield.core.model.FindingType;
 import de.skillshield.core.recognizer.Recognizer;
 import de.skillshield.core.recognizer.TextScanner;
 import java.util.ArrayList;
@@ -45,6 +47,23 @@ class KvStandDatumTest {
     private static final List<Recognizer> PRODUKT = List.of(new LanrRecognizer(), new IkRecognizer(),
             new KvnrRecognizer(), new BsnrRecognizer());
     private static final List<String> ARTEN = List.of("LANR", "IK", "KVNR", "BSNR");
+
+    /**
+     * Die Funde ohne die KV-Funde, deren Bereich nach der unabhaengigen Referenz ein Datumssegment ist.
+     * Umgestellt durch datum-und-kontextvorrang T-2: Das Produkt war gleich der Kopie (T-1), seit Teil A ist es
+     * gleich der Kopie ohne Datumssegmente. Die Kopie, {@code ALT_DATUM} und alle Siegel bleiben unveraendert.
+     */
+    private static List<Finding> ohneDatumssegmente(String text, List<Finding> funde) {
+        List<Finding> rest = new ArrayList<>(funde.size());
+        for (Finding f : funde) {
+            boolean kv = f.type() == FindingType.LANR || f.type() == FindingType.IK
+                    || f.type() == FindingType.KVNR || f.type() == FindingType.BSNR;
+            if (!(kv && DatumReferenz.istDatumssegment(text, f.start(), f.end()))) {
+                rest.add(f);
+            }
+        }
+        return rest;
+    }
 
     private static int hash(int h, List<Finding> funde, boolean mitOriginalwert) {
         int ergebnis = 31 * h + funde.size();
@@ -84,12 +103,13 @@ class KvStandDatumTest {
                         List<Finding> kopie = KOPIEN.get(a).detect(text);
                         m.siegelKopie = hash(m.siegelKopie, kopie, false);
                         m.kopieFunde += kopie.size();
-                        m.ungleichKopieProdukt[a] += kopie.equals(PRODUKT.get(a).detect(text)) ? 0 : 1;
+                        m.ungleichKopieProdukt[a] += ohneDatumssegmente(text, kopie).equals(PRODUKT.get(a).detect(text))
+                                ? 0 : 1;
                     }
                     List<Finding> alt = ALT.scan(text);
                     m.siegelAlt = hash(m.siegelAlt, alt, true);
                     m.altFunde += alt.size();
-                    m.ungleichAltNeu += alt.equals(NEU.scan(text)) ? 0 : 1;
+                    m.ungleichAltNeu += ohneDatumssegmente(text, alt).equals(NEU.scan(text)) ? 0 : 1;
                 }
                 alle.add(m);
             }
@@ -98,7 +118,10 @@ class KvStandDatumTest {
         return messungen;
     }
 
-    /** Die Huellen der Kopie liefern auf allen Textmengen dieselben Funde wie die Produkterkenner (alle Felder). */
+    /**
+     * Umgestellt durch datum-und-kontextvorrang T-2: Vorher "Kopie gleich Produkt"; jetzt liefern die Produkterkenner
+     * auf allen Textmengen dieselben Funde wie die Huellen der Kopie ohne Funde ueber Datumssegmente (alle Felder).
+     */
     @Test
     void kopie_gleichProdukt_aufAllenMengenJeArt() {
         List<Messung> m = messungen();
@@ -110,7 +133,11 @@ class KvStandDatumTest {
         }
     }
 
-    /** {@code ALT_DATUM} liefert auf allen Textmengen dieselben Funde wie {@code TextScanner.standard()}. */
+    /**
+     * Umgestellt durch datum-und-kontextvorrang T-2: Vorher "{@code ALT_DATUM} gleich {@code standard()}"; jetzt
+     * liefert {@code standard()} auf allen Textmengen dieselben Funde wie {@code ALT_DATUM} ohne KV-Funde ueber
+     * Datumssegmente.
+     */
     @Test
     void altDatum_gleichStandard_aufAllenMengen() {
         List<Messung> m = messungen();

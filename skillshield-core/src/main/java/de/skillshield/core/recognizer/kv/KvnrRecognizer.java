@@ -99,6 +99,11 @@ import java.util.List;
  * Woerter davor, ein Strich mit Leerraum und ein Wort, das kein Kontextwort bildet ({@code Patienten-VKNR}), ergeben
  * keinen Fund. LANR und IK kennen diese Form nicht.
  *
+ * <p>Datumsangaben sind keine Nummern (Feature datum-und-kontextvorrang, Teil A): Ein Segment, das genau ein gueltiges
+ * Datum ist (zum Beispiel {@code 14.03.1958}) oder ein Zeitraum aus zwei Daten beginnt, ist kein Fund. Die
+ * Buchstabenform beginnt mit einem Buchstaben und ist nie ein Datum: {@code B 14.03.1958} hinter einem KVNR-Kontextwort
+ * bleibt ein Fund (0,40, bekannte Grenze). Einzelheiten im Javadoc von {@link KvNumberScanner} und {@code KvDatum}.
+ *
  * <p>Vorrang des Bestands (Nachtrag 2 und 3 zu T-6): Der Erkenner ist {@linkplain #nachrangig() nachrangig}. Der
  * {@code TextScanner} schneidet jeden seiner Kandidaten, der sich mit den aufgeloesten Bestandsfunden (den Funden der
  * Typen E-Mail, IP, URL oder Pfad im Scan ohne die nachrangigen Erkenner, Einzelheiten im Javadoc des
