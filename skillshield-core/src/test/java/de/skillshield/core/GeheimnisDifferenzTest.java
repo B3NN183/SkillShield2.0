@@ -9,6 +9,7 @@ import de.skillshield.core.model.FindingType;
 import de.skillshield.core.recognizer.Recognizer;
 import de.skillshield.core.recognizer.TextScanner;
 import de.skillshield.core.recognizer.TextScannerStandGeheimnis;
+import de.skillshield.core.recognizer.geheimnis.GeheimnisTypen;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
@@ -26,8 +27,9 @@ import org.junit.jupiter.api.Test;
  * </ol>
  * Die Zahl der zusaetzlichen Funde je Menge ist exakt festgehalten. In T-1 ist sie ueberall 0 (volle Gleichheit);
  * spaetere Tasks tragen die gemessenen Zahlen ein, jeden zusaetzlichen Fund einzeln nennt der Bericht. Zulaessige
- * Ausnahmen gibt es keine. Regel 3 (Abdeckung neu = alt plus Geheimnis-Kandidaten) ist ab T-3 um die Kandidaten zu
- * ergaenzen; die Typerkennung ({@code GEHEIMNISTYPEN}) ist dann gegen {@code GeheimnisTypen} abzugleichen.
+ * Ausnahmen gibt es keine. Regel 3 (Abdeckung neu = alt plus Geheimnis-Kandidaten) ist seit T-3 um die Kandidaten
+ * ergaenzt (die Funde der Erkenner von {@code neu}, die {@code ALT} nicht hat, mit Geheimnistyp); die Typerkennung
+ * nutzt {@code GeheimnisTypen}, {@code GEHEIMNISTYPEN} wird dagegen abgeglichen.
  * Meldungen nennen Menge, Textindex, Bereich, Typ und Quelle, nie Text oder Werte.
  *
  * <p>Die Gegenproben belegen, dass der Vergleich anschlaegt: ein kuenstlicher Erkenner mit einem Fund ausserhalb des
@@ -72,7 +74,37 @@ class GeheimnisDifferenzTest {
     }
 
     private static boolean istGeheimnistyp(FindingType typ) {
-        return GEHEIMNISTYPEN.contains(typ.name());
+        return GeheimnisTypen.istGeheimnistyp(typ);
+    }
+
+    /**
+     * Die Geheimnis-Kandidaten eines Texts: die Funde der Erkenner von {@code neu}, die {@code alt} nicht hat
+     * (Klasse nicht in ALT), mit Geheimnistyp. Unbeteiligte Erkenner laufen nicht noch einmal.
+     */
+    private static List<Finding> geheimnisKandidaten(List<Recognizer> zusatz, String text) {
+        List<Finding> kandidaten = new ArrayList<>();
+        for (Recognizer r : zusatz) {
+            for (Finding f : r.detect(text)) {
+                if (istGeheimnistyp(f.type())) {
+                    kandidaten.add(f);
+                }
+            }
+        }
+        return kandidaten;
+    }
+
+    private static List<Recognizer> zusatzErkenner(TextScannerStandGeheimnis alt, TextScanner neu) {
+        List<Class<?>> klassenAlt = new ArrayList<>();
+        for (Recognizer r : alt.recognizers()) {
+            klassenAlt.add(r.getClass());
+        }
+        List<Recognizer> zusatz = new ArrayList<>();
+        for (Recognizer r : neu.recognizers()) {
+            if (!klassenAlt.contains(r.getClass())) {
+                zusatz.add(r);
+            }
+        }
+        return zusatz;
     }
 
     private static boolean ueberlappt(Finding a, Finding b) {
@@ -97,6 +129,7 @@ class GeheimnisDifferenzTest {
         int zusaetzlich = 0;
         List<String> verstoesse = new ArrayList<>();
         List<String> zusatz = new ArrayList<>();
+        List<Recognizer> zusatzErkenner = zusatzErkenner(alt, neu);
         for (int i = 0; i < texte.size(); i++) {
             List<Finding> a = alt.scan(texte.get(i));
             List<Finding> n = neu.scan(texte.get(i));
@@ -120,14 +153,16 @@ class GeheimnisDifferenzTest {
                 }
             }
             zusaetzlich += weitere.size();
-            BitSet abdeckungAlt = abdeckung(a);
+            // Regel 3 (ab T-3): Abdeckung neu = Abdeckung alt vereinigt die Geheimnis-Kandidaten
+            BitSet erwartetAbdeckung = abdeckung(a);
+            erwartetAbdeckung.or(abdeckung(geheimnisKandidaten(zusatzErkenner, texte.get(i))));
             BitSet nur = abdeckung(n);
             BitSet ohneAlt = (BitSet) nur.clone();
-            ohneAlt.andNot(abdeckungAlt);
-            BitSet verloren = (BitSet) abdeckungAlt.clone();
+            ohneAlt.andNot(erwartetAbdeckung);
+            // Weitere Funde ohne Geheimnistyp sind schon als Verstoss von Regel 2 gemeldet (nicht doppelt zaehlen).
+            ohneAlt.andNot(abdeckung(weitere.stream().filter(w -> !istGeheimnistyp(w.type())).toList()));
+            BitSet verloren = (BitSet) erwartetAbdeckung.clone();
             verloren.andNot(nur);
-            BitSet nurWeitere = abdeckung(weitere);
-            ohneAlt.andNot(nurWeitere);
             if (!verloren.isEmpty() || !ohneAlt.isEmpty()) {
                 verstoesse.add(menge + "#" + i + ": Abdeckung weicht ab (verloren=" + verloren.cardinality()
                         + ", fremd=" + ohneAlt.cardinality() + ")");
@@ -165,6 +200,15 @@ class GeheimnisDifferenzTest {
             summe += menge.size();
         }
         assertTrue(summe >= 1000, "zu wenige Texte in den Bestandsmengen: " + summe);
+    }
+
+    @Test
+    void geheimnistypen_listeStimmtMitGeheimnisTypenUeberein() {
+        assertEquals(List.of(GeheimnisTypen.PASSWORT.name(), GeheimnisTypen.TOKEN.name()), GEHEIMNISTYPEN);
+        for (String name : GEHEIMNISTYPEN) {
+            assertTrue(istGeheimnistyp(new FindingType(name)), name);
+        }
+        assertFalse(istGeheimnistyp(new FindingType("HOST")));
     }
 
     @Test
@@ -210,13 +254,32 @@ class GeheimnisDifferenzTest {
     @Test
     void gegenprobe_fundImBestand_veraendertEinenFundVonAlt_wirdAlsVerstossGemeldet() {
         // Der Zusatzfund ragt ueber das Ende des Pfads hinaus (Teilueberlappung): der Pfad wird zusammengelegt.
+        // Umgestellt durch geheimnisse-erkennung T-3: alter Typ der kuenstlichen Erkenner TOKEN, neuer Typ HOST.
+        // Grund: Ein Kandidat vom Typ TOKEN wird seit der Lueckenregel auf die Luecken zugeschnitten und kann den
+        // Pfad nicht mehr veraendern (gezeigt in der folgenden Gegenprobe); die Gegenprobe braucht dafuer einen
+        // Typ ausserhalb der Geheimnistypen.
         String pfad = "Datei C:\\Temp\\x.log gelesen";
         Messung hoch = vergleiche("probe", List.of(pfad), TextScannerStandGeheimnis.ALT,
-                standardPlus(markiere("x.log gelesen", "TOKEN", 0.99)));
+                standardPlus(markiere("x.log gelesen", "HOST", 0.99)));
         assertFalse(hoch.verstoesse().isEmpty(), "Fund mit hoeherer Konfidenz im Pfad wurde nicht bemerkt");
         Messung gleich = vergleiche("probe", List.of(pfad), TextScannerStandGeheimnis.ALT,
-                standardPlus(markiere("x.log gelesen", "TOKEN", 0.95)));
+                standardPlus(markiere("x.log gelesen", "HOST", 0.95)));
         assertFalse(gleich.verstoesse().isEmpty(), "Fund mit gleicher Konfidenz im Pfad wurde nicht bemerkt");
+    }
+
+    @Test
+    void gegenprobe_geheimnisKandidatImBestand_veraendertKeinenFund_reststueckStattZusammenlegung() {
+        String pfad = "Datei C:\\Temp\\x.log gelesen";
+        for (double konfidenz : new double[] {0.95, 0.99, 1.0}) {
+            Messung m = vergleiche("probe", List.of(pfad), TextScannerStandGeheimnis.ALT,
+                    standardPlus(markiere("x.log gelesen", "TOKEN", konfidenz)));
+            assertEquals(List.of(), m.verstoesse());
+            assertEquals(1, m.zusaetzlich());
+        }
+        Messung innen = vergleiche("probe", List.of(pfad), TextScannerStandGeheimnis.ALT,
+                standardPlus(markiere("x.log", "PASSWORT", 0.99)));
+        assertEquals(List.of(), innen.verstoesse());
+        assertEquals(0, innen.zusaetzlich());
     }
 
     @Test

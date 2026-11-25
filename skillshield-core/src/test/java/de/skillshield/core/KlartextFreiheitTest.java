@@ -24,6 +24,7 @@ import de.skillshield.core.pseudonymize.PseudonymizationResult;
 import de.skillshield.core.pseudonymize.Pseudonymizer;
 import de.skillshield.core.recognizer.Recognizer;
 import de.skillshield.core.recognizer.TextScanner;
+import de.skillshield.core.recognizer.geheimnis.GeheimnisTypen;
 import de.skillshield.core.recognizer.kv.IkRecognizer;
 import de.skillshield.core.recognizer.kv.LanrRecognizer;
 import de.skillshield.core.reidentify.ReidentificationResult;
@@ -785,6 +786,52 @@ class KlartextFreiheitTest {
         });
         assertAusgabeKlartextfrei("KV-Trenner-Test", ausgabe);
     }
+
+    /**
+     * geheimnisse-erkennung T-3 (AK-42): Die Typen in {@code GeheimnisTypen} und die Lueckenregel des Scanners. Ein
+     * kuenstlicher Erkenner liefert einen Kandidaten vom Typ PASSWORT ueber Marker-Pfad und Marker-E-Mail. Im Fund,
+     * in der Fundliste, im pseudonymisierten Text, im Mapping und im Ergebnis der Rueckuebersetzung, in den
+     * Ausnahmen (null als Typ, Fund passt nicht zum Text) und auf Standard- und Fehlerausgabe steht kein Marker.
+     */
+    @Test
+    void geheimnisTypen_lueckenregel_keinMarkerInFundenAusnahmenUndAusgabe() {
+        int von = "Passwort: ".length();
+        int bis = TEXT_GEHEIMNIS.length() - " Ende".length();
+        Finding kandidat = new Finding(GeheimnisTypen.PASSWORT, TEXT_GEHEIMNIS.substring(von, bis), von, bis, 0.95,
+                "kuenstlich");
+        List<Recognizer> liste = new ArrayList<>(TextScanner.standard().recognizers());
+        liste.add(text -> List.of(kandidat));
+        Ausgabe ausgabe = erfasse(() -> {
+            List<Finding> funde = new TextScanner(liste).scan(TEXT_GEHEIMNIS);
+            assertTrue(findeMarker(TEXT_GEHEIMNIS).isPresent(), "Suchfunktion findet den Marker im Eingabetext");
+            assertTrue(funde.size() >= 3, "Pfad, E-Mail und Reststueck");
+            assertToStringKlartextfrei("Liste der Funde Luecken", funde);
+            for (Finding f : funde) {
+                assertToStringKlartextfrei("Finding.toString Luecken", f);
+                assertToStringKlartextfrei("Finding.source Luecken", f.source());
+                assertToStringKlartextfrei("FindingType Luecken", f.type());
+            }
+            PseudonymizationResult pseudo = PSEUDONYMIZER.pseudonymize(TEXT_GEHEIMNIS, funde);
+            assertTrue(findeMarker(pseudo.text()).isEmpty(), "Marker im pseudonymisierten Text");
+            assertToStringKlartextfrei("PseudonymizationResult Luecken", pseudo);
+            assertToStringKlartextfrei("PlaceholderMapping Luecken", pseudo.mapping());
+            ReidentificationResult zurueck = REIDENTIFIER.restore(pseudo.text(), pseudo.mapping());
+            assertTrue(TEXT_GEHEIMNIS.equals(zurueck.text()), "Roundtrip Luecken");
+            assertToStringKlartextfrei("ReidentificationResult Luecken", zurueck);
+
+            NullPointerException npe = assertThrows(NullPointerException.class,
+                    () -> GeheimnisTypen.istGeheimnistyp(null));
+            assertKlartextfrei("istGeheimnistyp(null)", npe);
+            Finding falsch = new Finding(GeheimnisTypen.TOKEN, MARKER_PFAD, 0, MARKER_PFAD.length(), 0.95, "x");
+            TextScanner fehlerhaft = new TextScanner(List.of(text -> List.of(falsch)));
+            IllegalStateException ise = assertThrows(IllegalStateException.class,
+                    () -> fehlerhaft.scan("anderer Text ohne Marker"));
+            assertKlartextfrei("Fund passt nicht zum Text", ise);
+        });
+        assertAusgabeKlartextfrei("Luecken-Test", ausgabe);
+    }
+
+    private static final String TEXT_GEHEIMNIS = "Passwort: " + MARKER_PFAD + " und " + MARKER_MAIL + " Ende";
 
     @Test
     void selbsttest_kvMarkerUndIhreErstenSechsZiffernWerdenGefunden() {

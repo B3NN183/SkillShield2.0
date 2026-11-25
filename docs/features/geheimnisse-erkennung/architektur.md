@@ -792,5 +792,11 @@ dazukommen.
    versetzt hinter einem BOM steht, wird nicht geprüft (nur mit absichtlich gebauter Datei erreichbar). Nicht
    umgesetzt; bei Gelegenheit zusätzlich ab Versatz 1 dekodieren.
 
+8. **Überlappungsfreie Kandidaten je Geheimnis-Erkenner (security, T-3, niedrig), gilt ab T-4.** Die Lückenregel ist
+   linear, solange jeder Geheimnis-Erkenner überlappungsfreie Kandidaten liefert; bei vielen einander überlappenden
+   Kandidaten über vielen Bestandsfunden wächst die Zahl der Reststücke quadratisch (heute nur mit künstlichen
+   Erkennern erreichbar). Jeder Geheimnis-Erkenner (T-4, T-6, T-7, T-8) bekommt deshalb einen Test „Kandidaten
+   untereinander überlappungsfrei“ über den Prüfstand und einen Zufallslauf.
+
 `SynthetischeGeheimnisse`: Die Anforderung definiert nur `P1`, `P2`, `P3`, `P6` und `P7`; „P1 bis P7“ in Kap. 6.2
 ist ungenau.
