@@ -53,6 +53,30 @@ public final class SynthetischeGeheimnisse {
     /** Anforderung P7: sieben Zeichen. */
     public static final String P7 = "Zx9#kqw";
 
+    /** Ergaenzung T-2, Anforderung AK-7, AK-11: wie P1, aber ohne das Ausrufezeichen am Ende. */
+    public static final String P1_OHNE_AUSRUF = "Sommer2026";
+
+    /** Ergaenzung T-2, Anforderung AK-10: fuenf Zeichen, zu kurz fuer einen Fund. */
+    public static final String P5 = "Ab3!x";
+
+    /** Ergaenzung T-2, Anforderung AK-11: Sonderzeichen mitten im Wort. */
+    public static final String P_DOLLAR = "Pa$$word";
+
+    /** Ergaenzung T-2, Anforderung AK-16: Kleinbuchstaben und eine Ziffer. */
+    public static final String P_HUNTER = "hunter2x";
+
+    /** Ergaenzung T-2, Anforderung AK-24: nur Buchstaben (ODBC-Zeichenfolge, halber Wert-Test). */
+    public static final String P_GEHEIM = "geheim";
+
+    /** Ergaenzung T-2, Anforderung AK-8: Wert mit Leerzeichen, der nur in Anfuehrungszeichen erfasst wird. */
+    public static final String P_MIT_LEERZEICHEN = "Wolke Fuchs 7x!";
+
+    /** Ergaenzung T-2, Anforderung AK-24: Wert mit Leerzeichen ohne Ausrufezeichen. */
+    public static final String P_LEERZEICHEN_OHNE = "Wolke Fuchs 7x";
+
+    /** Ergaenzung T-2, Anforderung AK-24: Wert mit Semikolon. */
+    public static final String P_SEMIKOLON = "a;b1x";
+
     /** Erfundener Token der Anforderung (Kurzname T): 29 Zeichen, Buchstaben, eine einzelne Ziffer, mit Marke. */
     public static final String T = "AbcdTestwertEfghIjklMnop7Qrst";
 

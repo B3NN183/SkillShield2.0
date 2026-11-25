@@ -1,0 +1,389 @@
+# Negativkorpus (Plan geheimnisse-erkennung, Kapitel 6.2 und T-2; Anforderung AK-33 bis AK-35).
+# Synthetische Ticket- und Dokumentationssaetze mit Geheimnis-Woertern, aber ohne Geheimnis. Kein Satz darf nach den
+# Regeln D-4 bis D-8 einen PASSWORT- oder TOKEN-Fund ergeben. Ein Treffer aendert die Regel, nie diese Datei.
+# Format: eine Zeile je Satz, UTF-8 ohne BOM, LF; "# Kategorie: NAME" beginnt eine Kategorie; die zwei Zeichen \n und
+# \t stehen fuer Zeilenumbruch und Tabulator. Eingefroren ab Abnahme T-2.
+# Kategorie: ZUSTAND
+Passwort zurückgesetzt
+Passwort ist abgelaufen
+Token abgelaufen
+Passwort wurde per SMS versendet
+Passwort für svc_abr_export wurde zurückgesetzt.
+Das Passwort für den Benutzer ist abgelaufen.
+Das Token ist nicht mehr gültig, siehe CHG0012345.
+Kennwort: wird per Post zugestellt
+Das Passwort des Kontos wurde gesperrt.
+Passwort ist gesperrt seit dem Wochenende
+Das Kennwort wurde heute Morgen geändert.
+Initialpasswort wurde dem Kollegen persönlich übergeben.
+Passwort vom Dienstkonto ist inzwischen abgelaufen und wurde erneuert.
+Das Adminpasswort ist noch nicht gesetzt.
+Kennwort läuft am Monatsende ab.
+Das Root-Passwort wurde nach dem Vorfall erneuert.
+Passwort bleibt unverändert, der Kunde hat die Änderung abgelehnt.
+Passwort für den Dienstzugang ist abgelaufen und muss erneuert werden.
+Das Kennwort des Benutzers ist nach dreimaliger Fehleingabe gesperrt.
+Passphrase wurde neu generiert und im Tresor abgelegt.
+Der Token wurde widerrufen.
+Das Secret wurde rotiert, die Anwendung läuft wieder.
+Das Passwort ist bei der Migration verloren gegangen.
+Passwort des Kontos svc_backup ist abgelaufen.
+Kennwort ist nicht mehr gültig, das Konto bleibt gesperrt.
+Passwort wurde vom Service-Desk zurückgesetzt, der Benutzer ist informiert.
+Das Passwort wurde nicht übernommen.
+Der Zugang funktioniert nach dem Passwortwechsel wieder.
+Kennwort ist leer.
+Passwort ist nicht gesetzt
+Passwort: abgelaufen
+Passwort: Sonnenschein
+Passwort: falsch!
+Passwort: E-Mail
+Passwort: nicht-gesetzt
+Passwort wurde zurückgesetzt.\nBitte neues Passwort vergeben.
+Ticket gelöst.\nDas Passwort läuft am Monatsende ab.\nToken wurde erneuert.
+Betreff: Passwort\nBitte um Rückmeldung.
+Kennwort:\nsiehe Tresor
+Das Passwort ist abgelaufen.\n\nDer Benutzer wurde informiert.
+Hinweis:\nPasswort ändern unter Einstellungen.
+# Kategorie: AUFFORDERUNG
+bitte neues Passwort vergeben
+Kennwort ändern
+Bitte Passwort ändern: Anleitung im Wiki.
+Passwort:\nBitte neues Passwort vergeben.
+Bitte das Passwort beim nächsten Login ändern.
+Bitte Kennwort sofort zurücksetzen und das Ticket schließen.
+Bitte den Token erneuern, bevor er abläuft.
+Neues Passwort bitte direkt im Tresor hinterlegen.
+Bitte das Initialpasswort nach der ersten Anmeldung ändern.
+Passwort bitte nicht per E-Mail versenden.
+Bitte Passwort nicht ins Ticket schreiben, sondern im Tresor ablegen.
+Kennwort bitte telefonisch beim Service-Desk erfragen.
+Bitte API-Key im Konfigurationsportal neu erzeugen.
+Secret bitte vor dem Wochenende rotieren.
+Bitte zuerst das Passwort zurücksetzen, dann den Dienst starten.
+Passwort für das Testkonto bitte neu vergeben.
+Bitte Kennwort für den Export-Benutzer neu setzen.
+Bitte die Passwortrichtlinie beachten.
+Bitte die Passphrase nicht weitergeben.
+Passwort ändern: bitte bis Freitag erledigen.
+Bitte Token neu ausstellen lassen.
+Bitte das Passwort des Dienstkontos vom Vorgesetzten freigeben lassen.
+Kennwort vor der Weitergabe ändern lassen.
+Bitte neues Kennwort vergeben und die Kollegen informieren.
+Bitte das Passwort mindestens alle 90 Tage wechseln.
+Bitte Password erneuern, sobald die Meldung erscheint.
+Passwort neu setzen und anschließend den Dienst prüfen.
+# Kategorie: VERWEIS
+Passwort: siehe Tresor
+Passwort: siehe KeePass
+Passwort (siehe Tresor): Eintrag SRV-APP07
+Passwort für SRV-APP07 laut Tresor
+Kennwort: siehe Wiki
+Passwort: siehe Eintrag im Tresor unter SRV-APP07
+Passwort: im Tresor hinterlegt
+Passwort: in KeePass abgelegt
+Passwort: bei der Teamleitung erfragen
+Kennwort: Details im Wiki unter Zugangsdaten
+Passwort: siehe CHG0012345
+Passwort: laut Übergabeprotokoll
+Token: siehe Konfigurationsportal
+Secret: siehe Vault-Eintrag
+Passwort ist im Tresor hinterlegt
+Passwort für den Dienstzugang ist im Tresor abgelegt
+Passwort ist im Passwortmanager unter dem Eintrag des Dienstes zu finden.
+Das Passwort steht im Tresor, Ordner Infrastruktur.
+Kennwort: Verweis auf das Übergabeprotokoll
+API-Key: siehe Entwicklerportal
+Zugangsdaten: siehe Tresor
+Passwort wird vom Service-Desk persönlich übergeben, siehe Wiki.
+Passwort: Siehe Seite Betriebshandbuch, Kapitel Zugänge
+Passwort: Eintrag im Tresor (SRV-APP07)
+Token: Eintrag im Tresor
+Passwort für svc_x: siehe Tresor, Eintrag Dienstkonten
+Kennwort für das Backup-Konto: Tresor, Ordner Backup
+Passwort: Betriebshandbuch Abschnitt 4
+Passwort: wie im Vorgänger-Ticket
+Kennwort: Kennwort-Liste im Tresor
+# Kategorie: RICHTLINIE
+password policy
+Das Passwort muss mindestens 12 Zeichen lang sein.
+Passwort-Richtlinie: 90 Tage gültig
+Passwörter müssen Groß- und Kleinbuchstaben enthalten.
+Die Passwortrichtlinie wurde zum Quartalsende verschärft.
+Passwortkomplexität: mindestens drei Zeichenklassen
+Kennwortrichtlinie: Wiederverwendung der letzten zehn Kennwörter ist nicht erlaubt.
+Passwörter dürfen nicht im Klartext gespeichert werden.
+Das Passwort darf nicht dem Benutzernamen entsprechen.
+Passwortwechsel ist alle 90 Tage verpflichtend.
+Initialpasswörter sind nur einmalig gültig.
+Passwort-Historie: die letzten 12 Passwörter werden gespeichert
+Für Dienstkonten gilt: Passwort mindestens 20 Zeichen
+Passwortlänge: mindestens 14 Zeichen
+Kennwörter sind vertraulich zu behandeln.
+Passphrasen sind einfachen Passwörtern vorzuziehen.
+Das Kennwort muss bei Verdacht auf Kompromittierung sofort geändert werden.
+Passwort-Manager sind für alle Teams zugelassen.
+Die Mindestlänge für das Admin-Passwort beträgt 16 Zeichen.
+Passwortrichtlinie: Gültigkeit 90 Tage, Sperre nach 5 Fehlversuchen
+Die Richtlinie für Passwörter steht im Wiki.
+Passwortregeln gelten auch für Testsysteme.
+Das Passwort wird nach der Richtlinie alle 180 Tage erneuert.
+Secrets dürfen nicht im Quellcode stehen.
+Tokens müssen eine Laufzeit von höchstens einer Stunde haben.
+Kennwort-Reset nur nach Identitätsprüfung.
+Das Passwort darf nicht aus dem Wörterbuch stammen.
+Passwort-Sperre: nach fünf Fehlversuchen wird das Konto gesperrt.
+Kennwortverwaltung: zentral über den Passwortmanager der IT.
+# Kategorie: ZAHL_DAUER
+Passwort: 12 Zeichen
+Die Passwortlänge wurde auf 14 erhöht.
+Kennwort ist 8-stellig.
+Der Token läuft nach 3600 Sekunden ab.
+Passwort ist 90-tägig gültig.
+Passwort: 90 Tage
+Kennwort läuft nach 90 Tagen ab.
+Token: 3600 Sekunden
+Passwort: 8 Zeichen, 90 Tage Laufzeit
+Passwort = 12 Zeichen
+Passwort: mindestens 12
+Das Passwort ist 12-stellig.
+Secret: 30 Minuten gültig
+Kennwort: 14 Zeichen
+Der Token ist 24 Stunden gültig.
+Token ist 3600 Sekunden gültig.
+Kennwort ist 90 Tage gültig.
+Passwort lautet 123456
+Passwort: 123456
+Das Passwort hatte 8 Zeichen und lief nach 90 Tagen ab.
+Passwort mit 16 Zeichen wurde vergeben.
+Passwort ist 6-stellig.
+Token läuft in 15 Minuten ab.
+Der API-Key hat eine Laufzeit von 365 Tagen.
+Secret: 2 Jahre gültig
+Kennwort = 14
+Passwort: 12 Stunden
+Die Sperre dauert 30 Minuten, das Passwort bleibt gültig.
+Passwort: 2026
+# Kategorie: ENGLISCH
+password: required
+The password has been reset.
+Password reset requested by the service desk.
+Password policy: minimum 12 characters.
+The password is expired.
+Please change your password.
+Password must contain at least one digit.
+The token has expired.
+Token is invalid.
+Token: invalid (HTTP 401)
+Secret: not set
+API key: not configured
+The password for the service account is stored in the vault.
+Password: see vault
+Password rotation is scheduled for the next maintenance window.
+Reset the password via the self-service portal.
+The initial password must be changed at first login.
+Password: expires in 30 days
+Password: not required for this account
+Bearer token expired, please log in again.
+The access token was revoked after the incident.
+Refresh token lifetime is 8 hours.
+The API key was rotated yesterday.
+Client secret is stored in the key vault.
+Password for admin: see ticket
+No password has been set for this account yet.
+Passwords are never stored in plain text.
+Credentials are managed in the vault.
+Please do not paste passwords into tickets.
+Password: n/a
+The password expires on the last day of the month.
+User locked out after five failed password attempts.
+Password check failed: invalid credentials
+# Kategorie: TOKEN_SAETZE
+Token: ungültig (HTTP 401)
+Secret: nicht vorhanden
+Bearer Authentifizierung
+Bearer-Token abgelaufen
+Authorization: failed
+Authorization: Fehler 401
+Tokenlänge: 29 Zeichen
+Token-Ablauf: 3600 Sekunden
+Secretary: Abteilungsassistenz
+Der Access-Token wurde vom Server abgelehnt (HTTP 403).
+Der Refresh-Token ist abgelaufen, bitte neu anmelden.
+Token wurde widerrufen
+Das Token ist nicht mehr gültig.
+Token fehlt im Request-Header.
+API-Key fehlt in der Konfiguration.
+Der API-Key wurde widerrufen und neu ausgestellt.
+Authorization-Header fehlt
+Authorization: Bearer fehlt im Request
+Authorization: Basic reicht für den Test nicht aus.
+Bearer Authentifizierung ist für die Schnittstelle aktiviert.
+Der Token läuft in 15 Minuten ab, danach folgt HTTP 401.
+Token ungültig: HTTP 401, Aufruf wiederholen.
+Token: abgelaufen (HTTP 401)
+Token: leer
+Secret: nicht gesetzt
+Request-ID: abgelehnt, Token wurde nicht mitgesendet.
+Client-Secret: nicht angegeben
+Der Token wurde im Log maskiert.
+Token-Rotation ist für das Quartalsende geplant.
+Der Zugriffstoken ist abgelaufen.
+X-API-Key: fehlt
+Token: undefined
+Token: null
+# Kategorie: KONFIGURATION
+pw: ****
+password=${DB_PASSWORD}
+password=%DB_PASSWORD%
+password: {{ vault_pw }}
+Passwort: <geheim>
+Passwort: [entfernt]
+Passwort: xxxxxxxx
+Passwort: [[PASSWORT_1]]
+"password": "${DB_PASSWORD}"
+db.password=${DB_PASSWORD}
+DB_PASSWORD=
+DB_PASSWORD=${DB_PASSWORD}
+client_secret: {{ lookup('env', 'CLIENT_SECRET') }}
+Token: ********
+Secret: ********
+api_key: <hier-eintragen>
+spring.datasource.password=${SPRING_DB_PASSWORD}
+password: "{{ db_password }}"
+secret: ${SECRET_FROM_ENV}
+Token=%TOKEN%
+Passwort = <PASSWORT>
+<password>${DB_PASSWORD}</password>
+<token>[entfernt]</token>
+{"password": ""}
+{"password": null, "user": "svc_x"}
+{"token": "<TOKEN>"}
+password: ~
+password: ENV['DB_PASSWORD']
+password: <%= ENV["DB_PW"] %>
+password: CHANGE_ME
+password: __PLACEHOLDER__
+password: <your-password>
+password: ${env:DB_PASSWORD}
+password: $(cat /run/secrets/db_password)
+Passwort: !!!!!!!!
+Passwort: ********
+token: ${CI_JOB_TOKEN}
+# Kategorie: TABELLE_XML_JSON
+| Passwort | abgelaufen |
+| Passwort | siehe Tresor |
+| Token | gültig |
+| Kennwort | Zustand |
+Passwort\tabgelaufen
+Token\t3600
+Kennwort\tgesperrt
+<password>abgelaufen</password>
+<token>ungültig</token>
+<secret></secret>
+{"password": "abgelaufen"}
+{"token": "ungültig", "status": 401}
+{"secret": "nicht vorhanden"}
+{"passwort": "siehe Tresor"}
+"password": "required",
+"api_key": null,
+password: required\nusername: svc_x
+| Benutzer | Passwort | Status |
+| svc_backup | Passwort | abgelaufen |
+| Passwort | Token | Secret |
+<passwort>siehe Tresor</passwort>
+<credentials><password>zurückgesetzt</password></credentials>
+| Token | 3600 Sekunden |
+| Kennwort | 90 Tage |
+| Secret | CHG0012345 |
+| Passwort | 8-stellig |
+<password>8-stellig</password>
+Passwort:\tsiehe Tresor
+Betriebshandbuch\n## Passwort zurücksetzen\nSchritt 1: Konto auswählen.
+Handbuch\n### Kennwort ändern\nSiehe Abschnitt 3.
+Kapitel 4: Passwort und Zugang
+Kapitel 7: Token und Berechtigungen
+**Passwort:** siehe Tresor
+**Token:** ungültig
+- **Kennwort**: siehe KeePass
+# Kategorie: VERSION_DATUM_TICKET
+Passwort: v4.2.1
+Passwort: 4.2.1-rc1
+Passwort: CHG0012345
+Passwort: INC0004711
+Passwort: 8-stellig
+Passwort: 90-tägig
+Passwort: SHA-256
+Passwort: AES-256
+Passwort: TLS1.2
+Passwort: Windows11
+Token: 2026-03-12T10:15:00Z
+Token: 2026-03-12T10:15:00+01:00
+Secret: 2026-12-01T08:00:00.000Z
+Kennwort: 12.03.2026
+Passwort: 2026-03-12
+Passwort: 2026-03-12 gültig
+Token: INC0004711
+Secret: JIRA-1234
+Passwort: KVBSP-4711
+Passwort: v2.0-rc1
+Passwort: Server2022
+Passwort: Office365
+Passwort: UTF-8
+Passwort: PBKDF2
+Passwort: Argon2id
+Passwort: SHA-512
+Passwort: TLS-1.3
+Passwort: RSA-4096
+Kennwort: AES128
+Passwort-Reset in Version 4.2.1 ausgeliefert, siehe CHG0012345.
+# Kategorie: HASH_UUID_BASE64
+Passwort-Hash: a1b3c5d7e9f2a4b6c8d0e1f3a5b7c9d2e4f6a8b0c1d3e5f7a9b2c4d6e8f0a1b3
+sha256:c5d7e9f2a4b6c8d0e1f3a5b7c9d2e4f6a8b0c1d3e5f7a9b2c4d6e8f0a1b3c5d7
+SHA-256: a1b3c5d7e9f2a4b6c8d0e1f3a5b7c9d2e4f6a8b0c1d3e5f7a9b2c4d6e8f0a1b3
+MD5: a1b3c5d7e9f2a4b6c8d0e1f3a5b7c9d2
+SHA-1: a1b3c5d7e9f2a4b6c8d0e1f3a5b7c9d2e4f6a8b0
+Prüfsumme der Installationsdatei (SHA-256): e9f2a4b6c8d0e1f3a5b7c9d2e4f6a8b0c1d3e5f7a9b2c4d6e8f0a1b3c5d7e9f2
+Commit a1b3c5d behebt den Fehler beim Export.
+Commit a1b3c5d7e9f2a4b6c8d0e1f3a5b7c9d2e4f6a8b0 wurde in den Hauptzweig übernommen.
+Request-ID: a3c7e2a6-c0e3-a7c2-e6a0-c3e7a2c6e0a3
+Objekt e3a7c2e6-a0c3-e7a2-c6e0-a3c7e2a6c0e3 wurde im Archiv gefunden.
+Korrelations-ID c7e2a6c0-e3a7-c2e6-a0c3-e7a2c6e0a3c7 steht in beiden Logdateien.
+a3c7e2a6-c0e3-a7c2-e6a0-c3e7a2c6e0a3
+Fingerprint: A1:B3:C5:D7:E9:F2:A4:B6:C8:D0:E1:F3:A5:B7:C9:D2:E4:F6:A8:B0
+SHA256-Fingerprint des Zertifikats: C5:D7:E9:F2:A4:B6:C8:D0:E1:F3:A5:B7:C9:D2:E4:F6:A8:B0:C1:D3
+Base64 (Auszug): AbCdE1GhIjK3MnOpQ5StUvW7YzAbC9EfGhI2KlMnO4QrStU6WxYzAbC8EfG0
+AbCdE1GhIjK3MnOpQ5StUvW7YzAbC9EfGhI2KlMnO4QrStU6WxYzAbC8EfG0
+Inhalt des Anhangs (Base64): KlMnO4QrStU6WxYzAbC8EfG0AbCdE1GhIjK3MnOpQ5StUvW7YzAbC9EfGhI2
+ETag: e9f2a4b6c8d0e1f3a5b7c9d2e4f6a8b0
+Session-ID a1b3c5d7e9f2a4b6c8d0e1f3a5b7c9d2 wurde beendet.
+Build-ID: c3e7a2c6-e0a3-c7e2-a6c0-e3a7c2e6a0c3
+Die Prüfsumme c5d7e9f2a4b6c8d0e1f3a5b7c9d2e4f6a8b0c1d3 stimmt nicht überein.
+Das Passwort-Hash-Feld enthält e9f2a4b6c8d0e1f3a5b7c9d2e4f6a8b0.
+Die Bytefolge AbCdE1GhIjK3MnOpQ5StUvW7YzAbC9EfGhI2KlMnO4QrStU6WxYzAbC8EfG0 gehört zum Logo.
+# Kategorie: PFAD_URL
+Passwortdatei: /etc/x
+Passwort: /etc/shadow
+Passwort: C:\Tresor\pw.kdbx
+Passwort: https://tresor.kvbsp.local/eintrag
+Kennwort-Datei liegt unter /opt/app/conf/kennwort.properties
+Das Passwort liegt unter \\srv-fs02.kvbsp.local\Tresor\pw.kdbx
+Passwort: siehe https://wiki.kvbsp.local/display/IT/Zugaenge
+Token-Datei: /var/lib/app/token.txt
+--password-file /etc/x
+token_file=/run/secrets/app_token
+Secret: /run/secrets/db_secret
+Passwort: ~/passwoerter.kdbx
+Passwort: ./secrets/db.txt
+Passwort: D:\Apps\Tresor\db.kdbx
+Kennwort: file:///srv/tresor/db.kdbx
+Passwort: ftp://tresor.kvbsp.local/db.kdbx
+Passwort: \\srv-fs02.kvbsp.local\Tresor
+Das Kennwort steht auf https://wiki.kvbsp.local/display/IT/Kennwoerter
+Token: https://auth.kvbsp.local/oauth/token
+Passwort-Reset: https://selfservice.kvbsp.local/reset
+Der Link https://wiki.kvbsp.local/passwort-richtlinie beschreibt die Regeln.
+Passwortdatei: D:\Apps\ArvisPro\conf\secrets.properties
+Passwort: /opt/app/conf
+Pfad zur Passwortdatei: /etc/app/pw.conf
+password: /var/run/secrets/kubernetes.io/serviceaccount/token

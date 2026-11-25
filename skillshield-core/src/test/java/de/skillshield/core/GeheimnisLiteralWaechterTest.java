@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -38,8 +39,10 @@ import org.junit.jupiter.api.Test;
  * <p>Geprueft wird die Zeile des Quelltexts (in Ressourcen: die Zeile der Datei) nach dem Aufloesen von Unicode- und
  * Oktal-Escapes ({@code TestdatenSynthetischTest#loeseEscapesAuf}). Dateien mit Nullbyte werden als UTF-16 gelesen,
  * wenn ein BOM oder das Nullbyte-Muster dafuer spricht; jede andere Datei mit Nullbyte ist ein Verstoss, ausser ihre
- * Endung steht in einer festen Liste von Binaerendungen (png, jpg, jpeg, gif, jar, zip, class). Das erfasst jedes
- * zusammenhaengende Java-Literal einer Zeile, ausserdem Kommentare und Textbloecke; ein Literal, das aus
+ * Endung steht in einer festen Liste von Binaerendungen (png, jpg, jpeg, gif, jar, zip, class). Haertung (nach T-1):
+ * Eine Datei mit Binaerendung und Nullbyte wird zusaetzlich als Ein-Byte-Text (ISO-8859-1) je Zeile geprueft, und bei
+ * UTF-16 ohne BOM wird zusaetzlich die Ein-Byte-Dekodierung geprueft; beide Ergebnisse werden vereinigt. Das
+ * erfasst jedes zusammenhaengende Java-Literal einer Zeile, ausserdem Kommentare und Textbloecke; ein Literal, das aus
  * verketteten Teilen besteht (Teile durch Anfuehrungszeichen getrennt), ist keine Form. Es gibt keine Ausnahme,
  * auch nicht fuer {@code SynthetischeGeheimnisse} und diesen Waechter selbst; dort stehen die Formen nur zerlegt, die
  * Selbsttests verketten zur Laufzeit.
@@ -235,13 +238,17 @@ class GeheimnisLiteralWaechterTest {
             return pruefeText(name, dekodiereUtf8OderLatin1(bytes));
         }
         String utf16 = dekodiereUtf16(bytes);
+        boolean binaer = BINAERENDUNGEN.contains(endung(name));
+        if (utf16 == null && !binaer) {
+            return List.of(name + ": Binaerdatei ohne erkennbare Textkodierung");
+        }
+        Set<String> meldungen = new LinkedHashSet<>();
         if (utf16 != null) {
-            return pruefeText(name, utf16);
+            meldungen.addAll(pruefeText(name, utf16));
         }
-        if (BINAERENDUNGEN.contains(endung(name))) {
-            return List.of();
-        }
-        return List.of(name + ": Binaerdatei ohne erkennbare Textkodierung");
+        // Haertung: bei jedem Nullbyte zusaetzlich als Ein-Byte-Text je Zeile pruefen (auch mit BOM)
+        meldungen.addAll(pruefeText(name, new String(bytes, StandardCharsets.ISO_8859_1)));
+        return new ArrayList<>(meldungen);
     }
 
     private static List<String> pruefeDateien(List<Quelle> quellen) {
@@ -414,6 +421,43 @@ class GeheimnisLiteralWaechterTest {
             assertEquals(List.of(), pruefeBytes("bild." + endung.toUpperCase(Locale.ROOT), bytes), endung);
         }
         assertEquals(List.of(), pruefeBytes("klartext.dat", "nur Text".getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private static byte[] hintereinander(byte[] vorn, byte[] hinten) {
+        byte[] ganz = new byte[vorn.length + hinten.length];
+        System.arraycopy(vorn, 0, ganz, 0, vorn.length);
+        System.arraycopy(hinten, 0, ganz, vorn.length, hinten.length);
+        return ganz;
+    }
+
+    @Test
+    void selbsttest_haertungA_binaerendungMitNullbyte_wirdZusaetzlichAlsEinByteTextGeprueft() {
+        byte[] form = jwtForm().getBytes(StandardCharsets.ISO_8859_1);
+        byte[] bytes = hintereinander(new byte[] {1, 0, 2}, form);
+        assertEquals(List.of("bild.png:1: " + Art.JWT.beschreibung()), pruefeBytes("bild.png", bytes));
+        assertEquals(List.of("bild.JAR:1: " + Art.JWT.beschreibung()), pruefeBytes("bild.JAR", bytes));
+        assertEquals(List.of("blob.dat: Binaerdatei ohne erkennbare Textkodierung"), pruefeBytes("blob.dat", bytes));
+        assertEquals(List.of(), pruefeBytes("bild.png", new byte[] {1, 0, 2, 'a', 'b'}));
+    }
+
+    @Test
+    void selbsttest_haertungB_utf16OhneBom_pruefeZusaetzlichDieEinByteDekodierung() {
+        byte[] zweiByte = utf16("harmlos\n", StandardCharsets.UTF_16LE, false);
+        byte[] bytes = hintereinander(zweiByte, jwtForm().getBytes(StandardCharsets.ISO_8859_1));
+        assertEquals(List.of("d.txt:2: " + Art.JWT.beschreibung()), pruefeBytes("d.txt", bytes));
+        byte[] mitBom = hintereinander(utf16("a\n", StandardCharsets.UTF_16LE, true),
+                utf16(jwtForm() + "\n", StandardCharsets.UTF_16LE, false));
+        assertEquals(List.of("d.txt:2: " + Art.JWT.beschreibung()), pruefeBytes("d.txt", mitBom));
+    }
+
+    @Test
+    void selbsttest_haertungC_bomMitAnschliessendemEinByteText_wirdAlsEinByteTextGeprueft() {
+        byte[] kopf = {(byte) 0xFF, (byte) 0xFE, 0, 'x', '\n'};
+        byte[] bytes = hintereinander(kopf, jwtForm().getBytes(StandardCharsets.ISO_8859_1));
+        assertEquals(List.of("d.txt:2: " + Art.JWT.beschreibung()), pruefeBytes("d.txt", bytes));
+        byte[] kopfBe = {(byte) 0xFE, (byte) 0xFF, 0, 'x', '\n'};
+        byte[] bytesBe = hintereinander(kopfBe, jwtForm().getBytes(StandardCharsets.ISO_8859_1));
+        assertEquals(List.of("d.txt:2: " + Art.JWT.beschreibung()), pruefeBytes("d.txt", bytesBe));
     }
 
     @Test

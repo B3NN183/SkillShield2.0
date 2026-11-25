@@ -760,5 +760,37 @@ beide setzen eine absichtlich gebaute Datei voraus): Dateien mit Binärendung un
 prüfen; bei UTF-16 ohne BOM zusätzlich die Ein-Byte-Dekodierung prüfen. Nachzuholen in T-2, bevor Korpusdateien
 dazukommen.
 
+### Entscheidungen nach der Prüfung von T-2 (25.11.2026), gültig ab T-4
+
+1. **Platzhalterartige Werte bleiben Funde.** `password: !vault |`, `password: @@DBPASS@@` und
+   `password: REPLACE_ME_123` sind nach D-4 bis D-8 Funde und bleiben es (Richtung „möglichst viel schützen“; ein
+   solcher Wert kann ein echtes schwaches Passwort sein, der Nutzer kann den Fund abwählen). Der Wert-Test wird
+   dafür nicht erweitert, die Korpora bleiben unverändert. Neue Grenze **G-20** (Überschutz bei Platzhaltern mit
+   Sonderzeichen oder Ziffern), in T-4 mit einem Test `bekannteGrenze…` festgehalten.
+2. **W3 (c)** (Zahl mit Wortteil wie `90-tägig`): Der Kleinbuchstabenteil wird mit `Character.isLowerCase`
+   geprüft, Umlaute und `ß` eingeschlossen. Kap. 1.7 („nur ASCII“) gilt für diesen Teil nicht.
+3. **Generator-Treffer 100 % (AK-38):** Die Ist-Konstanten des Positiv-Generators dürfen nur 0 (Kategorie noch
+   nicht aktiv) oder die volle Zahl der Texte des Typs annehmen (66 663 PASSWORT ab T-4, 33 337 TOKEN ab T-6). Der
+   Test prüft das fest.
+4. **K3/K4 (T-5, OF-4):** Wird ein Verbinder gestrichen, bleiben seine Fälle im Positivkorpus stehen und werden nie
+   in `AKTIVE_KATEGORIEN` aufgenommen; das Streichen bekommt einen eigenen Test `bekannteGrenze…`.
+5. **JWT hinter `Authorization: Bearer`:** Der erwartete Fund mit Quelle `token-jwt` ist in T-7 ausdrücklich zu
+   bestätigen und zu begründen (nicht dem letzten Gleichstandskriterium überlassen).
+
+6. **Auszeichnungszeichen hinter dem Verbinder (Markdown/Wiki), neu, gilt ab T-4.** Nach D-7 beginnt der Wert am
+   ersten Zeichen hinter dem Verbinder; bei `**Passwort:** <Wert>` wäre das `**`, und ein echtes Passwort in
+   fett gesetzter Dokumentation bliebe ungeschützt (Hinweis des reviewers). Entscheidung in Richtung „möglichst viel
+   schützen“, weil Betriebsdokumentation der Hauptanwendungsfall ist: Zwischen Kontextwort, Verbinder und Wert
+   werden die Auszeichnungszeichen `*`, `_` und der Gravis (jeweils ein bis drei in Folge, auch direkt vor dem
+   Verbinder wie in `**Kennwort**: <Wert>`) übersprungen; sie gehören nicht zum Fund. Umschließt dieselbe
+   Zeichenfolge den Wert (`` `<Wert>` ``, `**<Wert>**`), endet der Fund vor ihr. Der Wert-Test gilt unverändert für
+   den Wert ohne Auszeichnung; `**Passwort:** siehe Tresor` bleibt kein Fund (Negativkorpus unverändert). T-4 belegt
+   das mit eigenen Tests (Positiv- und Negativfälle außerhalb des eingefrorenen Korpus), misst die Wirkung am
+   Negativkorpus und an beiden Generatoren (weiter 0 Fehlalarme) und nennt die Fälle im Bericht. Führt die Regel zu
+   Fehlalarmen im Prüfstand, wird angehalten und gemeldet.
+7. **Offene Härtung des Wächters** `GeheimnisLiteralWaechterTest` (security, niedrig): UTF-16-Text, der um ein Byte
+   versetzt hinter einem BOM steht, wird nicht geprüft (nur mit absichtlich gebauter Datei erreichbar). Nicht
+   umgesetzt; bei Gelegenheit zusätzlich ab Versatz 1 dekodieren.
+
 `SynthetischeGeheimnisse`: Die Anforderung definiert nur `P1`, `P2`, `P3`, `P6` und `P7`; „P1 bis P7“ in Kap. 6.2
 ist ungenau.
