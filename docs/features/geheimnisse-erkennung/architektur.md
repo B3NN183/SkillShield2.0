@@ -798,5 +798,47 @@ dazukommen.
    Erkennern erreichbar). Jeder Geheimnis-Erkenner (T-4, T-6, T-7, T-8) bekommt deshalb einen Test „Kandidaten
    untereinander überlappungsfrei“ über den Prüfstand und einen Zufallslauf.
 
+### Entscheidungen nach der Prüfung von T-4, Durchlauf 1 (25.11.2026)
+
+1. **Anführungszeichen im Wert (security, mittel) – wird in T-4 behoben.** Ein Wert in Anführungszeichen endet
+   nicht an einem maskierten (`\"`, `\'`) oder verdoppelten (`""`, `''`) Anführungszeichen; diese gelten als Inhalt
+   (JSON, YAML, SQL, CSV). Die 256-Zeichen-Schranke und die Linearität bleiben. Tests mit Positiv- und
+   Negativfällen; kein Zeichen des Werts bleibt lesbar.
+2. **Einzelnes `*` oder `_` am Wertanfang (Abweichung von Entscheidung 6).** Angenommen ist: Ein einzelnes Zeichen
+   ohne Gegenstück bleibt Teil des Funds (der Wert ist geschützt; der eingefrorene Positiv-Generator enthält solche
+   Werte). Zusätzlich wird in T-4 versucht: Ein einzelnes `*`/`_` am Wertanfang wird wie die Folgen aus zwei oder
+   drei Zeichen behandelt, wenn dasselbe Zeichen später in derselben Zeile noch einmal steht (kursiv gesetzter
+   Text wie `*siehe Tresor*` ist dann kein Fund). Bleibt der Prüfstand dabei nicht vollständig grün (Positivkorpus,
+   beide Generatoren, Negativkorpus, Grenzfälle), entfällt der Versuch; der heutige Stand bleibt als Grenze mit
+   Test bestehen.
+3. **Zwischenwort `fuer`** (ASCII-Schreibweise von `für`) gilt wie `für`.
+4. **Umstellungen außerhalb von Kap. 8.1 nachträglich genehmigt** (nur Erkennerliste bzw. gezählte Ausnahme nach
+   6.4, keine Assertion entfernt): `BsnrScannerKollisionenTest.ak33_…`, `KvStandDatumTest.altDatum_aufbauWieStandard`
+   (Siegel unberührt), `TextScannerLueckenTest.standard_ohneGeheimnisKandidaten_gleichAlt_…` (34 Texte, 35
+   zusätzliche PASSWORT-Funde). Kap. 8.1 gilt um diese drei ergänzt; mit T-6 ändern sie sich erneut (Zahl 10).
+5. **Platzhalter im Referenz-Ticket:** `[[PASSWORT_6]]`, nicht `[[PASSWORT_1]]` (der `Pseudonymizer` zählt über
+   alle Typen); die Angabe in T-4 war ungenau.
+6. **Weitere Schreibweisen, die nach T-4 ungeschützt bleiben (security), Entscheidung in T-5:** Zusatz zwischen
+   Kontextwort und Verbinder ohne Zwischenwort (`Passwort (neu): …`, `Passwort neu: …`), mehr als drei Wörter
+   nach `für`, Verbinder `=>`, `:=`, ` - `, `->`, Doppelpunkt in voller Breite, Schlüssel/Wert-Attribute
+   (`key="…Password" value="…"`). T-5 misst jede Form am Prüfstand und nimmt sie nur auf, wenn sie dort keine
+   Fehlalarme erzeugt; sonst wird sie als Grenze mit Test festgehalten. Gemessene Fehlalarm-Klasse nach T-4
+   (Überschutz, hingenommen): Begriffe mit Ziffer oder Sonderzeichen direkt hinter `Passwort:` wie `KeePass2`,
+   `Policy#3`, `Q4/2026`.
+8. **Nach Durchlauf 2 offen (security, niedrig), in T-5 zu beheben und am Prüfstand zu messen:**
+   (a) Rückstrich direkt vor dem Begrenzer in Formaten mit Verdopplung (`'..\''..'`) und Werte in
+   Anführungszeichen, die auf einen Rückstrich enden: Teile des Werts können lesbar bleiben (gemessen: etwa die
+   Hälfte der Werte mit dieser Zeichenfolge; sie kommt in rund 0,2 % zufälliger starker Passwörter vor).
+   Schützende Wahl: Findet die Suche kein schließendes Zeichen, gilt das letzte als maskiert übersprungene
+   Begrenzerzeichen der Zeile (innerhalb von 256 Zeichen) als Schluss; bei Rückstrich, Zeichen, Zeichen wird
+   weitergelesen, wenn später in der Zeile noch ein schließendes Zeichen steht.
+   (b) Leerer Wert in kompaktem JSON (`{"password":"","user":"…"}`): Der Rückfall auf das erste Wort liest über
+   Schlüssel und Wert des nächsten Felds (Fehlalarm und Strukturverlust, kein Abfluss). Bei leerem Inhalt `""`/`''`
+   kein Rückfall, sondern hinter dem Paar weitersuchen.
+   (c) Der Versuch aus Punkt 2 (einzelnes `*`/`_`) ist gescheitert (Positiv-Generator 66 531 statt 66 663) und
+   zurückgenommen; die Grenze bleibt mit Test `bekannteGrenze_auszeichnung_…` bestehen.
+7. **T-8** führt die ausgenommenen Schlüssel ein und setzt die Zahlen der inaktiven Kategorien im Differenztest
+   (heute 7 vorgezogene PASSWORT-Funde bei ODBC und Kommandozeile) neu fest.
+
 `SynthetischeGeheimnisse`: Die Anforderung definiert nur `P1`, `P2`, `P3`, `P6` und `P7`; „P1 bis P7“ in Kap. 6.2
 ist ungenau.

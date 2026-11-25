@@ -151,11 +151,16 @@ class BsnrKlartextFreiheitTest {
 
     // ------------------------------------------------------------------ Lage in der Standardliste
 
-    /** Der BSNR-Erkenner steht als letzter in {@code standard()} (Index 7, nach der KVNR), genau einmal. */
+    /**
+     * Der BSNR-Erkenner steht an Index 7 von {@code standard()} (nach der KVNR), genau einmal. Seit
+     * geheimnisse-erkennung T-4 folgt der Passwort-Erkenner an Index 8; der Name des Tests bleibt unveraendert.
+     */
     @Test
     void abgleich_bsnrErkennerSteht_alsLetzterInDerStandardliste() {
         List<Recognizer> liste = TextScanner.standard().recognizers();
-        assertEquals(8, liste.size(), "Zahl der Standard-Erkenner");
+        // Umgestellt durch geheimnisse-erkennung T-4: Zahl der Standard-Erkenner 9 (alter Wert: 8); Index 7
+        // bleibt der BSNR-Erkenner
+        assertEquals(9, liste.size(), "Zahl der Standard-Erkenner");
         assertTrue(liste.get(7) instanceof BsnrRecognizer, "Index 7 ist der BSNR-Erkenner");
         assertTrue(liste.get(6) instanceof KvnrRecognizer, "Index 6 ist der KVNR-Erkenner");
         assertEquals(1, liste.stream().filter(r -> r instanceof BsnrRecognizer).count(), "Zahl der BSNR-Erkenner");

@@ -77,6 +77,16 @@ public final class SynthetischeGeheimnisse {
     /** Ergaenzung T-2, Anforderung AK-24: Wert mit Semikolon. */
     public static final String P_SEMIKOLON = "a;b1x";
 
+    /** Ergaenzung T-4: Anfang eines Wertes, an den eine E-Mail-Adresse stoesst (Bestandsfund im Wert, G-18). */
+    public static final String P_ZQ9 = "Zq9";
+
+    /** Ergaenzung T-4: ein Marker-Geheimnis, das den Wert-Test besteht und den Marker traegt (Klartext-Freiheit). */
+    public static final String MARKER_GEHEIMNIS = "Marker7#Geheimnis";
+
+    /** Ergaenzung T-4, G-20: platzhalterartige Werte mit Sonderzeichen oder Ziffern, die Funde bleiben. */
+    public static final List<String> P_PLATZHALTERARTIG = List.of("!vault", "@@DBPASS@@", "REPLACE_ME_123",
+            "CHANGEME_2026", "GEHEIM_#1");
+
     /** Erfundener Token der Anforderung (Kurzname T): 29 Zeichen, Buchstaben, eine einzelne Ziffer, mit Marke. */
     public static final String T = "AbcdTestwertEfghIjklMnop7Qrst";
 

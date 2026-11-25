@@ -5,13 +5,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import de.skillshield.core.model.ConfidenceLevel;
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.model.FindingType;
 import de.skillshield.core.pseudonymize.PseudonymizationResult;
 import de.skillshield.core.pseudonymize.Pseudonymizer;
+import de.skillshield.core.recognizer.TextScanner;
 import de.skillshield.core.recognizer.TextScannerStandGeheimnis;
+import de.skillshield.core.recognizer.geheimnis.GeheimnisTypen;
 import de.skillshield.core.reidentify.Reidentifier;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -218,5 +222,93 @@ class ReferenzTicketTest {
         }
         String zurueck = new Reidentifier().restore(ersetzt, p.mapping()).text();
         assertTrue(text.equals(zurueck), "Rueckuebersetzung nicht zeichengleich");
+    }
+
+    // ------------------------------------------------------------------ T-4: Abnahme AK-48 b (neuer Stand)
+
+    /** Der neue Fund (AK-48 b): das Passwort, 0,95, Quelle passwort-kontext. */
+    private static Finding passwortFund(String text) {
+        int von = text.indexOf(P1);
+        return new Finding(GeheimnisTypen.PASSWORT, P1, von, von + P1.length(), 0.95, "passwort-kontext");
+    }
+
+    /** Die erwartete neue Fundliste: die sechs Funde "heute" plus der Passwort-Fund, nach Beginn sortiert. */
+    private static List<Finding> neuErwartet(String text) {
+        List<Finding> liste = new ArrayList<>(heute(text));
+        liste.add(passwortFund(text));
+        liste.sort(Comparator.comparingInt(Finding::start));
+        return liste;
+    }
+
+    @Test
+    void neu_genauEinNeuerFundUeberDasPasswort_dieSechsFundeHeuteSindFeldgleich() {
+        String text = ticket();
+        List<Finding> neu = TextScanner.standard().scan(text);
+        assertEquals(7, neu.size(), "sechs Funde heute und ein neuer");
+        assertEquals(neuErwartet(text), neu);
+        for (Finding f : TextScannerStandGeheimnis.ALT.scan(text)) {
+            assertTrue(neu.contains(f), "Fund von heute fehlt oder ist veraendert: " + f);
+        }
+        long passwoerter = neu.stream().filter(f -> f.type().equals(GeheimnisTypen.PASSWORT)).count();
+        assertEquals(1, passwoerter, "genau ein PASSWORT-Fund");
+        assertEquals(0, neu.stream().filter(f -> f.type().equals(GeheimnisTypen.TOKEN)).count(), "kein TOKEN-Fund");
+    }
+
+    @Test
+    void neu_derPasswortFundHatTypBereichKonfidenzStufeUndQuelle() {
+        String text = ticket();
+        Finding pw = TextScanner.standard().scan(text).stream()
+                .filter(f -> f.type().equals(GeheimnisTypen.PASSWORT)).findFirst().orElseThrow();
+        assertEquals(GeheimnisTypen.PASSWORT, pw.type());
+        assertTrue(P1.equals(text.substring(pw.start(), pw.end())), "Bereich deckt genau das Passwort");
+        assertTrue(P1.equals(pw.originalValue()), "Originalwert");
+        assertEquals(0.95, pw.confidence(), 0.0);
+        assertEquals(ConfidenceLevel.SICHER, ConfidenceLevel.of(pw.confidence()));
+        assertEquals("passwort-kontext", pw.source());
+    }
+
+    @Test
+    void neu_pseudonymisiertOhnePasswort_stichwoerterStehen_roundtripZeichengleich() {
+        String text = ticket();
+        List<Finding> funde = TextScanner.standard().scan(text);
+        PseudonymizationResult p = new Pseudonymizer().pseudonymize(text, funde);
+        String ersetzt = p.text();
+        assertFalse(ersetzt.contains(P1), "Passwort steht im Klartext");
+        assertFalse(ersetzt.contains("Sommer2026"), "Teil des Passworts steht im Klartext");
+        // die Nummer im Platzhalter zaehlt ueber alle Typen: das Passwort ist der sechste Fund (vor der URL)
+        assertTrue(ersetzt.contains("[[PASSWORT_6]]"), "Platzhalter des Passworts");
+        assertTrue(ersetzt.contains("[[URL_7]]"), "die URL ist jetzt der siebte Fund");
+        assertEquals(1, zaehle(ersetzt, "[[PASSWORT_"), "genau ein PASSWORT-Platzhalter");
+        for (String bleibt : List.of("Version 4.2", "#48213", "CHG0012345", "Export", "Dienst neu gestartet",
+                "Tempor" + (char) 0xE4 + "res Passwort f" + (char) 0xFC + "r svc_abr_export: [[PASSWORT_6]]")) {
+            assertTrue(ersetzt.contains(bleibt), "Klartext fehlt, Baustein " + bleibt.length() + " Zeichen");
+        }
+        for (Finding f : funde) {
+            assertFalse(ersetzt.contains(f.originalValue()), "ersetzter Wert steht noch im Text: " + f);
+        }
+        String zurueck = new Reidentifier().restore(ersetzt, p.mapping()).text();
+        assertTrue(text.equals(zurueck), "Rueckuebersetzung nicht zeichengleich");
+    }
+
+    @Test
+    void neu_alleFundeDesAltStandsBleibenUnveraendert_dieNichtFundeStehenWeiterFrei() {
+        String text = ticket();
+        List<Finding> funde = TextScanner.standard().scan(text);
+        List<String> abgedeckt = new ArrayList<>();
+        List<String> woerter = List.of("Ticket #48213", "Thomas Kr" + (char) 0xFC + "ger", "KVBSP\\tkrueger",
+                "ABR_Sachbearbeitung_RW", "GG-ABR-Export-Lesen", "GG-ABR-Export-Schreiben", "Version 4.2",
+                "ArvisPro kann", "der Export nach", "svc_abr_export auf", "SRV-APP07", "auf dbsrv-ora01.",
+                "jdbc:oracle:thin:" + AT + "dbsrv-ora01.kvbsp.local:1521/ABRPROD", "Schema ABR_STAGE",
+                "Tabelle T_EXPORT_QUEUE", "Dienst neu gestartet", "Change CHG0012345",
+                "Tempor" + (char) 0xE4 + "res Passwort f" + (char) 0xFC + "r svc_abr_export: ");
+        for (String wort : woerter) {
+            if (!wortFrei(text, wort, funde)) {
+                abgedeckt.add("Baustein " + wort.length() + " Zeichen");
+            }
+        }
+        assertEquals(List.of(), abgedeckt);
+        Matcher m = Pattern.compile("Tel\\. [0-9]{4} [0-9]{3}-[0-9]{4}").matcher(text);
+        assertTrue(m.find(), "Rufnummer fehlt");
+        assertTrue(frei(m.start(), m.end(), funde), "die Rufnummer ist ein Fund");
     }
 }

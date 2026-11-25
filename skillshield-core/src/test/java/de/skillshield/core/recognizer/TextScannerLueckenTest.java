@@ -12,6 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.model.FindingType;
 import de.skillshield.core.recognizer.geheimnis.GeheimnisTypen;
+import de.skillshield.core.recognizer.geheimnis.PasswortRecognizer;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collections;
@@ -467,10 +468,24 @@ class TextScannerLueckenTest {
             "\\\\srv01\\freigabe\\a.txt", "https://host.example/pfad?x=y", "max@example.invalid", "192.0.2.17",
             LANR_GUELTIG, IK_GUELTIG, KVNR_GUELTIG, "(", ")", ",", ".", ":", "=", "-", "/", "\n", "\t", "  ");
 
+    /**
+     * Umgestellt durch geheimnisse-erkennung T-4 (Plan Kapitel 6.4, Fall "zusaetzlicher PASSWORT-Fund nach
+     * Lueckenregel"). Alte Erwartung: {@code standard()} liefert in jedem der 60 000 Texte genau die Funde von ALT
+     * (es gab keinen Geheimnis-Erkenner). Neue Erwartung: Liefert der {@code PasswortRecognizer} fuer den Text
+     * keinen Kandidaten, bleibt die Gleichheit mit ALT unveraendert; liefert er einen, stehen alle Funde von ALT
+     * feldgleich in der neuen Liste, jeder weitere Fund hat den Typ PASSWORT und ueberlappt keinen Fund von ALT.
+     * Gezaehlt und festgehalten (gemessen): 34 Texte mit zusaetzlichen Funden, zusammen 35 zusaetzliche Funde, das
+     * sind die Reststuecke von Kandidaten ("Passwort : .max@..." oder "Passwort = =gestartet"), die Funde von ALT
+     * teilweise oder gar nicht abdecken. Die Texte mit dem Baustein "Passwort" und einem Verbinder sind Absicht des
+     * Laufs; er findet sonst keinen anderen Unterschied.
+     */
     @Test
     void standard_ohneGeheimnisKandidaten_gleichAlt_ueberEinenGrossenZufallslauf() {
         Random r = new Random(SEED + 1);
         TextScanner neu = TextScanner.standard();
+        PasswortRecognizer passwort = new PasswortRecognizer();
+        int texteMitZusatz = 0;
+        int zusatzFunde = 0;
         int gesamt = 0;
         for (int i = 0; i < 60_000; i++) {
             StringBuilder sb = new StringBuilder();
@@ -484,8 +499,32 @@ class TextScannerLueckenTest {
             String text = sb.toString();
             List<Finding> alt = TextScannerStandGeheimnis.ALT.scan(text);
             gesamt += alt.size();
-            assertEquals(alt, neu.scan(text), "standard() ungleich ALT, Iteration " + i);
+            List<Finding> ist = neu.scan(text);
+            if (passwort.detect(text).isEmpty()) {
+                assertEquals(alt, ist, "standard() ungleich ALT, Iteration " + i);
+                continue;
+            }
+            for (Finding f : alt) {
+                assertTrue(ist.contains(f), "Fund von ALT fehlt oder ist veraendert, Iteration " + i);
+            }
+            int zusatz = 0;
+            for (Finding f : ist) {
+                if (alt.contains(f)) {
+                    continue;
+                }
+                zusatz++;
+                assertEquals(GeheimnisTypen.PASSWORT, f.type(), "weiterer Fund ist kein PASSWORT, Iteration " + i);
+                for (Finding a : alt) {
+                    assertFalse(ueberlappt(a, f), "weiterer Fund ueberlappt ALT, Iteration " + i);
+                }
+            }
+            zusatzFunde += zusatz;
+            if (zusatz > 0) {
+                texteMitZusatz++;
+            }
         }
+        assertEquals(34, texteMitZusatz, "Texte mit zusaetzlichen Funden");
+        assertEquals(35, zusatzFunde, "zusaetzliche Funde");
         assertTrue(gesamt > 50_000, "zu wenige Funde im Lauf: " + gesamt);
     }
 }

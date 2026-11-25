@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import de.skillshield.core.model.ConfidenceLevel;
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.model.FindingType;
+import de.skillshield.core.recognizer.geheimnis.GeheimnisTypen;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -21,6 +22,16 @@ class BeschriftungenTest {
             "KVNR,KVNR", "BSNR,BSNR", "TEXT,Manuell"})
     void typenHabenDieBeschriftungenAusD13(String typ, String erwartet) {
         assertEquals(erwartet, Beschriftungen.typ(fund(typ)));
+    }
+
+    /** geheimnisse-erkennung T-4 (D-15, AK-44): Passwort und Token oder Schluessel haben deutsche Namen. */
+    @Test
+    void geheimnisTypenHabenDeutscheBeschriftungen() {
+        assertEquals("Passwort", Beschriftungen.typ(fund("PASSWORT")));
+        assertEquals("Token oder Schl" + (char) 0xFC + "ssel", Beschriftungen.typ(fund("TOKEN")));
+        assertEquals("Passwort", Beschriftungen.typ(new Finding(GeheimnisTypen.PASSWORT, "x", 0, 1, 0.95, "test")));
+        assertEquals("Token oder Schl" + (char) 0xFC + "ssel",
+                Beschriftungen.typ(new Finding(GeheimnisTypen.TOKEN, "x", 0, 1, 0.95, "test")));
     }
 
     @Test

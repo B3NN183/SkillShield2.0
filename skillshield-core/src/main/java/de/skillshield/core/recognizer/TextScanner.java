@@ -4,6 +4,7 @@ import de.skillshield.core.conflict.ConflictResolver;
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.model.FindingType;
 import de.skillshield.core.recognizer.geheimnis.GeheimnisTypen;
+import de.skillshield.core.recognizer.geheimnis.PasswortRecognizer;
 import de.skillshield.core.recognizer.general.EmailRecognizer;
 import de.skillshield.core.recognizer.general.Ipv4Recognizer;
 import de.skillshield.core.recognizer.general.PathRecognizer;
@@ -138,15 +139,19 @@ public final class TextScanner {
     }
 
     /**
-     * Scanner mit den Standard-Erkennern in dieser Reihenfolge: E-Mail, IPv4, URL, Pfad, LANR, IK, KVNR, BSNR. Die
-     * Liste ist ueber {@link #recognizers()} lesbar. KVNR und BSNR stehen am Ende; bei Konflikten entscheidet allein
-     * der {@link ConflictResolver} (nicht die Reihenfolge). Typen mit gleichem Bereich: hoehere Konfidenz gewinnt,
-     * bei Gleichstand der Typname (BSNR vor IK vor KVNR vor LANR); Plan kvnr-bsnr-erkennung, Kapitel 2.
+     * Scanner mit den Standard-Erkennern in dieser Reihenfolge: E-Mail, IPv4, URL, Pfad, LANR, IK, KVNR, BSNR,
+     * Passwort. Die Liste ist ueber {@link #recognizers()} lesbar. Die acht bisherigen Erkenner stehen unveraendert
+     * an den Indizes 0 bis 7, der {@link PasswortRecognizer} (Plan geheimnisse-erkennung, T-4) an Index 8; der
+     * Token-Erkenner folgt in einem spaeteren Task an Index 9. Bei Konflikten entscheidet allein der
+     * {@link ConflictResolver} (nicht die Reihenfolge). Typen mit gleichem Bereich: hoehere Konfidenz gewinnt, bei
+     * Gleichstand der Typname (BSNR vor IK vor KVNR vor LANR); Plan kvnr-bsnr-erkennung, Kapitel 2. Kandidaten der
+     * Geheimnistypen ordnet die Lueckenregel ein (Klassenbeschreibung): sie veraendern keinen Fund der uebrigen
+     * Erkenner.
      */
     public static TextScanner standard() {
         return new TextScanner(List.of(new EmailRecognizer(), new Ipv4Recognizer(), new UrlRecognizer(),
                 new PathRecognizer(), new LanrRecognizer(), new IkRecognizer(),
-                new KvnrRecognizer(), new BsnrRecognizer()));
+                new KvnrRecognizer(), new BsnrRecognizer(), new PasswortRecognizer()));
     }
 
     /**

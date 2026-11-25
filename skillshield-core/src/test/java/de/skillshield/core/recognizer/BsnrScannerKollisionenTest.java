@@ -17,6 +17,7 @@ import de.skillshield.core.model.Finding;
 import de.skillshield.core.model.FindingType;
 import de.skillshield.core.pseudonymize.PseudonymizationResult;
 import de.skillshield.core.pseudonymize.Pseudonymizer;
+import de.skillshield.core.recognizer.geheimnis.PasswortRecognizer;
 import de.skillshield.core.recognizer.general.EmailRecognizer;
 import de.skillshield.core.recognizer.kv.BsnrRecognizer;
 import de.skillshield.core.recognizer.kv.BsnrSynthetischWaechter;
@@ -377,8 +378,13 @@ class BsnrScannerKollisionenTest {
     @Test
     void ak33_standardEnthaeltDenBsnrErkennerAmEnde_nachrangigMitRestQuelle() {
         List<Recognizer> liste = TextScanner.standard().recognizers();
-        Recognizer letzter = liste.get(liste.size() - 1);
-        assertTrue(letzter instanceof BsnrRecognizer, "letzter Erkenner ist der BSNR-Erkenner");
+        // Umgestellt durch geheimnisse-erkennung T-4: alte Erwartung: der BSNR-Erkenner ist der letzte der Liste;
+        // neue Erwartung: er steht an Index 7, dahinter folgt der PasswortRecognizer (Plan Kapitel 8.1 nennt diesen
+        // Test nicht, die Umstellung ist gleichartig zu BsnrKlartextFreiheitTest).
+        assertTrue(liste.get(liste.size() - 1) instanceof PasswortRecognizer,
+                "letzter Erkenner ist der Passwort-Erkenner");
+        Recognizer letzter = liste.get(liste.size() - 2);
+        assertTrue(letzter instanceof BsnrRecognizer, "vorletzter Erkenner ist der BSNR-Erkenner");
         assertTrue(letzter.nachrangig(), "nachrangig");
         assertTrue("bsnr-rest".equals(letzter.restQuelle()), "Restquelle");
         assertEquals(1, liste.stream().filter(r -> r instanceof BsnrRecognizer).count(), "genau ein BSNR-Erkenner");

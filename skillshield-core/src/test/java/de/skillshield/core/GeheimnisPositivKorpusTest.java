@@ -51,14 +51,16 @@ class GeheimnisPositivKorpusTest {
     // ------------------------------------------------------------------ Freischaltung und Istwerte (eingefroren)
 
     /** Kategorien, die {@code standard()} schon erfuellen muss; in T-2 leer, T-4 und folgende schalten frei. */
-    static final Set<String> AKTIVE_KATEGORIEN = Set.of();
+    static final Set<String> AKTIVE_KATEGORIEN = Set.of(GeheimnisPositivKorpus.K1,
+            GeheimnisPositivKorpus.ZWISCHENTEIL, GeheimnisPositivKorpus.UMBRUCH,
+            GeheimnisPositivKorpus.ANFUEHRUNG, GeheimnisPositivKorpus.MEHRFACH);
 
     /**
      * Treffer von {@code standard()} im Positiv-Generator je Typ. Erlaubt sind nur 0 (noch nicht freigeschaltet) und
      * die volle Zahl der Texte des Typs (AK-38: 100 Prozent); die Testmethode prueft das. Sollwert PASSWORT: 66 663
      * ab T-4.
      */
-    static final int GENERATOR_PASSWORT_TREFFER_IST = 0;
+    static final int GENERATOR_PASSWORT_TREFFER_IST = 66_663;
     /** Sollwert TOKEN: 33 337 ab T-6 (sonst 0, siehe {@link #GENERATOR_PASSWORT_TREFFER_IST}). */
     static final int GENERATOR_TOKEN_TREFFER_IST = 0;
 

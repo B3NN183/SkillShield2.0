@@ -67,9 +67,10 @@ class GeheimnisFehlalarmTest {
     static final int WORTLISTE_IST = 267;
     /**
      * Zahl der Erkenner in {@code TextScanner.standard()}, deren Klasse im Paket
-     * {@code de.skillshield.core.recognizer.geheimnis} liegt (Istwert; in T-2 gibt es keinen).
+     * {@code de.skillshield.core.recognizer.geheimnis} liegt (Istwert; in T-2 gibt es keinen, ab T-4 den
+     * {@code PasswortRecognizer}, ab T-6 auch den {@code TokenRecognizer}).
      */
-    static final int GEHEIMNIS_ERKENNER_IST = 0;
+    static final int GEHEIMNIS_ERKENNER_IST = 1;
 
     /** Saetze mit K1, K2, K3, K4 im Korpus, Istwerte (Gegenprobe). */
     static final int KORPUS_K1_IST = 153;

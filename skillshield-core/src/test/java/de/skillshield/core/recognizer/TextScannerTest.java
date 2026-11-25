@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import de.skillshield.core.model.ConfidenceLevel;
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.model.FindingType;
+import de.skillshield.core.recognizer.geheimnis.PasswortRecognizer;
 import de.skillshield.core.recognizer.general.EmailRecognizer;
 import de.skillshield.core.recognizer.general.Ipv4Recognizer;
 import de.skillshield.core.recognizer.general.PathRecognizer;
@@ -356,8 +357,12 @@ class TextScannerTest {
         // ein Standard-Erkenner oder aendert sich die Reihenfolge, schlaegt dieser Test fehl.
         List<Class<?>> klassen = TextScanner.standard().recognizers().stream()
                 .<Class<?>>map(Object::getClass).toList();
+        // Umgestellt durch geheimnisse-erkennung T-4: alte Erwartung: die acht Erkenner bis BsnrRecognizer;
+        // neue Erwartung: dahinter PasswortRecognizer (Index 8). Grund: Der Standard-Scanner bekommt den
+        // Passwort-Erkenner hinter den bisherigen acht (Plan Kapitel 8.1); deren Reihenfolge bleibt unveraendert.
         assertEquals(List.of(EmailRecognizer.class, Ipv4Recognizer.class, UrlRecognizer.class, PathRecognizer.class,
-                LanrRecognizer.class, IkRecognizer.class, KvnrRecognizer.class, BsnrRecognizer.class), klassen);
+                LanrRecognizer.class, IkRecognizer.class, KvnrRecognizer.class, BsnrRecognizer.class,
+                PasswortRecognizer.class), klassen);
     }
 
     @Test

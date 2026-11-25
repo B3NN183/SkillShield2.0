@@ -27,9 +27,12 @@ import org.junit.jupiter.api.Test;
  * </ol>
  * Die Zahl der zusaetzlichen Funde je Menge ist exakt festgehalten. In T-1 ist sie ueberall 0 (volle Gleichheit);
  * spaetere Tasks tragen die gemessenen Zahlen ein, jeden zusaetzlichen Fund einzeln nennt der Bericht. Zulaessige
- * Ausnahmen gibt es keine. Regel 3 (Abdeckung neu = alt plus Geheimnis-Kandidaten) ist seit T-3 um die Kandidaten
- * ergaenzt (die Funde der Erkenner von {@code neu}, die {@code ALT} nicht hat, mit Geheimnistyp); die Typerkennung
- * nutzt {@code GeheimnisTypen}, {@code GEHEIMNISTYPEN} wird dagegen abgeglichen.
+ * Ausnahmen gibt es keine. Stand T-4 (PasswortRecognizer in {@code standard()}): in allen Bestandsmengen weiter 0
+ * zusaetzliche Funde; dazu kommen die Pruefstand-Mengen (Negativkorpus, Positivkorpus, die ersten 20 000 Texte
+ * der Generatoren), in denen die zusaetzlichen Funde genau die erwarteten PASSWORT-Funde sind. Regel 3
+ * (Abdeckung neu = alt plus Geheimnis-Kandidaten) ist seit T-3 um die Kandidaten ergaenzt (die Funde der Erkenner
+ * von {@code neu}, die {@code ALT} nicht hat, mit Geheimnistyp); die Typerkennung nutzt {@code GeheimnisTypen},
+ * {@code GEHEIMNISTYPEN} wird dagegen abgeglichen.
  * Meldungen nennen Menge, Textindex, Bereich, Typ und Quelle, nie Text oder Werte.
  *
  * <p>Die Gegenproben belegen, dass der Vergleich anschlaegt: ein kuenstlicher Erkenner mit einem Fund ausserhalb des
@@ -190,6 +193,82 @@ class GeheimnisDifferenzTest {
         }
         assertEquals(List.of(), verstoesse);
         assertEquals(ERWARTET, ist);
+    }
+
+    // ------------------------------------------------------------------ Pruefstand-Mengen (ab T-4)
+
+    private static final int PRUEFSTAND_GENERATORTEXTE = 20_000;
+
+    /** Negativkorpus: keine Geheimnis-Funde, also keine zusaetzlichen Funde (T-4: 372 Saetze, alle 0). */
+    @Test
+    void negativkorpus_standardGleichAlt_keinZusatzfund() {
+        List<String> texte = new ArrayList<>();
+        GeheimnisFehlalarmTest.korpus().values().forEach(texte::addAll);
+        Messung m = vergleiche("Negativkorpus", texte, TextScannerStandGeheimnis.ALT, TextScanner.standard());
+        assertEquals(List.of(), m.verstoesse());
+        assertEquals("Negativkorpus|texte=372|funde=26|zusaetzlich=0", m.kurz());
+    }
+
+    /**
+     * Positivkorpus (199 Faelle): die Funde von ALT bleiben, dazu kommen genau die Geheimnis-Funde der aktiven
+     * Kategorien (K1, ZWISCHENTEIL, UMBRUCH, ANFUEHRUNG, MEHRFACH); die Faelle der noch nicht aktiven Kategorien
+     * liefern in T-4 nur wenige zusaetzliche Funde der Kontextregel (T-4: Zahl der zusaetzlichen Funde exakt
+     * festgehalten, Begruendung unten).
+     */
+    @Test
+    void positivkorpus_standardGleichAlt_zusaetzlicheFundeNurInDenAktivenKategorien() {
+        List<String> aktiv = new ArrayList<>();
+        List<String> inaktiv = new ArrayList<>();
+        int erwartetAktiv = 0;
+        for (GeheimnisPositivKorpus.Fall f : GeheimnisPositivKorpus.faelle()) {
+            if (GeheimnisPositivKorpusTest.AKTIVE_KATEGORIEN.contains(f.kategorie())) {
+                aktiv.add(f.text());
+                erwartetAktiv += f.funde().size();
+            } else {
+                inaktiv.add(f.text());
+            }
+        }
+        Messung a = vergleiche("Positivkorpus aktiv", aktiv, TextScannerStandGeheimnis.ALT, TextScanner.standard());
+        assertEquals(List.of(), a.verstoesse());
+        assertEquals(erwartetAktiv, a.zusaetzlich(), "zusaetzliche Funde in den aktiven Kategorien");
+        assertEquals("Positivkorpus aktiv|texte=97|funde=21|zusaetzlich=" + erwartetAktiv, a.kurz());
+        Messung i = vergleiche("Positivkorpus inaktiv", inaktiv, TextScannerStandGeheimnis.ALT,
+                TextScanner.standard());
+        assertEquals(List.of(), i.verstoesse());
+        // Sieben Faelle mit Passwort-Teil liefern schon in T-4 einen PASSWORT-Fund der Kontextregel (nicht den
+        // erwarteten der spaeteren Regel): TOKEN_KONTEXT-17 (Passwort vor dem Token), ODBC-01, ODBC-02, ODBC-07 und
+        // KOMMANDOZEILE-01, -03, -06 (Schluessel mit Gleichheitszeichen). Sie sind erwuenscht (mehr Schutz) und
+        // aendern sich mit T-6 und T-8.
+        assertEquals("Positivkorpus inaktiv|texte=102|funde=8|zusaetzlich=7", i.kurz());
+    }
+
+    /** Positiv-Generator (erste 20 000 Texte): ALT liefert nichts, standard() genau einen Fund je Text. */
+    @Test
+    void positivGenerator_standardGleichAlt_einZusatzfundJePasswortText() {
+        List<String> texte = new ArrayList<>();
+        for (GeheimnisPositivGenerator.Text t : GeheimnisPositivGenerator.lauf(GeheimnisPositivGenerator.SEED,
+                PRUEFSTAND_GENERATORTEXTE).texte()) {
+            texte.add(t.text());
+        }
+        Messung m = vergleiche("Positiv-Generator", texte, TextScannerStandGeheimnis.ALT, TextScanner.standard());
+        assertEquals(List.of(), m.verstoesse());
+        assertEquals("Positiv-Generator|texte=20000|funde=0|zusaetzlich=13344", m.kurz());
+    }
+
+    /** Negativ- und Verletzend-Generator (je erste 20 000 Texte): keine zusaetzlichen Funde. */
+    @Test
+    void negativUndVerletzendGenerator_standardGleichAlt_keinZusatzfund() {
+        List<String> negativ = GeheimnisNegativGenerator.lauf(GeheimnisNegativGenerator.SEED,
+                PRUEFSTAND_GENERATORTEXTE).texte();
+        Messung n = vergleiche("Negativ-Generator", negativ, TextScannerStandGeheimnis.ALT, TextScanner.standard());
+        assertEquals(List.of(), n.verstoesse());
+        assertEquals(0, n.zusaetzlich());
+        List<String> verletzend = GeheimnisPositivGenerator.verletzend(PRUEFSTAND_GENERATORTEXTE).texte();
+        Messung v = vergleiche("Verletzend-Generator", verletzend, TextScannerStandGeheimnis.ALT,
+                TextScanner.standard());
+        assertEquals(List.of(), v.verstoesse());
+        assertEquals(0, v.zusaetzlich());
+        assertEquals("Verletzend-Generator|texte=20000|funde=0|zusaetzlich=0", v.kurz());
     }
 
     @Test

@@ -25,6 +25,7 @@ import de.skillshield.core.pseudonymize.Pseudonymizer;
 import de.skillshield.core.recognizer.Recognizer;
 import de.skillshield.core.recognizer.TextScanner;
 import de.skillshield.core.recognizer.geheimnis.GeheimnisTypen;
+import de.skillshield.core.recognizer.geheimnis.PasswortRecognizer;
 import de.skillshield.core.recognizer.kv.IkRecognizer;
 import de.skillshield.core.recognizer.kv.LanrRecognizer;
 import de.skillshield.core.reidentify.ReidentificationResult;
@@ -832,6 +833,61 @@ class KlartextFreiheitTest {
     }
 
     private static final String TEXT_GEHEIMNIS = "Passwort: " + MARKER_PFAD + " und " + MARKER_MAIL + " Ende";
+
+    /** Ein Marker-Geheimnis, das den Wert-Test besteht (Buchstaben, Ziffer, Sonderzeichen) und den Marker traegt. */
+    private static final String MARKER_GEHEIMNIS = SynthetischeGeheimnisse.MARKER_GEHEIMNIS;
+
+    /**
+     * geheimnisse-erkennung T-4 (AK-42, D-15): Der {@code PasswortRecognizer} und seine Bausteine
+     * ({@code KontextRegel}, {@code Werttest}, {@code GeheimnisZeichen}) in allen Zweigen der Regel (K1, Umbruch,
+     * Zwischenteil, Anfuehrung, Auszeichnung, Klammern am Ende, zu langer Wert). Im Fund, in der Fundliste, im
+     * pseudonymisierten Text, im Mapping, im Ergebnis der Rueckuebersetzung, in der Ausnahme bei {@code null} und auf
+     * Standard- und Fehlerausgabe steht kein Marker ausser im Eingabetext und in der Rueckuebersetzung des
+     * Originals. Der Erkenner wirft ausser der {@code NullPointerException} mit der Meldung {@code text} nichts.
+     */
+    @Test
+    void passwortErkenner_keinMarkerInFundenAusnahmenUndAusgabe() {
+        List<String> texte = List.of("Passwort: " + MARKER_GEHEIMNIS, "pw=" + MARKER_GEHEIMNIS + ".",
+                "Passwort:\n" + MARKER_GEHEIMNIS, "Passwort f" + (char) 0xFC + "r svc_x: \"" + MARKER_GEHEIMNIS + "\"",
+                "**Passwort:** **" + MARKER_GEHEIMNIS + "**", "Passwort: (" + MARKER_GEHEIMNIS + ")",
+                "Passwort: " + MARKER_GEHEIMNIS.repeat(400), "Passwort: " + MARKER_PFAD,
+                "Passwort: " + MARKER_MAIL, "x Passwort: " + MARKER_GEHEIMNIS + " Passwort: " + MARKER_GEHEIMNIS);
+        Ausgabe ausgabe = erfasse(() -> {
+            PasswortRecognizer erkenner = new PasswortRecognizer();
+            int gefunden = 0;
+            for (int i = 0; i < texte.size(); i++) {
+                String text = texte.get(i);
+                assertTrue(findeMarker(text).isPresent(), "Suchfunktion findet den Marker im Eingabetext " + i);
+                List<Finding> kandidaten = erkenner.detect(text);
+                gefunden += kandidaten.size();
+                assertToStringKlartextfrei("Kandidaten " + i, kandidaten);
+                for (Finding f : kandidaten) {
+                    assertToStringKlartextfrei("Finding.toString Passwort-Kandidat " + i, f);
+                    assertToStringKlartextfrei("Finding.source Passwort-Kandidat " + i, f.source());
+                    assertToStringKlartextfrei("FindingType Passwort-Kandidat " + i, f.type());
+                }
+                List<Finding> funde = TextScanner.standard().scan(text);
+                assertToStringKlartextfrei("Liste der Funde Passwort-Text " + i, funde);
+                PseudonymizationResult pseudo = PSEUDONYMIZER.pseudonymize(text, funde);
+                assertToStringKlartextfrei("PseudonymizationResult Passwort-Text " + i, pseudo);
+                assertToStringKlartextfrei("PlaceholderMapping Passwort-Text " + i, pseudo.mapping());
+                ReidentificationResult zurueck = REIDENTIFIER.restore(pseudo.text(), pseudo.mapping());
+                assertTrue(text.equals(zurueck.text()), "Roundtrip Passwort-Text " + i);
+                assertToStringKlartextfrei("ReidentificationResult Passwort-Text " + i, zurueck);
+                if (!kandidaten.isEmpty() && i != 7 && i != 8) {
+                    assertTrue(findeMarker(pseudo.text()).isEmpty(), "Marker im pseudonymisierten Text " + i);
+                }
+            }
+            assertTrue(gefunden >= 8, "der Test trifft die Regel zu selten: " + gefunden);
+            NullPointerException npe = assertThrows(NullPointerException.class, () -> erkenner.detect(null));
+            assertKlartextfrei("PasswortRecognizer.detect(null)", npe);
+            assertEquals("text", npe.getMessage());
+            NullPointerException scan = assertThrows(NullPointerException.class,
+                    () -> TextScanner.standard().scan(null));
+            assertKlartextfrei("TextScanner.scan(null) mit Passwort-Erkenner", scan);
+        });
+        assertAusgabeKlartextfrei("Passwort-Erkenner-Test", ausgabe);
+    }
 
     @Test
     void selbsttest_kvMarkerUndIhreErstenSechsZiffernWerdenGefunden() {
