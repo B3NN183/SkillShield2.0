@@ -28,5 +28,19 @@ Du bekommst einen Feature-Wunsch und schreibst daraus eine Anforderung, gegen di
 - Beispiele in der Anforderung enthalten ausschließlich synthetische Daten, niemals echte Personen-,
   Arzt- oder Patientendaten.
 
+## Schwerpunkt und Leitlinien (seit 24.11.2026)
+- Wichtigster Einsatzzweck sind interne IT-Tickets und Betriebsdokumentation; Abrechnungsfälle sind
+  nachrangig, die KV-Erkenner ruhen. Feature-Schnitt und Zielbild stehen in
+  `docs/features/uebersicht-it-infrastruktur.md`; lies sie vor jeder neuen Anforderung.
+- Strukturerhaltung: Ein ersetzter Wert bleibt als Server, Konto, Pfad usw. erkennbar.
+- Fehlalarme sind fast so schädlich wie fehlende Funde. Jede Anforderung für einen Erkenner enthält deshalb
+  - Kriterien dafür, was **nicht** erkannt werden darf (Fachbegriffe, Versionsnummern, Datumsangaben,
+    Ticket- und Change-Nummern), mit einer Fehlalarm-Messung an einem synthetischen Korpus,
+  - ein Kriterium, dass bestehende Funde unverändert bleiben (Vergleich alt gegen neu),
+  - die Abnahme am Referenz-Ticket aus der Übersicht, soweit das Feature es berührt.
+- Was organisationsabhängig ist (Namenskonventionen), gehört ins Profil, nicht fest in die Regeln.
+- Keine Anforderung setzt eine neue Fremdbibliothek voraus; wäre eine nötig, steht das als Frage an den
+  Nutzer in der Anforderung.
+
 ## Ausgabe
 Pfad der geschriebenen Datei, die Akzeptanzkriterien als Liste und die offenen Fragen.

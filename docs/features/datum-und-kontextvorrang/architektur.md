@@ -635,3 +635,36 @@ Abschnitt 3). Freigegeben ist deshalb nur **Teil A (Datumsangaben sind keine KV-
 - **Prüfsummendatei von `oberflaeche-mvp`** bleibt unverändert; sie war der Nachweis jenes Features.
 - **Geburtsdaten im Klartext** nach Teil A: bekannte Grenze; der Schutz als eigener Typ ruht mit den
   übrigen KV-Themen. Bis dahin markiert der Anwender sie von Hand.
+
+## Nachtrag 2 der Hauptsitzung vom 24.11.2026: Festlegungen nach der Prüfung von T-1
+
+- **AK-10, dritter Fall (Datum mit Uhrzeit).** `BSNR <Datum> 08:30` ergibt heute einen Fund über Datum
+  plus Stundenangabe (das Segment hat zehn Ziffern und ist nach D-5 kein Datum). D-5 geht vor: Der Fund
+  **bleibt** (0,40), der Fall ist eine bekannte Grenze mit eigenem Test `bekannteGrenze…` in T-2. AK-10
+  gilt insoweit als berichtigt. `KvDatum` wird dafür nicht großzügiger gefasst.
+- **Maßstab ist `DatumReferenz` aus T-1**, einschließlich ihrer vier strengeren Auslegungen (zweistelliges
+  Jahr: `29.02.JJ` nur, wenn es in beiden Jahrhunderten ein Schaltjahr ist; Zeitraum nur bei Kettenende
+  hinter dem zweiten Datum; Zeitraum-Präfixe; Neun-Ziffern-Regel). T-2 und T-3 richten sich danach.
+- **Eingefroren ab der Abnahme von T-1** (in T-2 und T-3 unverändert, per `git diff` gegen den Tag der
+  T-1-Abnahme nachzuweisen): `DatumReferenz`, `DatumMessung`, `DatumMengen`, `KvNumberScannerStandDatum`,
+  `KvStandDatum` sowie die Siegel in `KvStandDatumTest`. Ausnahme: die im Plan vorgesehenen Umstellungen
+  beim Einschalten von `TEIL_A` (Schalter, Erwartung des Anlasstexts auf „Produkt gleich Kopie ohne
+  Datumssegmente").
+- **Produktdateien der „alten" Seite** (`KvArt`, `BsnrRegionalcodes`, `KvCheckDigits`, `KvnrPruefziffer`,
+  `KvnrOhneKontext`, `TextScanner`, `ConflictResolver`, allgemeine Erkenner) ändern sich in T-2 und T-3
+  höchstens im Javadoc.
+- **Die 14 Bestandsmengen enthalten kein Datumssegment.** Der Differenztest belegt dort nur „sonst ändert
+  sich nichts". T-2 misst deshalb zusätzlich am Produkt gegen `ALT_DATUM` Texte, in denen ein Datum neben
+  echten Nummern steht (direkt, weiter, Aufzählung vor und nach dem Datum, nachgestellt, Komma, `/`, `-`,
+  Zeilenumbruch, KVNR-Buchstabenform, Zeitraum, Neun-Ziffern-Grenzen), mit exakter Zahl entfallener Funde
+  größer 0 und ohne jeden anderen Unterschied. Die Datumsprüfung steht ausschließlich als erste Anweisung
+  in `ausgeben`.
+- **`KvDatum` ohne `java.time`** (Positivliste in `ArchitekturRegelnTest`); die Kalenderrechnung wird
+  gegen `DatumReferenz` über alle Tage von 1900 bis 2099 geprüft.
+- **Anlasstext:** Die Anforderung nennt `12.02.2026` an zwei Stellen, der abgedruckte Text einmal. Maßgeblich
+  ist der Fall des Nutzers mit zwei Leistungszeilen vom selben Tag; `SynthetischeDaten.anlassText()` wird
+  in T-2 entsprechend ergänzt, falls dort nur eine Zeile steht.
+- **Bestehende Lücken, nicht Teil dieses Features** (von security gemessen, schon vor T-1 vorhanden und
+  von Teil A unverändert): Eine echte Nummer hinter einem Zeitraum oder hinter mehreren Datumsangaben
+  (`BSNR <Zeitraum> <BSNR>`, `LANR <Datum> <Datum> <Datum> <LANR>`, `IK <Datum> <Datum>, <IK>`) hat heute
+  keinen Fund. Als bekannte Grenze geführt; die KV-Erkenner ruhen.

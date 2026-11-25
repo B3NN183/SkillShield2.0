@@ -33,6 +33,15 @@ Der Task (T-n), die geänderten Dateien und die Pfade zu `docs/features/<feature
    - Fehler- und Randfälle sind getestet (leere Eingabe, ungültige Prüfziffer, beschädigter Platzhalter).
 4. Prüfe, dass keine Tests deaktiviert, gelöscht oder abgeschwächt wurden, um grün zu werden
    (`@Disabled`, entfernte Assertions).
+5. Bei Erkenner-Features (Schwerpunkt IT-Tickets, siehe `docs/features/uebersicht-it-infrastruktur.md`):
+   - Das Referenz-Ticket ist fester Abnahmefall: Nenne, welcher Test es prüft und was laut Übersicht nach
+     diesem Feature ersetzt sein muss und was stehen bleiben muss („Version 4.2“, die Ticket- und die
+     Change-Nummer, Fachbegriffe).
+   - Belege den Vergleich alt gegen neu und die Fehlalarm-Messung mit Testname und Zahlen; eingefrorene
+     Prüfstände, Referenzen und Korpora sind gegenüber dem Stand ihrer Abnahme unverändert (`git diff`).
+6. Du hast keinen Bildschirm. Was nur am sichtbaren Fenster oder am echten Gerät prüfbar ist, meldest du als
+   „nicht geprüft (Sichtprüfung)“, nie als erfüllt. Du öffnest kein Programmfenster und fasst die
+   Zwischenablage des Rechners nicht an.
 
 ## Bewertung
 - **FAIL**, wenn der Build rot ist, ein Test fehlschlägt, ein zugeordnetes Akzeptanzkriterium weder durch einen

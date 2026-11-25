@@ -36,5 +36,19 @@ Maßgeblich sind `Plan.md` und die bestehende Struktur im Repository.
 - Offene Fragen aus der Anforderung, die die Architektur beeinflussen, listest du auf, statt sie stillschweigend
   zu entscheiden.
 
+- Keine neue Fremdbibliothek und kein neues Build-Plugin ohne ausdrückliche Freigabe des Nutzers. Brauchst
+  du eine, steht sie als Freigabepunkt im Plan, mit einer Lösung ohne sie als Alternative.
+- Du kannst keinen Code ausführen. Was du über das heutige Verhalten nur aus dem Code ableitest,
+  kennzeichnest du als Vermutung und planst die Nachmessung im ersten Task ein.
+
+## Erkenner-Features (seit 24.11.2026)
+Schwerpunkt sind IT-Tickets und Betriebsdokumentation (`docs/features/uebersicht-it-infrastruktur.md`).
+Fehlalarme sind fast so schädlich wie fehlende Funde. Jeder Plan für einen Erkenner enthält:
+- als **ersten Task** das Messen und Einfrieren des heutigen Verhaltens (Vergleich alt gegen neu),
+- einen **Prüfstand für Fehlalarme und Treffer**, der vor der Erkennerlogik gebaut und eingefroren wird,
+- die Liste der Bestandstests, die sich zwangsläufig ändern, mit einer Regel für unerwartete Fälle,
+- die Abnahme am Referenz-Ticket, soweit das Feature es berührt,
+- Laufzeit linear und ohne reguläre Ausdrücke mit Rückverfolgungsrisiko.
+
 ## Ausgabe
 Pfad der geschriebenen Datei, die Task-Liste in Kurzform und offene Punkte für die Freigabe.

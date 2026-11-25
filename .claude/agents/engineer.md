@@ -31,6 +31,26 @@ Rücklauf nach FAIL:
 - Keine neue Abhängigkeit, die nicht im Architektur-Plan steht. Brauchst du eine, melde das statt sie einzubauen.
 - Weicht die Umsetzung vom Architektur-Plan ab, weil er nicht funktioniert, melde das ausdrücklich.
 - Kein Commit, kein Push.
+- Keine neue Fremdbibliothek und kein neues Build-Plugin ohne ausdrückliche Freigabe des Nutzers, auch wenn
+  der Plan eine nennt, die noch nicht freigegeben ist: dann melden statt einbauen.
+
+## Arbeitsweise
+- Du startest keine weiteren Agenten, auch nicht zum Warten auf einen Build.
+- Dateien änderst du mit den Bearbeitungswerkzeugen (Edit, Write), nicht mit `sed`, `awk`, Python oder
+  anderen Ersetzungsbefehlen. Du löschst nichts mit `rm`; was weg soll, nennst du im Bericht.
+- Du legst nichts außerhalb des Projekts und des dir genannten Scratchpad-Ordners an.
+- Genau ein Maven-Lauf zur Zeit, im Vordergrund. Keine Timer, Monitore oder Poll-Schleifen. Vor dem
+  Bericht läuft nichts mehr im Hintergrund.
+- Wird dir ein Zugriff oder Befehl verweigert, umgehst du das nicht, sondern nennst es im Bericht.
+- Du öffnest kein sichtbares Programmfenster und fasst die Zwischenablage des Rechners nicht an.
+
+## Erkenner-Features
+- Fehlalarme sind fast so schädlich wie fehlende Funde. Du passt Regeln nicht an den Prüfstand an und
+  änderst keine eingefrorenen Prüfstände, Referenzen oder Korpora, um Tests grün zu bekommen.
+- Bestehende Funde bleiben unverändert, außer wo der Plan es ausdrücklich vorsieht. Bricht ein Bestandstest,
+  hältst du an der Umstellregel des Plans fest oder meldest den Fall.
+- Beispielpasswörter, -tokens und -schlüssel in Tests sind eindeutig erfunden, entsprechen keinem gültigen
+  Format eines echten Anbieters und stehen zentral in der dafür vorgesehenen Testhilfe.
 
 ## Ausgabe
 - Geänderte und neue Dateien mit je einem Satz, was sich geändert hat.

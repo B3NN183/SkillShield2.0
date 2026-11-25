@@ -30,10 +30,14 @@ Die Liste der geänderten Dateien, der Task (T-n) und der Pfad zum Architektur-P
 4. **Unsichere Authentifizierung/Autorisierung** (hier der Tresor): Argon2id mit angemessenen Parametern,
    AES-256-GCM mit einmaligem Nonce je Verschlüsselung, zufälliges Salt aus `SecureRandom`, Passwörter als
    `char[]` und nach Gebrauch überschrieben, Auto-Lock, kein Schlüsselmaterial auf Platte oder im Log.
-5. **Unsichere Abhängigkeiten**: führe `mvn -q clean compile org.owasp:dependency-check-maven:check` aus (die Phase davor ist nötig, weil der Check sonst die Module untereinander nicht auflösen kann; `clean` entfernt alte Berichte), sobald eine
-   `pom.xml` existiert. Prüfe neue Abhängigkeiten gegen den Architektur-Plan. Ist die Prüfung nicht ausführbar
-   (keine `pom.xml`, kein Maven, kein Netz für die Schwachstellendatenbank), melde „nicht ausführbar: <Grund>“.
-   Das ist kein PASS für diesen Punkt.
+5. **Unsichere Abhängigkeiten**: Hat sich eine `pom.xml` geändert, führe
+   `mvn -B clean package -DskipTests org.owasp:dependency-check-maven:check -Dodc.skipTestScope=false` aus
+   (Aufruf laut README; die Phase `package` ist nötig, weil der Check sonst das Test-JAR des Kerns nicht
+   auflösen kann). Prüfe neue Abhängigkeiten und Build-Plugins gegen den Architektur-Plan und gegen die
+   Regel, dass jede neue Fremdbibliothek die ausdrückliche Freigabe des Nutzers braucht. Ist die Prüfung
+   nicht ausführbar (kein `NVD_API_KEY` in deiner Shell, kein Netz für die Schwachstellendatenbank), melde
+   „nicht ausführbar: <Grund>“. Das ist kein PASS für diesen Punkt. Hat sich keine `pom.xml` geändert,
+   belege das mit `git diff` und melde „nicht nötig“.
 6. **Personenbezogene Daten in Logs oder Testdaten**: keine Klartext-Funde in Logs, Exception-Meldungen,
    `toString()` oder temporären Dateien. Testdaten ausschließlich synthetisch; alles, was nach echten Namen,
    LANR, BSNR, KVNR, IK-Nummern, Geburtsdaten oder Adressen aussieht, ist ein Fund.
@@ -41,6 +45,20 @@ Die Liste der geänderten Dateien, der Task (T-n) und der Pfad zum Architektur-P
    Feldern mit sensiblen Daten, unnötig breite Dateizugriffe.
 8. **Projektvorgaben aus Plan.md Kap. 11**: kein Netzwerk-Code im Produkt (`java.net`, HTTP-Clients, Sockets),
    Zwischenablage wird geleert, Platzhalter-Leak-Check wird nicht umgangen.
+9. **Erkenner-Features** (Schwerpunkt IT-Tickets und Betriebsdokumentation, siehe
+   `docs/features/uebersicht-it-infrastruktur.md`):
+   - Kein Schutzverlust: Kein bestehender Fund verschwindet, schrumpft oder wechselt den Typ, außer wo der
+     Plan es ausdrücklich vorsieht. Miss das selbst alt gegen neu an Zufallstexten nach; verlasse dich
+     nicht allein auf die Tests des engineer.
+   - Fehlalarme sind fast so schädlich wie fehlende Funde. Prüfe, ob der eingefrorene Prüfstand
+     (Fehlalarm- und Trefferkorpus, Referenzen) unverändert ist und ob Regeln an ihn angepasst wurden.
+   - Test-Geheimnisse: Beispielpasswörter, -tokens, -schlüssel und Verbindungszeichenfolgen in Tests,
+     Ressourcen und Dokumenten sind eindeutig erfunden, entsprechen keinem gültigen Format eines echten
+     Anbieters und sind so abgelegt, dass Geheimnis-Scanner sie nicht als echte Schlüssel melden.
+   - Geheimnisse sind besonders streng zu behandeln: kein erkannter Wert in Ausnahmetexten, `toString()`,
+     Testausgaben oder Fehlermeldungen von Assertions.
+   - Profile (konfigurierbare Muster): nur lesen, fester Ort, feste Obergrenzen, kein Nachladen, keine
+     regulären Ausdrücke mit Rückverfolgungsrisiko; ein Profil darf den Schutz nur erweitern, nie verringern.
 
 ## Schwere
 - **hoch**: Klartext personenbezogener Daten kann das Gerät verlassen oder dauerhaft ungeschützt gespeichert
