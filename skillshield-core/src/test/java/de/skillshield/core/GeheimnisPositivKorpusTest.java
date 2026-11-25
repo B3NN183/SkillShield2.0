@@ -50,10 +50,15 @@ class GeheimnisPositivKorpusTest {
 
     // ------------------------------------------------------------------ Freischaltung und Istwerte (eingefroren)
 
-    /** Kategorien, die {@code standard()} schon erfuellen muss; in T-2 leer, T-4 und folgende schalten frei. */
+    /**
+     * Kategorien, die {@code standard()} schon erfuellen muss; in T-2 leer, T-4 und folgende schalten frei.
+     * Umgestellt durch geheimnisse-erkennung T-5: alt K1, ZWISCHENTEIL, UMBRUCH, ANFUEHRUNG, MEHRFACH; neu dazu K2,
+     * K3, K4 (nur die Freischaltung, die Pruefung bleibt unveraendert).
+     */
     static final Set<String> AKTIVE_KATEGORIEN = Set.of(GeheimnisPositivKorpus.K1,
             GeheimnisPositivKorpus.ZWISCHENTEIL, GeheimnisPositivKorpus.UMBRUCH,
-            GeheimnisPositivKorpus.ANFUEHRUNG, GeheimnisPositivKorpus.MEHRFACH);
+            GeheimnisPositivKorpus.ANFUEHRUNG, GeheimnisPositivKorpus.MEHRFACH, GeheimnisPositivKorpus.K2,
+            GeheimnisPositivKorpus.K3, GeheimnisPositivKorpus.K4);
 
     /**
      * Treffer von {@code standard()} im Positiv-Generator je Typ. Erlaubt sind nur 0 (noch nicht freigeschaltet) und

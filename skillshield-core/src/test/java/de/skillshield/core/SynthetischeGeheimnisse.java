@@ -87,6 +87,42 @@ public final class SynthetischeGeheimnisse {
     public static final List<String> P_PLATZHALTERARTIG = List.of("!vault", "@@DBPASS@@", "REPLACE_ME_123",
             "CHANGEME_2026", "GEHEIM_#1");
 
+    /** Ergaenzung T-5, G-14: Bezeichner mit Gross-, Kleinbuchstabe und Ziffer, hinter K2 bis K4 ein Fund. */
+    public static final String P_BEZEICHNER = "Q3Final2";
+
+    /** Ergaenzung T-5, G-14 hinter K2: Produktname mit Jahreszahl. */
+    public static final String P_BEZEICHNER_EXCHANGE = "Exchange2019";
+
+    /** Ergaenzung T-5, G-14 hinter K2: Betriebssystem mit Bindestrich und Build-Kennung. */
+    public static final String P_BEZEICHNER_WIN = "Win11-24H2";
+
+    /** Ergaenzung T-5, G-14: Programmname mit Ziffer. */
+    public static final String P_PROGRAMM = "KeePass2";
+
+    /** Ergaenzung T-5, G-14: Begriff mit Sonderzeichen. */
+    public static final String P_BEGRIFF_SONDER = "Policy#3";
+
+    /** Ergaenzung T-5: Wert mit Bindestrich und Kleinwort am Ende (hinter K2 kein Fund). */
+    public static final String P_BINDESTRICH_NEU = "Sommer2026-neu";
+
+    /** Ergaenzung T-5: zweiter Wert mit Bindestrich und Kleinwort am Ende. */
+    public static final String P_BINDESTRICH_GEHEIM = "Wolke7x-geheim";
+
+    /** Ergaenzung T-5: Fachbegriff mit Bindestrich und Kleinwort (mit Umlaut), hinter K2 kein Fund. */
+    public static final String P_FACHBEGRIFF_VERSCHLUESSELT = "AES256-verschl" + (char) 0xFC + "sselt";
+
+    /** Ergaenzung T-5, S1: Anfang eines Werts mit einem {@code :} darin, dahinter ein ganzer Wert. */
+    public static final String P_MIT_DOPPELPUNKT_VORN = "Ab3x:";
+
+    /** Ergaenzung T-5, S1: Wert, dessen Rest hinter einem {@code :} zu kurz fuer einen Fund ist. */
+    public static final String P_MIT_DOPPELPUNKT_KURZ = "Wolke7x:Fu";
+
+    /** Ergaenzung T-5, S2: Wert mit {@code |} darin, der erste Teil besteht den Wert-Test. */
+    public static final String P_MIT_STRICH = "Wolke#Fuchs7x|Rest";
+
+    /** Ergaenzung T-5, S2: Wert mit {@code |} darin, der erste Teil besteht den Wert-Test nicht. */
+    public static final String P_MIT_STRICH_KURZ = "Ab3|Wolke#Fuchs7x";
+
     /** Erfundener Token der Anforderung (Kurzname T): 29 Zeichen, Buchstaben, eine einzelne Ziffer, mit Marke. */
     public static final String T = "AbcdTestwertEfghIjklMnop7Qrst";
 

@@ -211,7 +211,8 @@ class GeheimnisDifferenzTest {
 
     /**
      * Positivkorpus (199 Faelle): die Funde von ALT bleiben, dazu kommen genau die Geheimnis-Funde der aktiven
-     * Kategorien (K1, ZWISCHENTEIL, UMBRUCH, ANFUEHRUNG, MEHRFACH); die Faelle der noch nicht aktiven Kategorien
+     * Kategorien (K1, ZWISCHENTEIL, UMBRUCH, ANFUEHRUNG, K2, K3, K4, MEHRFACH); die Faelle der noch nicht aktiven
+     * Kategorien
      * liefern in T-4 nur wenige zusaetzliche Funde der Kontextregel (T-4: Zahl der zusaetzlichen Funde exakt
      * festgehalten, Begruendung unten).
      */
@@ -231,7 +232,10 @@ class GeheimnisDifferenzTest {
         Messung a = vergleiche("Positivkorpus aktiv", aktiv, TextScannerStandGeheimnis.ALT, TextScanner.standard());
         assertEquals(List.of(), a.verstoesse());
         assertEquals(erwartetAktiv, a.zusaetzlich(), "zusaetzliche Funde in den aktiven Kategorien");
-        assertEquals("Positivkorpus aktiv|texte=97|funde=21|zusaetzlich=" + erwartetAktiv, a.kurz());
+        // Umgestellt durch geheimnisse-erkennung T-5: alt texte=97 (K1, ZWISCHENTEIL, UMBRUCH, ANFUEHRUNG, MEHRFACH),
+        // neu texte=112 (dazu die 15 Faelle der Kategorien K2, K3, K4); funde=21 und die Gleichheit der
+        // zusaetzlichen Funde mit den erwarteten bleiben.
+        assertEquals("Positivkorpus aktiv|texte=112|funde=21|zusaetzlich=" + erwartetAktiv, a.kurz());
         Messung i = vergleiche("Positivkorpus inaktiv", inaktiv, TextScannerStandGeheimnis.ALT,
                 TextScanner.standard());
         assertEquals(List.of(), i.verstoesse());
@@ -239,7 +243,9 @@ class GeheimnisDifferenzTest {
         // erwarteten der spaeteren Regel): TOKEN_KONTEXT-17 (Passwort vor dem Token), ODBC-01, ODBC-02, ODBC-07 und
         // KOMMANDOZEILE-01, -03, -06 (Schluessel mit Gleichheitszeichen). Sie sind erwuenscht (mehr Schutz) und
         // aendern sich mit T-6 und T-8.
-        assertEquals("Positivkorpus inaktiv|texte=102|funde=8|zusaetzlich=7", i.kurz());
+        // Umgestellt durch geheimnisse-erkennung T-5: alt texte=102, neu texte=87 (die 15 Faelle von K2, K3, K4 sind
+        // jetzt aktiv und stehen oben); funde=8 und zusaetzlich=7 bleiben.
+        assertEquals("Positivkorpus inaktiv|texte=87|funde=8|zusaetzlich=7", i.kurz());
     }
 
     /** Positiv-Generator (erste 20 000 Texte): ALT liefert nichts, standard() genau einen Fund je Text. */

@@ -840,5 +840,58 @@ dazukommen.
 7. **T-8** führt die ausgenommenen Schlüssel ein und setzt die Zahlen der inaktiven Kategorien im Differenztest
    (heute 7 vorgezogene PASSWORT-Funde bei ODBC und Kommandozeile) neu fest.
 
+### T-5 verkleinert (Entscheidung des Nutzers, 25.11.2026)
+
+T-5 war nach drei Engineer-Durchläufen nicht durchgehend PASS (security, zweimal mittel: Schutzverlust gegenüber T-4
+bei Formulierungen wie „Passwort für svc_x ist jetzt: …“; quadratische Laufzeit bei langen Texten ohne Leerraum).
+Der Nutzer hat auf Rückfrage entschieden: **Schritt 5 verkleinern.** Die Dateien wurden auf `ge-t4-passwort`
+zurückgesetzt; T-5 wird auf dieser Grundlage neu umgesetzt.
+
+1. **Umfang:** nur die im Plan vorgesehenen Formen K2 (`ist`/`lautet`/`is`), K3 (Tabulator, `|`) und K4 (XML-Element),
+   je mit W6 und 0,80. **Entfallen:** Klammerzusatz, `=>`, `:=`, Doppelpunkt in voller Breite, `ist:`/`lautet:`/`is:`,
+   Einzelwort vor dem Verbinder, alle Änderungen an der Anführungslogik. Damit entfallen auch Punkt 6 und Punkt 8 (a)
+   und (b) der „Entscheidungen nach der Prüfung von T-4“; der Stand von T-4 gilt dort weiter. Jede dieser Formen, die
+   heute ungeschützt bleibt oder einen Fehlalarm liefert, wird als Grenze mit Test `bekannteGrenze…` festgehalten.
+2. **Aufbau in zwei Durchgängen (Entscheidung der Hauptsitzung), damit ein Schutzverlust gegenüber T-4 schon durch
+   den Aufbau ausgeschlossen ist:** Der erste Durchgang ist die Kontextregel von T-4 (K1 und Umbruch), unverändert.
+   Der zweite Durchgang sucht ausschließlich K2, K3 und K4. Ein Kandidat des zweiten Durchgangs wird nur gemeldet,
+   wenn er keinen Kandidaten des ersten Durchgangs überlappt und kein Kontextwort mit K1-Verbinder überdeckt.
+   Kandidaten des ersten Durchgangs werden nie verändert oder entfernt. Innerhalb des zweiten Durchgangs wird nie
+   zurückgesprungen; nach jedem ausgewerteten Wert geht es hinter ihm weiter, und das Lesen eines Werts ist auf
+   `Werttest.MAX_LAENGE` + 1 Zeichen begrenzt. Ist das Wort länger, wird es ganz übersprungen und nicht erneut gelesen.
+3. **Zwischenteil:** K2 bis K4 im zweiten Durchgang nach D-6. Steht im selben Zwischenteil später ein K1-Verbinder,
+   gilt der erste Durchgang (Formen wie „für svc_x ist jetzt: …“ bleiben wie in T-4 geschützt).
+4. **Fachbegriffe hinter K2** (`AES256-verschlüsselt`): Der Ausschluss „Bindestrich und reines Kleinbuchstabenwort
+   am Ende“ bleibt, nur für K2, weil er eine gemessene Fehlalarm-Klasse beseitigt (8 von 50 Fließtextzeilen). Die
+   Lücke (`Sommer2026-neu` hinter `ist`) wird als Grenze mit Test festgehalten und in `PasswortRecognizer` genannt.
+5. **Nachweis:** Der Vergleich gegen T-4 ist exakt: Auf jedem Text steht jeder Kandidat von `ge-t4-passwort` feldgleich
+   im neuen Ergebnis des `PasswortRecognizer`. Nicht nur gezählt, sondern als Test gegen eine eingefrorene Kopie der
+   T-4-Kontextregel (Testbaum), Zufallslauf mit festem Seed und allen Bestandsmengen.
+
+6. **Nach Durchlauf 1 der verkleinerten Fassung** (reviewer FAIL: Gegenprobe im Vergleichstest, Grenzliste; security
+   PASS mit zwei niedrigen Punkten):
+   (a) K3 mit `|`: Der Wert-Test (W1 bis W6) prüft nur den Teil bis zum nächsten `|`; besteht er, reicht der Fund
+   unverändert bis zum Ende des Worts (kein Zeichen eines Werts mit `|` bleibt dann lesbar). Kopfzeilen ohne Leerraum
+   wie `|Passwort|Benutzer|Rolle|` sind damit kein Fund. Bleibt der Prüfstand dabei nicht vollständig grün, entfällt
+   die Änderung und der Fall bleibt Grenze mit Test.
+   (b) `Passwort für svc_x ist <Wert>` mit `=` oder `:` im Wert: Der erste Durchgang liest dort einen K1-Verbinder im
+   Zwischenteil, der Wert bleibt ganz oder teilweise lesbar (wie in T-4). Grenze mit Test; keine Änderung der Regel.
+   (c) Das Lesen eines langen Worts bis zu seinem Ende (statt Abbruch bei `MAX_LAENGE` + 1) ist angenommen: linear,
+   je Durchgang einmal (security: bis 4 Mio. Zeichen gemessen).
+
+7. **Nach Durchlauf 2 der verkleinerten Fassung** (security PASS, niedrige Punkte), ersetzt 6 (a) wie folgt:
+   (a) Die Prüfung nur des ersten Teils gilt ausschließlich, wenn der Wert **unmittelbar** hinter `|` beginnt (Tabelle
+   ohne Leerraum). Steht Leerraum dazwischen, gilt die allgemeine Regel für K3 (ganzes Wort); Werte mit `|` sind dort
+   dann wieder geschützt. Der geringe Zuwachs an Fehlalarmen bei `|K| S| S|` ist angenommen.
+   (b) Führende `|` im Wert werden für die Prüfung übersprungen (`||Passwort||Benutzer||` ist kein Fund); geprüft wird
+   der Teil danach bis zum nächsten `|`, der Fund beginnt unverändert. Bleibt der Prüfstand nicht grün: Grenze.
+   (c) Grenzen mit Test: `|Passwort für svc_x|<Wert>|`, `|| Passwort || <Wert> ||`, Restfehlalarme kompakter Zellen
+   (`|K|*S*|S|`, `|K|S<br>S|S|`), Wert mit `|` in einer Tabelle ohne Leerraum.
+
+8. **Nach Durchlauf 3 (reviewer PASS, security PASS) offen, niedrig:** Tabellenzeilen mit Leerraum nur hinter dem
+   ersten Strich (`|K| S|S|`) sind weiter Fehlalarme (nur dokumentiert, in T-9 als Grenze mit Test nachzutragen, samt
+   `|K| S| S|`); Werte in maskierten Anführungszeichen außerhalb von JSON (`Passwort: \"…\"`) bleiben lesbar wie in
+   T-4 (in T-9 als Grenze mit Test nachzutragen).
+
 `SynthetischeGeheimnisse`: Die Anforderung definiert nur `P1`, `P2`, `P3`, `P6` und `P7`; „P1 bis P7“ in Kap. 6.2
 ist ungenau.

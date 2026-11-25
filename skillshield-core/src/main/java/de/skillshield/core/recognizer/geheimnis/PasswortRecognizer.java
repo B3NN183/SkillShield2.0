@@ -12,9 +12,18 @@ import java.util.Objects;
  * liefert nur den <b>Wert</b>: Kontextwort, Verbinder, Anfuehrungszeichen, Benutzername und der Rest der Zeile
  * bleiben unveraendert (D-3). Typ {@code PASSWORT}, Quelle {@value #QUELLE_KONTEXT}.
  *
- * <p>Stand T-4: Kontextwoerter, Zwischenteil, Verbinder K1 ({@code :} oder {@code =}) auch mit Zeilenumbruch,
- * Wertgrenzen und Wert-Test. Die schwaecheren Verbinder (K2 bis K4), die Verbindungszeichenfolgen (Quelle
+ * <p>Stand T-5: Kontextwoerter, Zwischenteil, Verbinder K1 ({@code :} oder {@code =}) auch mit Zeilenumbruch,
+ * Wertgrenzen und Wert-Test, dazu die schwaecheren Verbinder K2 ({@code ist}, {@code lautet}, {@code is}), K3
+ * (senkrechter Strich, Tabulator) und K4 (XML-Element) mit Konfidenz 0,80. Die Verbindungszeichenfolgen (Quelle
  * {@code passwort-verbindung}) und die Kommandozeile folgen in spaeteren Tasks.
+ *
+ * <p><b>Zwei Durchgaenge.</b> Der erste Durchgang ({@code KontextRegel}: K1 und Zeilenumbruch) ist der Stand von T-4
+ * und bleibt unveraendert; seine Kandidaten werden nie veraendert oder entfernt. Der zweite Durchgang
+ * ({@code SchwacheVerbinder}) sucht nur K2 bis K4 und meldet einen Kandidaten nur, wenn er keinen Kandidaten des
+ * ersten Durchgangs ueberlappt und kein Kontextwort mit K1-Verbinder ueberdeckt. Steht hinter dem Kontextwort (auch
+ * im Zwischenteil nach {@code ist}) ein K1-Verbinder, gilt der erste Durchgang ({@code Passwort fuer svc_x ist jetzt:
+ * Wert}). {@code pw} und {@code pwd} gelten nur mit K1 (D-4). Nach K2 bis K4 steht der Wert in derselben Zeile; ein
+ * Zeilenumbruch danach ergibt keinen Fund.
  *
  * <p><b>Kontextwoerter (D-4).</b> Ein Wortkoerper (Folge aus Buchstaben, Ziffern, {@code _}, {@code -}; Gross/klein
  * gleichgueltig) zaehlt, wenn er auf {@code passwort}, {@code kennwort}, {@code password}, {@code passwd} oder
@@ -84,6 +93,44 @@ import java.util.Objects;
  * {@code Passwort: *siehe Tresor*} ist deshalb ein Fund. Der Versuch, ein einzelnes Zeichen mit Gegenstueck in der
  * Zeile zu uebergehen (Entscheidung 2 vom 25.11.2026), brach den Positiv-Generator und wurde zurueckgenommen.</li>
  * <li>Zeitstempel: Ein Passwort in der Form eines ISO-Zeitstempels bleibt sichtbar (D-8 W3 (e)).</li>
+ * <li>G-14: Ein Wort mit Grossbuchstabe, Kleinbuchstabe und Ziffer hinter {@code ist}, {@code lautet}, {@code is}
+ * (K2), einem Tabulator, {@code |} oder in einem Element ({@code Passwort ist Q3Final2}) gilt als Passwort (W6 ist
+ * die engste vertretbare Regel). Das gilt ausdruecklich auch hinter K2: {@code Passwort ist Exchange2019} und
+ * {@code Passwort lautet Win11-24H2} sind Funde.</li>
+ * <li>K2, Fachbegriffe: Ein Wort, das auf Bindestrich und ein reines Kleinbuchstabenwort endet
+ * ({@code AES256-verschluesselt}), ist hinter {@code ist}, {@code lautet}, {@code is} kein Fund; ein Passwort dieser
+ * Form ({@code Sommer2026-neu}) bleibt dort sichtbar. In Anfuehrungszeichen und hinter K1, K3, K4 gilt der
+ * Ausschluss nicht.</li>
+ * <li>K2 bis K4 erfassen nur die genannten Formen. Nicht erfasst und sichtbar wie in T-4 bleiben: ein Zusatz zwischen
+ * Kontextwort und Verbinder ({@code Passwort (neu): ...}, {@code Passwort neu: ...}), mehr als drei Woerter nach
+ * {@code fuer}, die Verbinder {@code =>}, {@code :=}, ein {@code :} in voller Breite, {@code ist:}, {@code lautet:},
+ * {@code is:}, ein Verbinder ohne Kontextwort davor ({@code ist} direkt hinter einem Einzelwort), ein Strich oder
+ * Pfeil ({@code ->}) und Attributpaare ({@code key="...Password" value="..."}), ein Kontextwort mit Auszeichnung
+ * oder Anfuehrungszeichen vor K2 bis K4 ({@code **Passwort** ist ...}) und ein Wert nach K2 bis K4 mit Leerraum
+ * ausserhalb von Anfuehrungszeichen (nur das erste Wort zaehlt, im Element gar nichts).</li>
+ * <li>Ein Wert hinter K2 bis K4, der ein Kontextwort mit K1 enthaelt ({@code Passwort ist x-Passwort: Wert}),
+ * bleibt vorn lesbar wie in T-4; der Wert hinter dem inneren K1 wird vom ersten Durchgang gefunden.</li>
+ * <li>S1: Hinter {@code Passwort fuer svc_x ist Wert}, {@code | Passwort fuer svc_x | Wert |} und
+ * {@code Passwort fuer svc_x<TAB>Wert} gilt ein {@code :} oder {@code =} im Wert als K1 des Zwischenteils (auch
+ * {@code Passwort fuer svc_x<TAB>Wert<TAB>Benutzer: abc}); der erste Durchgang wertet dann nur den Rest dahinter. Der
+ * Wert bleibt ganz (Rest zu kurz) oder vorn lesbar, genau wie in T-4; die Regel aendert daran nichts.</li>
+ * <li>K3 mit {@code |}, Wert unmittelbar dahinter ({@code |Passwort|Wert|}): Das Wort reicht bis zum Leerraum. Der
+ * Schlussstrich gehoert zum Fund ({@code Wert|}), ebenso alles bis zum Wortende
+ * ({@code |Passwort|Wert|https://...|}); der Wert-Test prueft nur den Teil bis zum naechsten {@code |}, fuehrende
+ * {@code |} uebersprungen. Kopfzeilen und Statusspalten ohne Leerraum ({@code |Passwort|Benutzer|Rolle|},
+ * {@code |Passwort|nein|12|}, {@code ||Passwort||Benutzer||}, {@code |Passwort||gesperrt|}) sind deshalb kein Fund,
+ * wenn der erste Teil den Wert-Test nicht besteht; ein Wort nur aus {@code |} ist kein Fund. Steht Leerraum hinter
+ * dem {@code |} ({@code | Passwort | Wert |}), gilt das ganze Wort; der Wert bleibt dort auch mit {@code |} darin
+ * ganz gedeckt ({@code | Passwort | Ab3|Wolke#Fuchs7x |}), und kompakte Zellen mit Leerraum
+ * ({@code |K| S| S|}) sind Fehlalarme, die hingenommen werden.</li>
+ * <li>Grenzen von K3 ohne Leerraum: Ein Wert, der selbst ein {@code |} enthaelt und dessen erster Teil den
+ * Wert-Test nicht besteht ({@code |Passwort|Ab3|Wolke#Fuchs7x|}, auch {@code |Passwort||Ab3|Wolke#Fuchs7x|}),
+ * bleibt lesbar; besteht der erste Teil, ist der Wert ganz gedeckt. Nicht erfasst: {@code |Passwort fuer svc_x|Wert|}
+ * (der Strich steht im Wort des Zwischenteils, kein Verbinder) und {@code || Passwort || Wert ||} (das Wort hinter
+ * dem Kontextwort besteht nur aus {@code |}). Restfehlalarme kompakter Zellen:
+ * {@code |K|*S*|S|}, {@code |K|S<br>S|S|}, wenn der erste Teil den Wert-Test besteht.</li>
+ * <li>Ein Element mit Attribut ({@code <password type="x">Wert</password>}) ist kein Fund: Das Kontextwort steht
+ * unmittelbar zwischen {@code <} und {@code >}.</li>
  * </ul>
  * Die uebrigen Grenzen (G-3 bis G-6, G-11, G-12, G-14 bis G-17) betreffen Folgetasks oder die Oberflaeche und sind im
  * Plan beschrieben.
@@ -107,8 +154,21 @@ public final class PasswortRecognizer implements Recognizer {
     @Override
     public List<Finding> detect(String text) {
         Objects.requireNonNull(text, "text");
-        List<Finding> kandidaten = new ArrayList<>();
-        KontextRegel.finde(text, Art.PASSWORT, kandidaten);
+        List<Finding> erster = new ArrayList<>();
+        KontextRegel.finde(text, Art.PASSWORT, erster);
+        List<Finding> zweiter = new ArrayList<>();
+        SchwacheVerbinder.finde(text, Art.PASSWORT, erster, zweiter);
+        if (zweiter.isEmpty()) {
+            return List.copyOf(erster);
+        }
+        List<Finding> kandidaten = new ArrayList<>(erster.size() + zweiter.size());
+        int a = 0;
+        int b = 0;
+        while (a < erster.size() || b < zweiter.size()) {
+            boolean ersterZuerst = b >= zweiter.size()
+                    || (a < erster.size() && erster.get(a).start() < zweiter.get(b).start());
+            kandidaten.add(ersterZuerst ? erster.get(a++) : zweiter.get(b++));
+        }
         return List.copyOf(kandidaten);
     }
 }

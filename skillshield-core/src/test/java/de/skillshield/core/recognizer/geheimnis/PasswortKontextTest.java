@@ -7,7 +7,9 @@ import static de.skillshield.core.SynthetischeGeheimnisse.P3;
 import static de.skillshield.core.SynthetischeGeheimnisse.P5;
 import static de.skillshield.core.SynthetischeGeheimnisse.P6;
 import static de.skillshield.core.SynthetischeGeheimnisse.P7;
+import static de.skillshield.core.SynthetischeGeheimnisse.P_BINDESTRICH_NEU;
 import static de.skillshield.core.SynthetischeGeheimnisse.P_DOLLAR;
+import static de.skillshield.core.SynthetischeGeheimnisse.P_FACHBEGRIFF_VERSCHLUESSELT;
 import static de.skillshield.core.SynthetischeGeheimnisse.P_HUNTER;
 import static de.skillshield.core.SynthetischeGeheimnisse.P_MIT_LEERZEICHEN;
 import static de.skillshield.core.SynthetischeGeheimnisse.P_ZQ9;
@@ -472,6 +474,222 @@ class PasswortKontextTest {
         genau("AK-16 K1 hunter", "Passwort: ", P_HUNTER, 0.95);
         genau("AK-16 K1 Sommer2026", "Passwort: ", P1_OHNE_AUSRUF, 0.95);
         keinFund("AK-16 K1 sechs Zeichen ohne Ziffer", "Passwort: Abcdef");
+    }
+
+    // ------------------------------------------------------------------ T-5: K2 bis K4 (AK-3, AK-4, AK-5, AK-6, AK-16)
+
+    private static final PasswortRecognizer NEU = new PasswortRecognizer();
+    private static final PasswortRecognizerStandT4 T4 = new PasswortRecognizerStandT4();
+
+    @Test
+    void t5_ak4_k2_istLautetIs_080() {
+        genau("AK-4 ist", "Passwort ist ", P1, 0.80);
+        genau("AK-4 lautet", "Passwort lautet ", P1, 0.80);
+        genau("AK-4 is", "password is ", P1, 0.80);
+        genau("AK-4 Grossschreibung", "PASSWORT IST ", P1, 0.80);
+        genau("AK-4 Gemischt", "Kennwort Lautet ", P2, 0.80);
+        genau("AK-4 Nachsatz", "Das Initialpasswort lautet ", P2, " und gilt einmalig.", 0.80);
+        genau("AK-4 drei Klassen", "Passwort ist ", P1_OHNE_AUSRUF, 0.80);
+        genau("AK-4 geschuetztes Leerzeichen", "Passwort" + NBSP + "ist" + NBSP, P1, 0.80);
+        genau("AK-4 Anfuehrung", "Passwort ist \"", P_MIT_LEERZEICHEN, "\"", 0.80);
+    }
+
+    @Test
+    void t5_ak4_k3_tabulatorUndSenkrechterStrich_080() {
+        genau("AK-4 Tabulator", "Passwort\t", P1, 0.80);
+        genau("AK-4 Tabulator und Leerzeichen", "Passwort \t  ", P1, 0.80);
+        genau("AK-4 Tabelle", "| Passwort | ", P1, " |", 0.80);
+        genau("AK-4 Tabelle Kennwort", "| Kennwort | ", P2, " | weitere Spalte |", 0.80);
+        genau("AK-4 Strich ohne Leerraum", "Passwort| ", P1, 0.80);
+        genau("AK-4 Strich, Leerraum nur dahinter", "Passwort |", P1, 0.80);
+        genau("AK-4 Adminpasswort", "Adminpasswort\t", P3, 0.80);
+        genau("AK-4 Tabelle nach Zwischenteil", "| Passwort " + FUER + " svc_x | ", P1, " |", 0.80);
+        genau("AK-4 Tabulator nach Zwischenteil", "Passwort " + FUER + " svc_x\t", P1, 0.80);
+    }
+
+    @Test
+    void t5_ak4_k4_xmlElement_080() {
+        genau("AK-4 password", "<password>", P1, "</password>", 0.80);
+        genau("AK-4 Kennwort", "<Kennwort>", P3, "</Kennwort>", 0.80);
+        genau("AK-4 Passwort", "<Passwort>", P2, "</Passwort>", 0.80);
+        genau("AK-4 DB_PASSWORD", "<DB_PASSWORD>", P1, "</DB_PASSWORD>", 0.80);
+        genau("AK-4 in Zeile", "<config><password>", P1, "</password><user>svc_x</user></config>", 0.80);
+        genau("AK-4 256 Zeichen", "<password>", mischwert(256), "</password>", 0.80);
+    }
+
+    @Test
+    void t5_ak4_k4_keinFund_ohneEndeMitLeerraumUmbruchOderZuLang() {
+        keinFund("K4 ohne Ende", "<password>" + P1);
+        keinFund("K4 Leerraum im Wert", "<password>" + P_MIT_LEERZEICHEN + "</password>");
+        keinFund("K4 Umbruch im Wert", "<password>" + P1 + "\n</password>");
+        keinFund("K4 Umbruch hinter dem Element", "<password>\n" + P1 + "</password>");
+        keinFund("K4 leer", "<password></password>");
+        keinFund("K4 257 Zeichen", "<password>" + mischwert(257) + "</password>");
+        keinFund("K4 mit Attribut", "<password type=\"x\">" + P1 + "</password>");
+        keinFund("K4 Endetag", "</password>" + P1);
+        keinFund("K4 kein Kontextwort", "<pwdfeld>" + P1 + "</pwdfeld>");
+    }
+
+    @Test
+    void t5_ak5_k2_zwischenteil_080() {
+        genau("AK-5 lautet drei Woerter", "Das Passwort " + FUER + " den Benutzer svc_x lautet ", P1, 0.80);
+        genau("AK-5 von", "Passwort von SRV-APP07 ist ", P1, 0.80);
+        genau("AK-5 for", "password for root is ", P1, 0.80);
+        genau("AK-5 des Kontos", "Passwort des Kontos KVBSP\\svc_x ist ", P1, 0.80);
+        genau("AK-5 zum", "Kennwort zum Dienstkonto svc_x lautet ", P2, 0.80);
+        genau("AK-5 Wort mit 64 Zeichen", "Passwort " + FUER + " " + "x".repeat(64) + " ist ", P1, 0.80);
+    }
+
+    @Test
+    void t5_ak5_k2_keinFund_beiVierWoertern_zuLangemWortOderUmbruchImZwischenteil() {
+        keinFund("AK-5 vier Woerter", "Passwort " + FUER + " den alten Benutzer svc_x lautet " + P1);
+        keinFund("AK-5 Zeilenumbruch", "Passwort " + FUER + " den\nBenutzer svc_x ist " + P1);
+        keinFund("AK-5 Wort mit 65 Zeichen", "Passwort " + FUER + " " + "x".repeat(65) + " ist " + P1);
+        keinFund("AK-5 ohne Zwischenwort", "Passwort svc_x ist " + P1);
+        keinFund("AK-5 Zwischenwort ohne Wort", "Passwort " + FUER + " ist " + P1 + "x");
+    }
+
+    @Test
+    void t5_ak6_k2bisK4_keinFund_nachDemVerbinderIstEinZeilenumbruch() {
+        keinFund("AK-6 Passwort ist LF", "Passwort ist\n" + P1);
+        keinFund("AK-6 Passwort ist, Leerzeichen vor LF", "Passwort ist \n" + P1);
+        keinFund("AK-6 Passwort ist, CRLF und Einrueckung", "Passwort ist\r\n    " + P1);
+        keinFund("AK-6 lautet CR", "Passwort lautet\r" + P1);
+        keinFund("AK-6 Passwort ist, Auszeichnung und LF", "Passwort ist ** \n" + P1);
+        keinFund("AK-6 Tabulator LF", "Passwort\t\n" + P1);
+        keinFund("AK-6 Strich LF", "| Passwort |\n" + P1);
+        keinFund("AK-6 Strich, Leerzeichen, LF", "Passwort | \n" + P1);
+        keinFund("AK-6 Zwischenteil und ist LF", "Passwort " + FUER + " svc_x ist\n" + P1);
+        // Gegenprobe: K1 mit Zeilenumbruch bleibt wie in T-4 ein Fund (0,80).
+        genau("AK-6 K1 bleibt", "Passwort:\n", P1, 0.80);
+    }
+
+    @Test
+    void t5_ak16_k2bisK4_zweiKlassenUndSechsZeichen_keinFund_dreiKlassen_080() {
+        genau("AK-16 K2 Sommer2026", "Passwort ist ", P1_OHNE_AUSRUF, 0.80);
+        keinFund("AK-16 K2 hunter2x", "Passwort ist " + P_HUNTER);
+        keinFund("AK-16 K2 sechs Zeichen", "Passwort ist " + P6);
+        keinFund("AK-16 K2 sieben Zeichen", "Passwort lautet " + P7);
+        keinFund("AK-16 K3 hunter2x", "Passwort\t" + P_HUNTER);
+        keinFund("AK-16 K3 Strich hunter2x", "| Passwort | " + P_HUNTER + " |");
+        keinFund("AK-16 K4 hunter2x", "<password>" + P_HUNTER + "</password>");
+        keinFund("AK-16 K3 sechs Zeichen", "| Passwort | " + P6 + " |");
+        genau("AK-16 K1 hunter2x", "Passwort: ", P_HUNTER, 0.95);
+        genau("AK-16 K1 Wert 8 Zeichen, drei Klassen", "Passwort: ", P1_OHNE_AUSRUF, 0.95);
+    }
+
+    @Test
+    void t5_ak3_pwUndPwdGeltenNurMitK1_keinFundMitK2BisK4() {
+        keinFund("AK-3 pw ist", "pw ist " + P1);
+        keinFund("AK-3 pwd ist", "pwd ist " + P1);
+        keinFund("AK-3 pw lautet", "PW lautet " + P1);
+        keinFund("AK-3 pw Tabulator", "pw\t" + P1);
+        keinFund("AK-3 pwd Strich", "| pwd | " + P1 + " |");
+        keinFund("AK-3 pw Element", "<pw>" + P1 + "</pw>");
+        keinFund("AK-3 pwd Element", "<pwd>" + P1 + "</pwd>");
+        keinFund("AK-3 pw Auszeichnung", "__pw__ ist " + P1);
+        genau("AK-3 pw K1 bleibt", "pw: ", P1, 0.95);
+    }
+
+    @Test
+    void t5_ak3_abgrenzungKeinKontextwortMitK2BisK4() {
+        for (String wort : List.of("Passwortrichtlinie", "Passwort-Reset", "Kennwortes", "Pass", "Zugangsdaten",
+                "xpw", "Passwort2")) {
+            keinFund("AK-3 K2 " + wort.length(), wort + " ist " + P1);
+            keinFund("AK-3 K3 " + wort.length(), wort + "\t" + P1);
+            keinFund("AK-3 K3 Strich " + wort.length(), "| " + wort + " | " + P1 + " |");
+            keinFund("AK-3 K4 " + wort.length(), "<" + wort + ">" + P1 + "</" + wort + ">");
+        }
+    }
+
+    @Test
+    void t5_k2_fachbegriffMitBindestrichUndKleinwort_keinFund_nurHinterK2() {
+        String verschluesselt = P_FACHBEGRIFF_VERSCHLUESSELT;
+        keinFund("K2 Fachbegriff", "Passwort ist " + verschluesselt);
+        keinFund("K2 Fachbegriff lautet", "Kennwort lautet Sha256-gehasht");
+        keinFund("K2 Fachbegriff mit Satzende", "Das Passwort ist " + verschluesselt + ".");
+        keinFund("K2 Fachbegriff is", "password is Tls12-aktiv");
+        // Der Ausschluss gilt nur fuer K2 und nur fuer Wortwerte.
+        genau("K2 Grossbuchstabe nach dem Bindestrich", "Passwort ist ", "Sommer2026-Neu", 0.80);
+        genau("K2 Wort mit Ziffer nach dem Bindestrich", "Passwort ist ", P3, 0.80);
+        genau("K2 in Anfuehrungszeichen", "Passwort ist \"", P_BINDESTRICH_NEU, "\"", 0.80);
+        genau("K1", "Passwort: ", P_BINDESTRICH_NEU, 0.95);
+        genau("K1 mit Fachbegriff", "Passwort: ", verschluesselt, 0.95);
+        genau("K3 Tabulator", "Passwort\t", P_BINDESTRICH_NEU, 0.80);
+        genau("K3 Strich", "| Passwort | ", P_BINDESTRICH_NEU, " |", 0.80);
+        genau("K4", "<password>", P_BINDESTRICH_NEU, "</password>", 0.80);
+    }
+
+    /** Wie der Stand T-4 geschuetzt: gleiche Kandidaten wie T-4, genau einer, deckt den Wert, 0,95, Quelle stimmt. */
+    private static void wieT4Geschuetzt(String id, String text) {
+        List<Finding> ist = NEU.detect(text);
+        assertEquals(T4.detect(text), ist, id + " gleich T-4");
+        assertEquals(1, ist.size(), id + " Zahl");
+        int start = text.indexOf(P1);
+        assertTrue(ist.get(0).start() == start && ist.get(0).end() >= start + P1.length(), id + " deckt den Wert");
+        assertEquals(0.95, ist.get(0).confidence(), id + " Konfidenz");
+        assertEquals(QUELLE, ist.get(0).source(), id + " Quelle");
+    }
+
+    @Test
+    void t5_regression_formenMitK2UndK1_bleibenWieInT4Geschuetzt() {
+        List<String> texte = List.of(
+                "Das Passwort " + FUER + " svc_backup ist jetzt: " + P1,
+                "The password for svc_x is now: " + P1,
+                "Kennwort zum Server ist jetzt: " + P1,
+                "Passwort " + FUER + " svc_x ist : " + P1,
+                "Passwort " + FUER + " svc_x ist neu = " + P1,
+                "password for db is = " + P1,
+                "Das Passwort lautet PW: " + P1,
+                "| Passwort | Passwort: " + P1 + " |",
+                "Passwort\tKennwort: " + P1,
+                "Das Passwort ist DB_PASSWORD = " + P1,
+                "Kennwort lautet pwd = " + P1,
+                "<password>pw=" + P1 + "</password>");
+        for (int i = 0; i < texte.size(); i++) {
+            wieT4Geschuetzt("Regression " + i, texte.get(i));
+        }
+    }
+
+    @Test
+    void t5_regression_wertMitKontextwortUndK1_vordererTeilBleibtLesbarWieInT4() {
+        String vorn = "Ab3!xPasswort:";
+        for (String text : List.of("Passwort ist " + vorn + P1, "Passwort lautet " + vorn + P1,
+                "Passwort | " + vorn + P1, "Passwort\t" + vorn + P1, "<password>" + vorn + P1 + "</password>")) {
+            List<Finding> ist = NEU.detect(text);
+            assertEquals(T4.detect(text), ist, "gleich T-4 " + text.length());
+            assertEquals(1, ist.size(), "Zahl " + text.length());
+            assertEquals(text.indexOf(P1), ist.get(0).start(), "der vordere Teil bleibt lesbar " + text.length());
+            assertEquals(0.95, ist.get(0).confidence(), "Konfidenz " + text.length());
+        }
+    }
+
+    @Test
+    void t5_erkenner_liefertSortierteUeberlappungsfreieListe_beiMehrerenWertenUndVerbindern() {
+        String text = "Passwort: " + P1 + " Kennwort ist " + P2 + " <password>" + P3 + "</password> | Passwort | "
+                + P1 + " | Initialpasswort\t" + P2 + " Kennwort = " + P3;
+        List<Finding> k = NEU.detect(text);
+        assertEquals(6, k.size(), "Zahl");
+        for (int i = 1; i < k.size(); i++) {
+            assertTrue(k.get(i - 1).end() <= k.get(i).start(), "sortiert und ueberlappungsfrei " + i);
+        }
+        assertEquals(List.of(0.95, 0.80, 0.80, 0.80, 0.80, 0.95),
+                k.stream().map(Finding::confidence).toList(), "Konfidenzen in der Reihenfolge des Texts");
+        for (Finding f : k) {
+            assertTrue(text.substring(f.start(), f.end()).equals(f.originalValue()), "Teilstring");
+        }
+        roundtrip("mehrere Verbinder", text);
+    }
+
+    @Test
+    void t5_pseudonymisierung_nurDerWertWirdErsetzt_roundtripGleich_fuerK2BisK4() {
+        assertTrue("Passwort ist [[PASSWORT_1]]".equals(pseudo("Passwort ist " + P1)), "K2");
+        assertTrue("| Passwort | [[PASSWORT_1]] |".equals(pseudo("| Passwort | " + P1 + " |")), "K3 Strich");
+        assertTrue("Passwort\t[[PASSWORT_1]]".equals(pseudo("Passwort\t" + P1)), "K3 Tabulator");
+        assertTrue("<password>[[PASSWORT_1]]</password>".equals(pseudo("<password>" + P1 + "</password>")), "K4");
+        roundtrip("K2", "Das Passwort " + FUER + " den Benutzer svc_x lautet " + P1 + ".");
+        roundtrip("K3", "| Benutzer | Passwort |\n| svc_x | Passwort | " + P1 + " |");
+        roundtrip("K4", "<config><password>" + P1 + "</password></config>");
     }
 
     // ------------------------------------------------------------------ AK-45 (Teile)

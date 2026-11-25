@@ -23,11 +23,14 @@ import org.junit.jupiter.api.Test;
  * {@code PasswortRecognizer} ueber den Pruefstand (Negativkorpus, Positivkorpus, beide Generatoren in Teilen, das
  * Referenz-Ticket) und einen Zufallslauf mit festem Seed aus Bausteinen, die jede Regel der Kontextregel anstossen.
  * Je Text gilt: aufsteigend nach Beginn, {@code ende <= naechster Beginn}, Teilstring-Invariante, und kein Fund
- * beginnt oder endet in einem Surrogatpaar. Meldungen nennen nur Menge, Index und Zahlen.
+ * beginnt oder endet in einem Surrogatpaar. Seit T-5 (K2 bis K4, zwei Durchgaenge) gilt das auch fuer einen zweiten
+ * Zufallslauf mit Bausteinen fuer {@code ist}, {@code |}, Tabulator und Elemente. Meldungen nennen nur Menge, Index
+ * und Zahlen.
  */
 class GeheimnisKandidatenTest {
 
     private static final long SEED_ZUFALL = 20261128L;
+    private static final long SEED_ZUFALL_K2_K4 = 20261205L;
     private static final int ZUFALLSTEXTE = 60_000;
     private static final int GENERATORTEXTE = 20_000;
 
@@ -104,6 +107,56 @@ class GeheimnisKandidatenTest {
                 "svc_x", "x", "a1", P1, P2, P3, P_MIT_LEERZEICHEN, SynthetischeGeheimnisse.P6, emoji,
                 (char) 0xA0 + "", (char) 0x2009 + "", (char) 0x201E + "", (char) 0x201C + "", (char) 0xBB + "",
                 (char) 0xAB + "", "**Passwort:** ", "__Passwort__: ", "$", "%", "<", "/", "\\", "://", "@");
+    }
+
+    /** Bausteine fuer K2 bis K4 (T-5): Verbinder, Elemente, Tabellenzellen, Kontextwoerter und Werte gemischt. */
+    private static List<String> bausteineK2BisK4() {
+        return List.of("Passwort", "Kennwort", "password", "pw", "pwd", "Initialpasswort", "DB_PASSWORD", " ist ",
+                " lautet ", " is ", " ist", "ist", "|", " | ", "| ", " |", "\t", "<password>", "</password>",
+                "<Kennwort>", "</Kennwort>", "<pw>", "<", ">", "</", "Passwort ist ", "| Passwort | ", "Passwort\t",
+                ": ", "=", "\n", "\r\n", " ", "  ", "f" + (char) 0xFC + "r ", "svc_x ", "den ", "Benutzer ", "\"", "'",
+                "\\", "**", "__", "-", "-neu", "AES256-verschl" + (char) 0xFC + "sselt", P1, P2, P3, P_MIT_LEERZEICHEN,
+                SynthetischeGeheimnisse.P_HUNTER, "x-Passwort:", "Ab3!xPasswort:", "Passwort: ");
+    }
+
+    @Test
+    void zufallslaufK2BisK4_festerSeed_kandidatenUeberlappungsfrei_undKeinAusnahmefall() {
+        List<String> teile = bausteineK2BisK4();
+        Random r = new Random(SEED_ZUFALL_K2_K4);
+        int kandidaten = 0;
+        int mitSchwachemVerbinder = 0;
+        for (int i = 0; i < ZUFALLSTEXTE; i++) {
+            StringBuilder sb = new StringBuilder();
+            int n = 1 + r.nextInt(30);
+            for (int k = 0; k < n; k++) {
+                sb.append(teile.get(r.nextInt(teile.size())));
+            }
+            String text = sb.toString();
+            int anzahl = pruefe("Zufall K2 bis K4", i, text);
+            kandidaten += anzahl;
+            for (Finding f : PASSWORT.detect(text)) {
+                if (f.confidence() < 0.90) {
+                    mitSchwachemVerbinder++;
+                    break;
+                }
+            }
+        }
+        assertTrue(kandidaten >= ZUFALLSTEXTE / 4, "der Zufallslauf trifft zu selten: " + kandidaten);
+        assertTrue(mitSchwachemVerbinder >= ZUFALLSTEXTE / 20,
+                "zu wenige Texte mit Kandidat 0,80: " + mitSchwachemVerbinder);
+    }
+
+    @Test
+    void k2BisK4_ausgewaehlteTexte_kandidatenUeberlappungsfrei() {
+        List<String> texte = List.of(
+                "Passwort ist " + P1 + " Kennwort lautet " + P2 + " <password>" + P3 + "</password>",
+                "| Passwort | " + P1 + " | Kennwort | " + P2 + " |", "Passwort\t" + P1 + "\tKennwort\t" + P2,
+                "<password>pw=" + P1 + "</password><Kennwort>Passwort: " + P2 + "</Kennwort>",
+                "Das Passwort f" + (char) 0xFC + "r svc_x ist jetzt: " + P1);
+        for (int i = 0; i < texte.size(); i++) {
+            assertTrue(pruefe("K2 bis K4", i, texte.get(i)) >= 1, "Kandidat " + i);
+        }
+        assertEquals(0, pruefe("K2 bis K4 Kontextwort als Wert", 0, "Passwort ist Passwort ist " + P1), "Zahl");
     }
 
     @Test

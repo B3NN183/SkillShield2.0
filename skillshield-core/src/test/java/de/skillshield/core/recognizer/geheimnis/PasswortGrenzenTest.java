@@ -3,7 +3,19 @@ package de.skillshield.core.recognizer.geheimnis;
 import static de.skillshield.core.SynthetischeGeheimnisse.P1;
 import static de.skillshield.core.SynthetischeGeheimnisse.P2;
 import static de.skillshield.core.SynthetischeGeheimnisse.P3;
+import static de.skillshield.core.SynthetischeGeheimnisse.P_BEGRIFF_SONDER;
+import static de.skillshield.core.SynthetischeGeheimnisse.P_BEZEICHNER;
+import static de.skillshield.core.SynthetischeGeheimnisse.P_BEZEICHNER_EXCHANGE;
+import static de.skillshield.core.SynthetischeGeheimnisse.P_BEZEICHNER_WIN;
+import static de.skillshield.core.SynthetischeGeheimnisse.P_BINDESTRICH_GEHEIM;
+import static de.skillshield.core.SynthetischeGeheimnisse.P_BINDESTRICH_NEU;
+import static de.skillshield.core.SynthetischeGeheimnisse.P_FACHBEGRIFF_VERSCHLUESSELT;
+import static de.skillshield.core.SynthetischeGeheimnisse.P_MIT_DOPPELPUNKT_KURZ;
+import static de.skillshield.core.SynthetischeGeheimnisse.P_MIT_DOPPELPUNKT_VORN;
+import static de.skillshield.core.SynthetischeGeheimnisse.P_MIT_STRICH;
+import static de.skillshield.core.SynthetischeGeheimnisse.P_MIT_STRICH_KURZ;
 import static de.skillshield.core.SynthetischeGeheimnisse.P_PLATZHALTERARTIG;
+import static de.skillshield.core.SynthetischeGeheimnisse.P_PROGRAMM;
 import static de.skillshield.core.SynthetischeGeheimnisse.P_ZQ9;
 import static de.skillshield.core.SynthetischeGeheimnisse.hex64;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -22,10 +34,11 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Bekannte Grenzen der Passwort-Erkennung (Anforderung G-1 bis G-20, AK-52; Plan Kapitel 12): je Grenze ein Test
- * {@code bekannteGrenze...}, der festhaelt, was der Erkenner absichtlich nicht oder anders tut. Stand T-4: G-1, G-2,
- * G-7, G-8, G-9, G-10, G-12, G-13, G-18, G-19, G-20 sowie die Grenzen der Auszeichnung (Entscheidung 6) und des
- * ISO-Zeitstempels (D-8 W3 (e)). Die uebrigen Grenzen gehoeren zu spaeteren Tasks (Tokens, Verbindungszeichenfolgen,
- * K2 bis K4) oder zur Oberflaeche.
+ * {@code bekannteGrenze...}, der festhaelt, was der Erkenner absichtlich nicht oder anders tut. Stand T-5: G-1, G-2,
+ * G-7, G-8, G-9, G-10, G-12, G-13, G-14, G-18, G-19, G-20 sowie die Grenzen der Auszeichnung (Entscheidung 6), des
+ * ISO-Zeitstempels (D-8 W3 (e)), der Fachbegriffe hinter K2, der entfallenen Verbinderformen und die zwei offenen
+ * Punkte aus T-4 (Rueckstrich vor dem Begrenzer, leerer Wert in kompaktem JSON). Die uebrigen Grenzen gehoeren zu
+ * spaeteren Tasks (Tokens, Verbindungszeichenfolgen) oder zur Oberflaeche.
  *
  * <p>Meldungen nennen nur Fall-Nummern und Zahlen, nie einen Text oder Wert (Plan Kapitel 6.1).
  */
@@ -250,6 +263,177 @@ class PasswortGrenzenTest {
         for (int i = vor.length(); i < vor.length() + inhalt.length(); i++) {
             assertTrue(abgedeckt[i], "Position frei " + (i - vor.length()));
         }
+    }
+
+    // ------------------------------------------------------------------ T-5: K2 bis K4
+
+    private static final PasswortRecognizer NEU = new PasswortRecognizer();
+    private static final PasswortRecognizerStandT4 T4 = new PasswortRecognizerStandT4();
+    private static final String FF1A = String.valueOf((char) 0xFF1A);
+    private static final String FUER = "f" + UE + "r";
+
+    /** Kein Fund, und der Stand von T-4 liefert dasselbe (die Form war schon dort ungeschuetzt). */
+    private static void ungeschuetztWieT4(String id, String text) {
+        assertEquals(List.of(), NEU.detect(text), id);
+        assertEquals(T4.detect(text), NEU.detect(text), id + " gleich T-4");
+    }
+
+    @Test
+    void bekannteGrenze_g14_bezeichnerMitGrossKleinUndZiffernHinterK2BisK4IstEinFund() {
+        String bezeichner = P_BEZEICHNER;
+        fundUeber("G-14 K2 ist", "Passwort ist ", bezeichner, "");
+        fundUeber("G-14 K2 lautet", "Das Passwort lautet ", bezeichner, ".");
+        fundUeber("G-14 K3 Tabulator", "Passwort\t", bezeichner, "");
+        fundUeber("G-14 K3 Strich", "| Passwort | ", bezeichner, " |");
+        fundUeber("G-14 K4", "<password>", bezeichner, "</password>");
+    }
+
+    @Test
+    void bekannteGrenze_g14_auchHinterK2_produktUndBetriebssystemnamenSindFunde() {
+        // Ausdruecklich hinter K2 (Passwort ist ...): Namen, wie sie in Betriebsdokumentation stehen, sind Funde.
+        fundUeber("G-14 K2 Produktname", "Passwort ist ", P_BEZEICHNER_EXCHANGE, "");
+        fundUeber("G-14 K2 Betriebssystem", "Passwort lautet ", P_BEZEICHNER_WIN, " (Build)");
+        fundUeber("G-14 K2 is", "password is ", P_BEZEICHNER_WIN, "");
+    }
+
+    @Test
+    void bekannteGrenze_k2_wertMitBindestrichUndKleinwortIstKeinFund_einPasswortDieserFormBleibtSichtbar() {
+        keinFund("K2 Bindestrich und Kleinwort", "Passwort ist " + P_BINDESTRICH_NEU);
+        keinFund("K2 lautet", "Kennwort lautet " + P_BINDESTRICH_GEHEIM);
+        // Nur K2: hinter K1 gilt der Ausschluss nicht.
+        fundUeber("K1 Bindestrich und Kleinwort", "Passwort: ", P_BINDESTRICH_NEU, "");
+    }
+
+    @Test
+    void bekannteGrenze_k3k4_fachbegriffMitBindestrichUndBegriffeMitZiffer_sindFunde() {
+        // Der Ausschluss "Bindestrich und Kleinwort" gilt nur hinter K2; in Tabellenzellen und Elementen sind
+        // solche Begriffe Funde (Ueberschutz, wie G-14).
+        String begriff = P_FACHBEGRIFF_VERSCHLUESSELT;
+        fundUeber("K3 Strich", "| Passwort | ", begriff, " |");
+        fundUeber("K3 Tabulator", "Passwort\t", begriff, "");
+        fundUeber("K4", "<password>", begriff, "</password>");
+        fundUeber("K3 Programmname mit Ziffer", "| Passwort | ", P_PROGRAMM, " |");
+        fundUeber("K3 Begriff mit Sonderzeichen", "| Passwort | ", P_BEGRIFF_SONDER, " |");
+    }
+
+    @Test
+    void bekannteGrenze_k2bisK4_wertMitInnerenKontextwortUndK1_vordererTeilBleibtLesbarWieInT4() {
+        String vorn = "Ab3!xPasswort:";
+        fundUeber("K2", "Passwort ist " + vorn, P1, "");
+        fundUeber("K3 Strich", "| Passwort | " + vorn, P1, " |");
+        // Beim Element reicht der Fund des ersten Durchgangs wie in T-4 bis zum Leerraum, also ueber das Endetag.
+        String element = "<password>" + vorn + P1 + "</password>";
+        assertEquals(T4.detect(element), NEU.detect(element), "K4 gleich T-4");
+        assertEquals(element.indexOf(P1), NEU.detect(element).get(0).start(), "K4 Beginn");
+    }
+
+    @Test
+    void bekannteGrenze_k2bisK4_dasKontextwortAlsWertVerbrauchtDenKontext() {
+        // Wie G-19: Der Wert wird ausgewertet und uebersprungen; ein Kontextwort darin gilt nicht mehr als Kontext.
+        keinFund("K2 Kontextwort als Wert", "Passwort ist Passwort ist " + P1);
+        keinFund("K3 Kontextwort als Wert", "| Passwort | Passwort | " + P1 + " |");
+    }
+
+    @Test
+    void bekannteGrenze_k2bisK4_entfalleneFormen_bleibenSichtbarWieInT4() {
+        ungeschuetztWieT4("Klammerzusatz", "Passwort (neu): " + P1);
+        ungeschuetztWieT4("Zusatzwort", "Passwort neu: " + P1);
+        ungeschuetztWieT4("Pfeil =>", "Passwort => " + P1);
+        ungeschuetztWieT4("Zuweisung :=", "Passwort := " + P1);
+        ungeschuetztWieT4("Doppelpunkt in voller Breite", "Passwort" + FF1A + " " + P1);
+        ungeschuetztWieT4("lautet mit Doppelpunkt", "Passwort lautet: " + P1);
+        ungeschuetztWieT4("ist mit Doppelpunkt", "Passwort ist: " + P1);
+        ungeschuetztWieT4("is mit Doppelpunkt", "password is: " + P1);
+        ungeschuetztWieT4("Gedankenstrich", "Passwort - " + P1);
+        ungeschuetztWieT4("Pfeil ->", "Passwort -> " + P1);
+        ungeschuetztWieT4("Attributpaar", "<add key=\"DbPassword\" value=\"" + P1 + "\" />");
+        ungeschuetztWieT4("mehr als drei Woerter nach fuer K2",
+                "Passwort " + FUER + " den alten Benutzer svc_x ist " + P1);
+        ungeschuetztWieT4("mehr als drei Woerter nach fuer K3",
+                "Passwort " + FUER + " den alten Benutzer svc_x\t" + P1);
+        ungeschuetztWieT4("Auszeichnung vor K2", "**Passwort** ist " + P1);
+        ungeschuetztWieT4("Anfuehrungszeichen vor K2", "\"Passwort\" ist " + P1);
+        ungeschuetztWieT4("Einzelwort vor ist", "svc_x ist " + P1);
+    }
+
+    @Test
+    void bekannteGrenze_k2bisK4_wertMitLeerraumOhneAnfuehrung_nurDasErsteWort_imElementGarKein() {
+        ungeschuetztWieT4("K2 mehrere Woerter", "Passwort ist Wolke Fuchs 7x!");
+        ungeschuetztWieT4("K3 mehrere Woerter", "| Passwort | Wolke Fuchs 7x! |");
+        ungeschuetztWieT4("K4 mit Leerraum", "<password>Wolke Fuchs 7x!</password>");
+    }
+
+    @Test
+    void bekannteGrenze_k3_tabelleOhneLeerraum_derSchlussstrichGehoertZumFund() {
+        // Der Wert ist das erste Wort bis zum Leerraum; das | am Ende steht in der Sonderzeichenliste und bleibt.
+        fundUeber("K3 ohne Leerraum", "Passwort|", P1 + "|", "");
+        // Der Schlussstrich gehoert auch dann zum Fund, wenn der Wert zwischen zwei Strichen steht (S2).
+        fundUeber("K3 Schlussstrich", "|Passwort|", P1 + "|", "");
+    }
+
+    /** Kein Kandidat deckt den Wert ganz; die Kandidaten sind die des Stands T-4. */
+    private static void wertNichtGanzGedeckt(String id, String text, String wert) {
+        assertEquals(T4.detect(text), NEU.detect(text), id + " gleich T-4");
+        int von = text.indexOf(wert);
+        for (Finding f : NEU.detect(text)) {
+            assertTrue(f.start() > von || f.end() < von + wert.length(), id + " Wert ganz gedeckt");
+        }
+    }
+
+    @Test
+    void bekannteGrenze_s1_einVerbinderZeichenImWertGiltAlsK1DesZwischenteils_derWertBleibtLesbarWieInT4() {
+        String ohneWert = "Passwort " + FUER + " svc_x";
+        // Der Doppelpunkt im Wert zaehlt als K1 des Zwischenteils: der Rest dahinter ist der Wert des ersten
+        // Durchgangs; der vordere Teil bleibt lesbar. Ist der Rest zu kurz, bleibt der ganze Wert lesbar.
+        for (String wert : List.of(P_MIT_DOPPELPUNKT_KURZ, P_MIT_DOPPELPUNKT_VORN + P1)) {
+            wertNichtGanzGedeckt("S1 ist", ohneWert + " ist " + wert, wert);
+            wertNichtGanzGedeckt("S1 lautet", ohneWert + " lautet " + wert, wert);
+            wertNichtGanzGedeckt("S1 Tabelle", "| " + ohneWert + " | " + wert + " |", wert);
+            wertNichtGanzGedeckt("S1 Tabulator", ohneWert + "\t" + wert, wert);
+        }
+        // ganz lesbar: kein Kandidat, wie in T-4
+        assertEquals(List.of(), NEU.detect(ohneWert + " ist " + P_MIT_DOPPELPUNKT_KURZ), "S1 ganz lesbar");
+        // teilweise lesbar: nur der Rest hinter dem Doppelpunkt ist ein Fund
+        String teilweise = ohneWert + " ist " + P_MIT_DOPPELPUNKT_VORN + P1;
+        assertEquals(1, NEU.detect(teilweise).size(), "S1 teilweise Zahl");
+        assertEquals(teilweise.indexOf(P1), NEU.detect(teilweise).get(0).start(), "S1 teilweise Beginn");
+        // Tabulator, Wert, Tabulator, K1 einer weiteren Spalte: der Wert bleibt lesbar wie in T-4
+        wertNichtGanzGedeckt("S1 weitere Spalte", ohneWert + "\t" + P1 + "\tBenutzer: abc", P1);
+        assertEquals(List.of(), NEU.detect(ohneWert + "\t" + P1 + "\tBenutzer: abc"), "S1 weitere Spalte kein Fund");
+    }
+
+    @Test
+    void bekannteGrenze_k4_elementMitAttribut_istKeinFundUndGleichT4() {
+        ungeschuetztWieT4("Element mit Attribut", "<password type=\"x\">" + P1 + "</password>");
+    }
+
+    @Test
+    void bekannteGrenze_s2_wertMitStrichDarin_bestehtDerErsteTeilNicht_bleibtDerWertLesbar() {
+        assertEquals(List.of(), NEU.detect("|Passwort|" + P_MIT_STRICH_KURZ + "|"), "S2 kurzer erster Teil");
+        assertEquals(1, NEU.detect("|Passwort|" + P_MIT_STRICH + "|").size(), "S2 erster Teil besteht");
+    }
+
+    @Test
+    void bekannteGrenze_offen_rueckstrichVorDemBegrenzer_teileDesWertsKoennenLesbarBleiben() {
+        // Offener Punkt aus T-4 (security, niedrig): in Formaten mit Verdopplung gilt \' als maskiert; die Suche
+        // endet vor dem Rest. Heutiger Stand: Der Fund endet nach dem maskierten Zeichen, der Rest bleibt sichtbar.
+        fundUeber("Rueckstrich vor dem Begrenzer", "password: '", "Ab3#x\\'", "'Yz7'");
+        // Ein Wert, der auf einen Rueckstrich endet, schliesst nicht; der Fund endet am Rueckstrich, das
+        // schliessende Zeichen bleibt davor stehen.
+        fundUeber("Wert endet auf Rueckstrich", "password: '", "Ab3#xYz7\\", "'");
+    }
+
+    @Test
+    void bekannteGrenze_offen_leererWertInKompaktemJson_derFundLiestUeberDieNaechstenFelder() {
+        // Offener Punkt aus T-4 (security, niedrig): der Rueckfall auf das erste Wort liest ueber Schluessel und
+        // Wert des naechsten Felds (Fehlalarm und Strukturverlust, kein Abfluss).
+        keinFund("leerer Wert allein", "{\"password\":\"\",\"user\":\"svc_x\"}");
+        String text = "{\"password\":\"\",\"user\":\"svc_x\",\"token\":\"" + P1 + "\"}";
+        List<Finding> funde = passwoerter(text);
+        assertEquals(1, funde.size(), "Zahl");
+        assertEquals(text.indexOf("\",\"user\""), funde.get(0).start(), "Beginn");
+        assertEquals(text.length() - 1, funde.get(0).end(), "Ende");
+        assertEquals(T4.detect(text), NEU.detect(text), "gleich T-4");
     }
 
     // ------------------------------------------------------------------ G-12

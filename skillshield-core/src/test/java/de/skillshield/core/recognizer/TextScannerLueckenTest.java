@@ -474,10 +474,11 @@ class TextScannerLueckenTest {
      * (es gab keinen Geheimnis-Erkenner). Neue Erwartung: Liefert der {@code PasswortRecognizer} fuer den Text
      * keinen Kandidaten, bleibt die Gleichheit mit ALT unveraendert; liefert er einen, stehen alle Funde von ALT
      * feldgleich in der neuen Liste, jeder weitere Fund hat den Typ PASSWORT und ueberlappt keinen Fund von ALT.
-     * Gezaehlt und festgehalten (gemessen): 34 Texte mit zusaetzlichen Funden, zusammen 35 zusaetzliche Funde, das
-     * sind die Reststuecke von Kandidaten ("Passwort : .max@..." oder "Passwort = =gestartet"), die Funde von ALT
-     * teilweise oder gar nicht abdecken. Die Texte mit dem Baustein "Passwort" und einem Verbinder sind Absicht des
-     * Laufs; er findet sonst keinen anderen Unterschied.
+     * Gezaehlt und festgehalten (gemessen; in T-4 34 Texte und 35 Funde, seit T-5 41 Texte und 42 Funde, siehe
+     * Kommentar unten): 41 Texte mit zusaetzlichen Funden, zusammen 42 zusaetzliche Funde. In T-4 waren das
+     * ausschliesslich die Reststuecke von Kandidaten ("Passwort : .max@..." oder "Passwort = =gestartet"), die
+     * Funde von ALT teilweise oder gar nicht abdecken. Die Texte mit dem Baustein "Passwort" und einem Verbinder
+     * sind Absicht des Laufs; er findet sonst keinen anderen Unterschied.
      */
     @Test
     void standard_ohneGeheimnisKandidaten_gleichAlt_ueberEinenGrossenZufallslauf() {
@@ -523,8 +524,12 @@ class TextScannerLueckenTest {
                 texteMitZusatz++;
             }
         }
-        assertEquals(34, texteMitZusatz, "Texte mit zusaetzlichen Funden");
-        assertEquals(35, zusatzFunde, "zusaetzliche Funde");
+        // Umgestellt durch geheimnisse-erkennung T-5: alt 34 Texte und 35 zusaetzliche Funde, neu 41 Texte und 42
+        // zusaetzliche Funde. Die sieben neuen Texte enthalten alle "Passwort", einen Tabulator und danach ein Wort
+        // aus den Bausteinen ohne Leerzeichen (Passwort, Tabulator, Server, IK, Adresse, Nummer): K3, je ein
+        // zusaetzlicher PASSWORT-Fund, der keinen Fund von ALT ueberlappt.
+        assertEquals(41, texteMitZusatz, "Texte mit zusaetzlichen Funden");
+        assertEquals(42, zusatzFunde, "zusaetzliche Funde");
         assertTrue(gesamt > 50_000, "zu wenige Funde im Lauf: " + gesamt);
     }
 }

@@ -7,8 +7,10 @@ import java.util.List;
 /**
  * Kontextregel der Geheimnis-Erkenner (Anforderung D-4, D-6 bis D-9; Plan Kapitel 1.3): findet ein Kontextwort, den
  * Verbinder, den Wert und prueft ihn mit {@link Werttest}. Stand T-4: Art {@link Art#PASSWORT}, Verbinder K1
- * ({@code :} oder {@code =}) in derselben Zeile und K1 mit einem Zeilenumbruch. Die schwaecheren Verbinder K2 bis K4
- * folgen in T-5, Tokens in T-6, die Verbindungsregeln in T-8.
+ * ({@code :} oder {@code =}) in derselben Zeile und K1 mit einem Zeilenumbruch. Das ist der erste Durchgang des
+ * {@code PasswortRecognizer}; er ist seit T-4 unveraendert. Die schwaecheren Verbinder K2 bis K4 wertet der zweite
+ * Durchgang {@link SchwacheVerbinder} aus (T-5, nutzt Kontextwort, Zwischenteil und Wertgrenzen dieser Klasse), Tokens
+ * folgen in T-6, die Verbindungsregeln in T-8.
  *
  * <p><b>Ablauf.</b> Ein Durchlauf liest jeden Wortkoerper (maximale Folge aus Buchstaben, Ziffern, kombinierenden
  * Zeichen, {@code _} und {@code -}) einmal vorwaerts. Erst an seinem Ende wird rueckwaerts verglichen (hoechstens
@@ -80,9 +82,9 @@ final class KontextRegel {
             "for", "von", "vom", "des", "der", "zu", "zum", "zur", "of", "to");
 
     /** Hoechstzahl der Woerter nach dem Zwischenwort (D-6). */
-    private static final int MAX_ZWISCHENTEIL_WOERTER = 3;
+    static final int MAX_ZWISCHENTEIL_WOERTER = 3;
     /** Hoechstlaenge eines Worts im Zwischenteil (D-6). */
-    private static final int MAX_ZWISCHENWORT = 64;
+    static final int MAX_ZWISCHENWORT = 64;
     /** Hoechstzahl gleicher Auszeichnungszeichen in einer Folge (Entscheidung 6). */
     private static final int MAX_AUSZEICHNUNG = 3;
 
@@ -93,6 +95,18 @@ final class KontextRegel {
 
     /** Zeichen, deren Zahl im Wert die Kuerzung am Ende braucht: Klammern und Anfuehrungszeichen. */
     private static final String SPEZIAL = "()[]{}" + GeheimnisZeichen.ANFUEHRUNG;
+
+    /**
+     * Klasse des Verbinders, der den Wert einleitet: K1 ({@code :} oder {@code =}, streng nach W1 bis W5, nach einem
+     * Zeilenumbruch mit W6), K2 ({@code ist}, {@code lautet}, {@code is}: W6 und kein Fachbegriff mit Bindestrich) und
+     * K3/K4 (Tabulator, Element, {@code |} mit Leerraum dahinter: W6). {@code K3_STRICH} ist K3 mit senkrechtem
+     * Strich, der Wert beginnt unmittelbar dahinter: wie K3_K4, aber der Wert-Test gilt nur fuer den Teil bis zum
+     * naechsten {@code |}, fuehrende {@code |} uebersprungen (Tabellen ohne Leerraum). K2 bis K4 wertet
+     * {@link SchwacheVerbinder} aus (T-5).
+     */
+    enum Klasse {
+        K1, K2, K3_K4, K3_STRICH
+    }
 
     private KontextRegel() {
     }
@@ -122,7 +136,7 @@ final class KontextRegel {
                 ende += Character.charCount(c);
             }
             int weiter = ende;
-            if (istKontextwort(text, i, ende)) {
+            if (istKontextwort(text, i, ende, true)) {
                 weiter = Math.max(ende, auswerten(text, ende, art, ziel));
             }
             i = weiter;
@@ -133,9 +147,10 @@ final class KontextRegel {
 
     /**
      * Ob der Wortkoerper {@code text[von, ende)} ein Kontextwort ist. Umschliesst dieselbe Folge von ein bis drei
-     * {@code _} den Koerper ({@code __Passwort__}, Auszeichnung), zaehlt der Inhalt.
+     * {@code _} den Koerper ({@code __Passwort__}, Auszeichnung), zaehlt der Inhalt. {@code pw} und {@code pwd}
+     * zaehlen nur mit {@code mitKurzformen} (D-4: sie gelten nur mit K1).
      */
-    private static boolean istKontextwort(String text, int von, int ende) {
+    static boolean istKontextwort(String text, int von, int ende, boolean mitKurzformen) {
         int a = 0;
         while (von + a < ende && a <= MAX_AUSZEICHNUNG && text.charAt(von + a) == '_') {
             a++;
@@ -157,7 +172,7 @@ final class KontextRegel {
             }
         }
         for (String wort : GANZE_WOERTER_PASSWORT) {
-            if (GeheimnisZeichen.gleichKlein(text, s, e, wort)) {
+            if (mitKurzformen && GeheimnisZeichen.gleichKlein(text, s, e, wort)) {
                 return true;
             }
         }
@@ -168,6 +183,18 @@ final class KontextRegel {
 
     /** Wertet hinter dem Kontextwort aus; liefert die Position, ab der weitergesucht wird (mindestens {@code kw}). */
     private static int auswerten(String text, int kw, Art art, List<Finding> ziel) {
+        int nachVerbinder = verbinderK1(text, kw);
+        if (nachVerbinder < 0) {
+            return kw;
+        }
+        return wert(text, nachVerbinder, art, ziel, Klasse.K1);
+    }
+
+    /**
+     * Position hinter dem Verbinder K1 nach dem Kontextwort, das bei {@code kw} endet (Auszeichnung, Anfuehrungszeichen
+     * und Zwischenteil eingerechnet), sonst -1. Die Leseweite ist durch eine Konstante beschraenkt.
+     */
+    static int verbinderK1(String text, int kw) {
         int n = text.length();
         int p = kw;
         int auszeichnung = auszeichnungLaenge(text, p, false);
@@ -179,11 +206,8 @@ final class KontextRegel {
         int nachVerbinder = verbinderAb(text, p);
         if (nachVerbinder < 0) {
             nachVerbinder = zwischenteil(text, nachAuszeichnung);
-            if (nachVerbinder < 0) {
-                return kw;
-            }
         }
-        return wert(text, nachVerbinder, art, ziel);
+        return nachVerbinder;
     }
 
     /** Position hinter dem Verbinder K1 ({@code :} oder {@code =}) nach optionalem Leerraum, sonst -1. */
@@ -227,7 +251,7 @@ final class KontextRegel {
         return -1;
     }
 
-    private static boolean istZwischenwort(String text, int von, int bis) {
+    static boolean istZwischenwort(String text, int von, int bis) {
         for (String wort : ZWISCHENWOERTER) {
             if (GeheimnisZeichen.gleichKlein(text, von, bis, wort)) {
                 return true;
@@ -240,7 +264,7 @@ final class KontextRegel {
      * Ende des Worts ab {@code q}: bis zum Leerraum, Zeilenumbruch, {@code :} oder {@code =}, gelesen hoechstens
      * {@code grenze} Zeichen.
      */
-    private static int wortEnde(String text, int q, int grenze) {
+    static int wortEnde(String text, int q, int grenze) {
         int i = q;
         int n = text.length();
         while (i < n && i - q < grenze) {
@@ -253,7 +277,7 @@ final class KontextRegel {
         return i;
     }
 
-    private static int ueberspringeLeerraum(String text, int p) {
+    static int ueberspringeLeerraum(String text, int p) {
         int i = p;
         while (i < text.length() && GeheimnisZeichen.istLeerraum(text.charAt(i))) {
             i++;
@@ -277,8 +301,11 @@ final class KontextRegel {
         return laenge <= MAX_AUSZEICHNUNG ? laenge : 0;
     }
 
-    /** Der Wert hinter dem Verbinder; liefert die Position, ab der weitergesucht wird. */
-    private static int wert(String text, int nachVerbinder, Art art, List<Finding> ziel) {
+    /**
+     * Der Wert hinter dem Verbinder der Klasse {@code klasse}; liefert die Position, ab der weitergesucht wird. Bei
+     * K2 bis K4 steht der Wert in derselben Zeile (der Aufrufer prueft das), der Fund hat die Strenge SCHWACH.
+     */
+    static int wert(String text, int nachVerbinder, Art art, List<Finding> ziel, Klasse klasse) {
         int n = text.length();
         int v = nachVerbinder;
         int lauf = auszeichnungLaenge(text, v, true);
@@ -287,9 +314,12 @@ final class KontextRegel {
             v += lauf;
         }
         int start = ueberspringeLeerraum(text, v);
-        boolean schwach = false;
+        boolean schwach = klasse != Klasse.K1;
         int umbruch = GeheimnisZeichen.zeilenumbruchLaenge(text, start);
         if (umbruch > 0) {
+            if (klasse != Klasse.K1) {
+                return nachVerbinder;
+            }
             start = ueberspringeLeerraum(text, start + umbruch);
             if (start >= n || GeheimnisZeichen.zeilenumbruchLaenge(text, start) > 0) {
                 return nachVerbinder;
@@ -315,15 +345,17 @@ final class KontextRegel {
             }
             start++;
         }
-        return wortWert(text, start, ausz, schwach, art, ziel);
+        return wortWert(text, start, ausz, schwach, klasse, art, ziel);
     }
 
     /**
      * Der Wert als erstes Wort ab {@code start} (bis zum Leerraum oder Zeilenende, hoechstens 4 096 Zeichen),
      * gekuerzt am Ende; {@code ausz} ist die Laenge der uebersprungenen Auszeichnung davor. Liefert die Position, ab
-     * der weitergesucht wird (das Wortende).
+     * der weitergesucht wird (das Wortende). Hinter K2 ist ein Wort, das auf Bindestrich und ein reines
+     * Kleinbuchstabenwort endet ({@code AES256-verschluesselt}), kein Fund.
      */
-    private static int wortWert(String text, int start, int ausz, boolean schwach, Art art, List<Finding> ziel) {
+    private static int wortWert(String text, int start, int ausz, boolean schwach, Klasse klasse, Art art,
+                                List<Finding> ziel) {
         int n = text.length();
         int we = start;
         while (we < n && !GeheimnisZeichen.istLeerraum(text.charAt(we))
@@ -337,10 +369,53 @@ final class KontextRegel {
         if (ausz > 0 && e - ausz > start && endetMitFolge(text, start, e, ausz)) {
             e = kuerzeEnde(text, start, e - ausz);
         }
-        if (e > start) {
+        if (e > start && klasse == Klasse.K3_STRICH) {
+            strichWert(text, start, e, art, ziel);
+        } else if (e > start && !(klasse == Klasse.K2 && endetMitBindestrichKleinwort(text, start, e))) {
             pruefeUndMelde(text, start, e, schwach, false, art, ziel);
         }
         return we;
+    }
+
+    /**
+     * Wert unmittelbar hinter {@code |} (K3, Tabelle ohne Leerraum), Wort {@code text[start, e)}: fuehrende {@code |}
+     * im Wort werden fuer die Pruefung uebersprungen; geprueft wird (W1 bis W6) nur der Teil danach bis zum
+     * naechsten {@code |} (oder bis {@code e}). Besteht er, reicht der Fund unveraendert von {@code start} bis
+     * {@code e} ({@code |Passwort|Wert|https://...|}), sonst ist es kein Fund ({@code |Passwort|Benutzer|Rolle|},
+     * {@code ||Passwort||Benutzer||}). Besteht das Wort nur aus {@code |}, ist es kein Fund. Ein Durchlauf, linear.
+     */
+    private static void strichWert(String text, int start, int e, Art art, List<Finding> ziel) {
+        int p = start;
+        while (p < e && text.charAt(p) == '|') {
+            p++;
+        }
+        if (p >= e) {
+            return;
+        }
+        int strich = p + 1;
+        while (strich < e && text.charAt(strich) != '|') {
+            strich++;
+        }
+        if (Werttest.besteht(text, p, strich, Verbinder.SCHWACH, false)) {
+            ziel.add(new Finding(art.typ(), text.substring(start, e), start, e, KONFIDENZ_WAHRSCHEINLICH,
+                    art.quelle()));
+        }
+    }
+
+    /**
+     * Ob {@code text[start, e)} auf einen Bindestrich und danach nur Kleinbuchstaben ({@link Character#isLowerCase})
+     * endet, mindestens einen. Der Bindestrich steht nicht am Anfang.
+     */
+    private static boolean endetMitBindestrichKleinwort(String text, int start, int e) {
+        int i = e;
+        while (i > start) {
+            int cp = text.codePointBefore(i);
+            if (!Character.isLowerCase(cp)) {
+                break;
+            }
+            i -= Character.charCount(cp);
+        }
+        return i < e && i - 1 > start && text.charAt(i - 1) == '-';
     }
 
     /**
@@ -436,8 +511,8 @@ final class KontextRegel {
     }
 
     /** Prueft den Wert und haengt bei Erfolg den Kandidaten an. */
-    private static void pruefeUndMelde(String text, int start, int ende, boolean schwach, boolean inAnfuehrung,
-                                       Art art, List<Finding> ziel) {
+    static void pruefeUndMelde(String text, int start, int ende, boolean schwach, boolean inAnfuehrung,
+                               Art art, List<Finding> ziel) {
         Verbinder v = schwach ? Verbinder.SCHWACH : Verbinder.STARK;
         // Ein maskiertes Anfuehrungszeichen am Anfang (Rueckstrich und Zeichen) ist keine Pfadform (W4): der
         // Rueckstrich zaehlt beim Wert-Test nicht, der Fund deckt ihn trotzdem.
