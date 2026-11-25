@@ -700,3 +700,104 @@ Abschnitt 3). Freigegeben ist deshalb nur **Teil A (Datumsangaben sind keine KV-
 - **Unabhängigkeit des Vergleichs:** `KvDatum` folgt im Aufbau der `DatumReferenz`; der Vergleich beider
   belegt vor allem Kalenderrechnung und Aufwand. Die unabhängige Bestätigung der Formen stammt aus der
   Regex-Spezifikation von security (315 Mio. Paare, keine Abweichung).
+
+## Nachtrag zu T-3 (Teil A nachgewiesen, nur Tests und Doku)
+
+Stand nach T-3; kein Produktivcode geändert (`git diff dk-t2-datum --stat -- skillshield-core/src/main` leer).
+Neue Testdateien: `DatumFormen` (Zufallsdaten aller Formen), `DatumFuzzMengen` (Menge 1i, `erzeugeKvI`, Seed
+20261201), `DatumFolgeMessung` (neue Messhilfe, Klasse Z), `DatumFuzzDifferenzTest`, `DatumFuzzTest`,
+`DatumGrenzlastTest`, `DatumAnlassTest`. Abweichung vom Plan: `erzeugeKvI` steht in `DatumFuzzMengen` statt in
+`RoundtripFuzzTest` (Seeds und Siegel dort bleiben unberührt); `RoundtripKorpusTest` und
+`DatumKontextvorrangDifferenzTest` wurden nicht geändert, die Menge 1i hat einen eigenen Differenztest.
+
+**Menge 1i:** 60 000 Texte (20 000 strukturiert, 40 000 dicht ohne Satzbau), 40 136 Datumssegmente der Referenz.
+- Produkt == `simuliert(DatumReferenz)` in allen 60 000 Texten (ganze Listen). Produkt sortiert, überlappungsfrei,
+  deterministisch.
+- Klasse A (entfallene Datumsfunde): 37 439 (beide Messwege). Texte mit Abweichung gegen `ALT_DATUM`: 22 405;
+  keiner davon ohne Datumssegment.
+- Harte Bedingungen: Positionen außerhalb der Datumssegmente ohne Schutz 0; Positionen mit gesunkener
+  Konfidenz 0; neu geschützte Positionen 0; Roundtrip zeichengleich in allen Texten.
+- Klasse Z (39 Folgeänderungen): gleicher Bereich mit anderem Typ 0, anderer Konfidenz 0, nur andere Quelle 0;
+  alter Fund mit anderem Bereich 13; neuer Fund ganz im entfallenen Datumsfund 19; neues Reststück eines
+  anderen alten Funds 7; neuer Fund ohne alten Fund 0; sonstige 0. In breiter Zufallssuche (1 Mio. dichte Texte)
+  trat ebenfalls kein Schutzverlust auf.
+- Datum bleibt teilweise Fund (KV-Fund über Datumsposition): 68 Segmente, 645 Positionen, 172 Funde des Produkts
+  mit genau einem Datumsbereich (Reststück gleich dem Datum).
+
+**100 000er-Läufe (AK-11 c/d), je Form 100 000 Texte, Seeds je Form fest:**
+- Gültige Daten (Punkt vierstellig, Punkt zweistellig, `/`, `-`, ISO): 0 Funde über dem Datum, auf Erkenner-
+  ebene (alle vier Arten) und in der Stichprobe über `standard()`. Zeitraum mit zufällig ein- oder
+  zweistelligem Tag/Monat: 47 585 von 100 000 behalten einen Fund mit genau neun Ziffern (Neun-Ziffern-Regel,
+  Grenze aus A-2); bei durchgehend zweistelliger Schreibweise 0 von 100 000. Herleitung der 47 585: Es ist ein
+  gemessener Istwert (fester Seed), kein berechneter. Er liegt knapp unter der Hälfte, weil Tag und Monat nur
+  dann einstellig geschrieben werden, wenn sie kleiner als 10 sind (und dann mit gleicher Wahrscheinlichkeit),
+  und der Präfix des Zeitraums nur bei bestimmten Kombinationen der Stellenzahlen genau neun Ziffern erreicht
+  (zum Beispiel 8+1 oder 6+2+1, siehe Kap. 1.2).
+- Ungültige Werte je Form (sechs Formen) und Nicht-Datumsformen: Fundlisten je Erkenner gleich der Kopie in allen
+  700 000 Texten; die Kopie hat nirgends einen Fund über einem Datumssegment.
+
+**Grenzlast (AK-30):** 18 Texte mit je mindestens 1 000 000 Zeichen (13 Baustein-Eingaben, 5 Sondertexte), drei
+Schritte je unter 2 s; die ganze Klasse braucht 5,7 s. Laufzeit der neuen Testklassen zusammen rund 23 s
+(`DatumFuzzDifferenzTest` 8,0 s, `DatumFuzzTest` 9,3 s, `DatumGrenzlastTest` 5,7 s, `DatumAnlassTest` < 0,1 s).
+
+**Anlasstext:** 13 Funde bei `ALT_DATUM`, 9 im Produkt, die vier Datumsfunde entfallen, die neun übrigen sind
+gleich; Roundtrip zeichengleich.
+
+**Bekannte Grenzen von Teil A (je Test `bekannteGrenze…`):** siehe Tabelle in `DatumGrenzenTest` (Datum mit
+weiterem Block, Uhrzeit, angehängte Ziffer/Neun-Ziffern, Zeitraum mit Neun-Ziffern-Präfix, Zeitraum mit weiterem
+Kettenteil, `29.02.00`, KVNR-Buchstabenform, Geburtsdatum im Klartext, Formen ohne Datumscharakter, ungültiger
+Kalender, Nummer hinter Zeitraum oder mehreren Daten, Nummer als Datum geschrieben) und neu in T-3:
+`bekannteGrenze_reststueckIstGenauDasDatum_bleibtFund`, `bekannteGrenze_datumBleibtTeilweiseFund_zahlenAufDerMenge`,
+`bekannteGrenze_zeitraumMitNeunZiffernPraefix_inDenZufallslaeufen`,
+`bekannteGrenze_zeitraumMitNeunZiffernPraefix_restWirdUeberNachgestelltesKontextwortFund` (der Rest eines
+Neun-Ziffern-Zeitraums kann über ein nachgestelltes Kontextwort Fund werden; das Produkt gleicht der Simulation),
+`bekannteGrenze_dieselbeNummerHinterLanrUndInDerStammdatenzeile_zweiPlatzhalter` (Verweis auf Teil B).
+**Widerlegte Annahme (Kap. 1.2):** Die Annahme "der Rest hinter dem Segment ist höchstens die Jahreszahl, also nie
+ein Segment" gilt nicht. Bei Neun-Ziffern-Präfix bleibt der Präfix Fund; der Rest (zum Beispiel `02.2085`) ist ein
+eigenes Stück und kann über ein nachgestelltes Kontextwort Fund werden (Test
+`bekannteGrenze_zeitraumMitNeunZiffernPraefix_restWirdUeberNachgestelltesKontextwortFund`). Das Produkt gleicht dabei
+der Simulation von Teil A; es entfällt nur ein Teil der Funde. Die Dokumentation (README) nennt diese Grenze.
+
+**Abweichung von AK-26 (Teil A):** `RoundtripKorpusTest` wurde, anders als in T-3 geplant, nicht ergänzt (die Datei
+bleibt eingefroren). Der Roundtrip ist stattdessen abgedeckt durch `DatumFuzzDifferenzTest` (Pseudonymisieren und
+Zurückübersetzen zeichengleich und ohne offene Platzhalter in allen 60 000 Texten der Menge 1i, die alle Formen
+und Nachbarfunde enthalten), `DatumGrenzlastTest` und `DatumAnlassTest`. Der gemischte Korpus mit allen Formen und
+die Platzhalter-Konsistenz je Zeichenfolge (Teil B) bleiben bei T-6.
+
+**Selbsttests der Messhilfe (`DatumFuzzDifferenzTest`):** Abweichung ohne Datumssegment (`texteMitAbweichung` 1,
+`abweichungOhneDatum` 1) und mit Datumssegment (1 und 0); Z-Art `sonst` (neuer Fund überdeckt einen alten nur
+teilweise); Z-Art `altBereich` allein; Datumssegment genau gleich dem Datum; Schutzverlust direkt neben dem Datum
+im selben Text wird gemeldet.
+
+**Vorbedingung Bestandstypen (Menge 1i):** Texte mit mindestens einem Datumssegment und einem Fund des Produkts vom
+Typ IP: 3 025, Pfad: 5 636, URL: 2 367, E-Mail: 2 269 (exakte Istwerte, Test
+`mengeI_datumsegmenteNebenBestandstypen_vorbedingung`). Damit prüft "kein Schutzverlust" auch Datum neben
+Bestandstypen.
+
+**Offener Punkt der Messung:** Positionen in einem Datumssegment werden von der Verlustzählung ausgenommen, auch wenn
+der alte Fund dort ein Pfad-, URL- oder E-Mail-Fund war. Würde nur ein alter KV-Fund ausgenommen, zählte die Messung
+44 verlorene Positionen in 7 Texten der Menge 1i: ein zusammengelegter Fund (Quelle `zusammengelegt`, Typ Pfad oder
+E-Mail) enthielt das Datum, im neuen Fund fehlt es. Das ist der erwartete Wegfall des Datums, kein Schutzverlust
+außerhalb. Die Messung blieb deshalb unverändert, die Entscheidung liegt bei der Hauptsitzung.
+
+**Entscheidung der Hauptsitzung dazu (25.11.2026), nach Nachmessung durch security:** Die Messung bleibt, wie sie
+ist. Genauer als oben beschrieben gilt: Alle 44 Positionen sind Zeichen des Datums und liegen in Datumssegmenten der
+Referenz. Der Datumsteil war früher nur geschützt, weil der damalige falsche KV-Datumskandidat mit dem benachbarten
+Pfad- bzw. E-Mail-Fund zusammengelegt wurde. Der rohe Pfad- bzw. E-Mail-Fund steht heute unverändert in der Fundliste
+(er reicht von sich aus 1 bis 4 Zeichen in das Datum hinein, diese bleiben geschützt) und hat eine höhere Konfidenz
+als der frühere zusammengelegte Fund. Kein Zeichen eines Pfads oder einer E-Mail-Adresse verliert Schutz. Die 7 Fälle
+gehören zu Klasse Z „alter Fund hat anderen Bereich“ (7 der 13). Offene Härtung der Messhilfe (niedrig, nicht
+umgesetzt): eine zusätzliche harte Bedingung, dass jede Position eines rohen Funds der Erkenner für Pfad, E-Mail, IP
+und URL auch neu geschützt ist (Istwert auf Menge 1i laut security: 0).
+
+**Nachtrag Durchlauf 3:** Die Grenzlastfälle 01 bis 13 (`DatumGrenzlastTest`) prüfen je Eingabe die exakte
+Gesamtzahl aller Funde außerhalb der Zeitmessung: 0 bei 01, 06, 11, 12, 13; n (Wiederholungen) bei 02, 08, 09, 10;
+gemessener Festwert 1 bei 03, 04, 05, 07 (je eine Kette ohne Leerzeichen; Fall 03 ein IP-Fund über die ganze Kette,
+Fall 04 und 07 ein IP-Fund ab Position 5 bis vor den letzten Punkt, Fall 05 ein BSNR-Fund von Position 5 bis 21, der
+Rest der Kette besteht nur aus Datumsangaben und bleibt ohne Fund; Typ und Bereich prüft ein eigener Test). Die zuvor als offen
+genannte Härtung ist umgesetzt: neue harte Bedingung "roher Bestandsfund bleibt geschützt" (`rohBestandUngeschuetzt`
+in `DatumFolgeMessung`, Teil von `hartErfuellt()`), Istwert auf Menge 1i 0, mit Selbsttest samt Mutante; der
+Selbsttest zum Schutzverlust prüft jetzt beide Seiten des Datums.
+
+Prüfsummen: `kern-pruefsummen-nachher.txt` (170 Einträge), `geaenderte-dateien.txt` (6 Produktdateien aus T-2,
+22 neue Dateien, keine geänderte Testdatei gegenüber `dk-t0-stand`).

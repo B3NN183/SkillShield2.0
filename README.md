@@ -15,8 +15,13 @@ Agentensteuerung: [CLAUDE.md](CLAUDE.md)). Diese Datei beschreibt, was zum Bauen
 - **Geplante Reihenfolge und Zielbild:** siehe
   [docs/features/uebersicht-it-infrastruktur.md](docs/features/uebersicht-it-infrastruktur.md).
   Die KV-Erkenner bleiben bestehen und werden vorerst nicht weiterentwickelt.
-- **Bekannter Fehler:** Datumsangaben wie `12.02.2026` werden als BSNR oder KVNR (Stufe „fraglich") ersetzt,
-  wenn ein KV-Kontextwort in der Nähe steht. Bis zur Behebung im Fenster einzeln abwählen.
+- **Datumsangaben (behoben für eindeutig geschriebene, gültige Daten):** Daten wie `12.02.2026`,
+  `5.3.2026`, `14/03/1958`, `2026-03-01` und Zeiträume wie `01.03.2026-31.03.2026` werden auch hinter einem
+  KV-Kontextwort nicht mehr als BSNR oder KVNR ersetzt. Verbleibende Grenzen: Ein Datum mit angehängter Zahl
+  oder Uhrzeit (`14.03.1958 1234`) bleibt ein Fund, bei einem Zeitraum mit einstelligem Tag oder Monat hinter
+  einem KV-Kontextwort (erfundenes Beispiel `1.3.2026-15.3.2026`) wird weiterhin teilweise ein neunstelliger
+  Teil ersetzt, eine Nummer in Datumsschreibweise (sechs bis acht Ziffern)
+  bleibt lesbar, und Geburtsdaten werden nicht geschützt (kein eigener Typ); sie bei Bedarf von Hand markieren.
 
 ## Voraussetzungen
 

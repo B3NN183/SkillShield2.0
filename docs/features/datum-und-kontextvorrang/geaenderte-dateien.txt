@@ -1,0 +1,33 @@
+# Gegenueber dk-t0-stand (kern-pruefsummen-vorher.txt) geaenderte und neue Dateien unter skillshield-core/src.
+# Beleg: Vergleich der SHA-256-Summen in kern-pruefsummen-vorher.txt und kern-pruefsummen-nachher.txt (Stand nach T-3).
+# Wort je Datei: neu | geaendert-Produkt | geaendert-Test
+# Hinweis: Testdateien, die schon in T-1 und T-2 entstanden sind, stehen hier unter "neu", weil der Vergleich gegen
+# dk-t0-stand (Stand vor dem Feature) laeuft; sie sind nicht erst in T-3 hinzugekommen.
+geaendert-Produkt  skillshield-core/src/main/java/de/skillshield/core/recognizer/kv/BsnrRecognizer.java
+geaendert-Produkt  skillshield-core/src/main/java/de/skillshield/core/recognizer/kv/IkRecognizer.java
+geaendert-Produkt  skillshield-core/src/main/java/de/skillshield/core/recognizer/kv/KvArt.java
+neu  skillshield-core/src/main/java/de/skillshield/core/recognizer/kv/KvDatum.java
+geaendert-Produkt  skillshield-core/src/main/java/de/skillshield/core/recognizer/kv/KvNumberScanner.java
+geaendert-Produkt  skillshield-core/src/main/java/de/skillshield/core/recognizer/kv/KvnrRecognizer.java
+geaendert-Produkt  skillshield-core/src/main/java/de/skillshield/core/recognizer/kv/LanrRecognizer.java
+neu  skillshield-core/src/test/java/de/skillshield/core/DatumAnlassTest.java
+neu  skillshield-core/src/test/java/de/skillshield/core/DatumFolgeMessung.java
+neu  skillshield-core/src/test/java/de/skillshield/core/DatumFormen.java
+neu  skillshield-core/src/test/java/de/skillshield/core/DatumFuzzDifferenzTest.java
+neu  skillshield-core/src/test/java/de/skillshield/core/DatumFuzzMengen.java
+neu  skillshield-core/src/test/java/de/skillshield/core/DatumFuzzTest.java
+neu  skillshield-core/src/test/java/de/skillshield/core/DatumGrenzenTest.java
+neu  skillshield-core/src/test/java/de/skillshield/core/DatumGrenzlastTest.java
+neu  skillshield-core/src/test/java/de/skillshield/core/DatumKeinFundTest.java
+neu  skillshield-core/src/test/java/de/skillshield/core/DatumKontextvorrangDifferenzTest.java
+neu  skillshield-core/src/test/java/de/skillshield/core/DatumKontextvorrangPrognoseTest.java
+neu  skillshield-core/src/test/java/de/skillshield/core/DatumMengen.java
+neu  skillshield-core/src/test/java/de/skillshield/core/DatumMessung.java
+neu  skillshield-core/src/test/java/de/skillshield/core/DatumProduktMessungTest.java
+neu  skillshield-core/src/test/java/de/skillshield/core/DatumReferenz.java
+neu  skillshield-core/src/test/java/de/skillshield/core/DatumReferenzTest.java
+neu  skillshield-core/src/test/java/de/skillshield/core/SynthetischeDaten.java
+neu  skillshield-core/src/test/java/de/skillshield/core/recognizer/kv/KvDatumTest.java
+neu  skillshield-core/src/test/java/de/skillshield/core/recognizer/kv/KvNumberScannerStandDatum.java
+neu  skillshield-core/src/test/java/de/skillshield/core/recognizer/kv/KvStandDatum.java
+neu  skillshield-core/src/test/java/de/skillshield/core/recognizer/kv/KvStandDatumTest.java
