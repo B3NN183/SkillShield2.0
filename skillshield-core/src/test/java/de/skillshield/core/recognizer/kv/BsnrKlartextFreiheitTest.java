@@ -160,7 +160,9 @@ class BsnrKlartextFreiheitTest {
         List<Recognizer> liste = TextScanner.standard().recognizers();
         // Umgestellt durch geheimnisse-erkennung T-4: Zahl der Standard-Erkenner 9 (alter Wert: 8); Index 7
         // bleibt der BSNR-Erkenner
-        assertEquals(9, liste.size(), "Zahl der Standard-Erkenner");
+        // Umgestellt durch geheimnisse-erkennung T-6: Zahl der Standard-Erkenner 10 (alter Wert: 9); Index 7
+        // bleibt der BSNR-Erkenner
+        assertEquals(10, liste.size(), "Zahl der Standard-Erkenner");
         assertTrue(liste.get(7) instanceof BsnrRecognizer, "Index 7 ist der BSNR-Erkenner");
         assertTrue(liste.get(6) instanceof KvnrRecognizer, "Index 6 ist der KVNR-Erkenner");
         assertEquals(1, liste.stream().filter(r -> r instanceof BsnrRecognizer).count(), "Zahl der BSNR-Erkenner");

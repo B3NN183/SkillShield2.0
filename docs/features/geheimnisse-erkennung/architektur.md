@@ -893,5 +893,56 @@ zurückgesetzt; T-5 wird auf dieser Grundlage neu umgesetzt.
    `|K| S| S|`); Werte in maskierten Anführungszeichen außerhalb von JSON (`Passwort: \"…\"`) bleiben lesbar wie in
    T-4 (in T-9 als Grenze mit Test nachzutragen).
 
+### Entscheidungen nach der Prüfung von T-6, Durchlauf 1 (26.11.2026)
+
+reviewer PASS; security FAIL (mittel). Für TOKEN gilt ab Durchlauf 2:
+1. **Hex-Tokens und UUIDs hinter K2 bis K4 und nach dem Zeilenumbruch (security, mittel):** Für Art TOKEN gilt dort
+   die Schema-Strenge (W1 bis W5, Länge ab 16, ohne Klassenregel W6), Konfidenz 0,80. PASSWORT bleibt unverändert
+   (W6). Bedingung: Prüfstand vollständig grün und eigene Fehlalarm-Stichprobe ohne neue Klasse; sonst Grenze mit Test
+   und Rückmeldung an den Nutzer.
+2. **Schema-Formen enger (Fehlalarme in HTTP-Dokumentation):** Hinter `Bearer`/`Authorization` ist ein Wert der Form
+   `name="…"` (Gleichheitszeichen direkt vor einem Anführungszeichen im Innern) und ein Wert mit `(` oder `)` kein
+   Token (`WWW-Authenticate: Bearer error="invalid_token"`, `Authorization: Basic base64(user:password)`).
+3. **Schema-Wert in Anführungszeichen über 256 Zeichen** (`"Authorization": "Bearer <langer Wert>"`): beheben, wenn es
+   ohne Sonderfall geht (im Rückfall das Schema-Wort überspringen und das nächste Wort mit der Schema-Prüfung werten);
+   sonst Grenze mit Test.
+4. **Grenzen mit Test, keine Regeländerung:** Base64-Token, das mit `/` beginnt (W4); `Authorization: Negotiate|NTLM|
+   Digest <Wert>`; Typwechsel PASSWORT → TOKEN, wenn ein TOKEN-Fund einen PASSWORT-Fund ganz umfasst (kein
+   Schutzverlust, alle Funde sind vorausgewählt).
+5. **Für T-8 vorgemerkt:** Stamm `accountkey` (Azure-Verbindungszeichenfolgen).
+
+### Entscheidung des Nutzers nach T-6, Durchlauf 2 (27.11.2026)
+
+Die Schema-Strenge hinter K2 bis K4 und nach dem Umbruch (Entscheidung 1 nach Durchlauf 1) schützte Hex/UUID-Tokens
+dort zu 99 %, erzeugte aber in einer Stichprobe bei 52 von 93 Zeilen mit langen technischen Bezeichnern Fehlalarme.
+Der Nutzer hat auf Rückfrage entschieden: **möglichst wenig Fehlalarme.** Entscheidung 1 wird zurückgenommen; für
+TOKEN gilt hinter K2 bis K4 und nach dem Umbruch wieder W6 wie für PASSWORT. Hex- und UUID-Tokens (zwei
+Zeichenklassen) bleiben dort lesbar: Grenze mit Test und Eintrag in `TokenRecognizer`. Hinter K1 und den
+Schema-Formen ändert sich nichts.
+
+Dazu, Mängel aus security Durchlauf 2:
+1. (mittel) Der Ausschluss `="` darf Base64-Padding mit verdoppeltem oder maskiertem schließendem Anführungszeichen
+   (`…==""`, `…=\"`) nicht treffen; `authorization()` überspringt vor dem Schema-Wort auch `""` und `\"`.
+2. (niedrig, Grenzen mit Test) Code-Aufrufe hinter Token-Kontextwort mit `=`; K4-Werte über 256 Zeichen (lange JWTs
+   in `<token>`); `"}}` am Ende eines 4 096-Zeichen-Werts.
+
+### Abnahme von T-6 mit Grenzen (Entscheidung des Nutzers, 27.11.2026)
+
+Nach Durchlauf 3: reviewer FAIL (nur Testdokumentation), security FAIL (mittel). Der Nutzer hat auf Rückfrage
+entschieden, T-6 **ohne weiteren Engineer-Durchlauf an der Produktlogik** abzunehmen und den offenen Fall als Grenze
+festzuhalten. Das FAIL von security bleibt als solches bestehen und ist vom Nutzer angenommen.
+Festzuhalten (nur Tests und Javadoc, kein Produktcode):
+1. **Grenze (security, mittel):** Ein Schema-Wert (`Authorization: Basic|Bearer|Token`) mit genau einem `=` am Ende
+   ist kein Fund, wenn direkt nach dem schließenden `"` ein Zeichen folgt, das die Kürzung am Ende nicht entfernt
+   (`! * & / - < > | ~ # $ % + _` u. a.; z. B. `"…="</code>`, `"…="**`, `"…="|`). Ursache: `istParameterAnfuehrung`
+   wertet `="` dort als Parameterform. Gemessen 2–4,5 % gedeckt. Behebung (nicht umgesetzt): Parameterform nur, wenn
+   nach `="` ein Namenszeichen folgt.
+2. **Grenzen (niedrig):** Bei kompaktem CSV-JSON (`==""}"…`) reicht der Fund über das Wertende hinaus (Überschutz,
+   kein Leck); maskierte Parameterformen (`Bearer error=\"invalid_token\"`) sind Fund; ein unmittelbar angeklebtes
+   zweites Kontextwort hinter einem Schema-Wert wird nicht ausgewertet.
+3. **Testdokumentation (reviewer):** Zufallstest `s2_zufallMitPadding_…` mit der exakten Zahl (bei festem Seed) und
+   Benennung der 10 nicht gedeckten Fälle; Grenzliste in `TokenRecognizer` vollständig und Verweis auf die richtige
+   Testklasse.
+
 `SynthetischeGeheimnisse`: Die Anforderung definiert nur `P1`, `P2`, `P3`, `P6` und `P7`; „P1 bis P7“ in Kap. 6.2
 ist ungenau.

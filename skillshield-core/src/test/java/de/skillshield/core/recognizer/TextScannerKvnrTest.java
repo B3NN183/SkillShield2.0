@@ -19,6 +19,7 @@ import de.skillshield.core.model.FindingType;
 import de.skillshield.core.pseudonymize.PseudonymizationResult;
 import de.skillshield.core.pseudonymize.Pseudonymizer;
 import de.skillshield.core.recognizer.geheimnis.PasswortRecognizer;
+import de.skillshield.core.recognizer.geheimnis.TokenRecognizer;
 import de.skillshield.core.recognizer.general.EmailRecognizer;
 import de.skillshield.core.recognizer.general.Ipv4Recognizer;
 import de.skillshield.core.recognizer.general.PathRecognizer;
@@ -100,13 +101,17 @@ class TextScannerKvnrTest {
                 .<Class<?>>map(Object::getClass).toList();
         // Nachtrag zu T-14: Zahl der Standard-Erkenner 8 (alter Wert: 7)
         // Umgestellt durch geheimnisse-erkennung T-4: Zahl der Standard-Erkenner 9 (alter Wert: 8)
-        assertEquals(9, klassen.size(), "Zahl der Standard-Erkenner");
+        // Umgestellt durch geheimnisse-erkennung T-6: Zahl der Standard-Erkenner 10 (alter Wert: 9)
+        assertEquals(10, klassen.size(), "Zahl der Standard-Erkenner");
         // Nachtrag zu T-14: Liste um BsnrRecognizer ergaenzt (alt: endete mit KvnrRecognizer.class)
         // Umgestellt durch geheimnisse-erkennung T-4: Liste um PasswortRecognizer ergaenzt (alt: endete mit
         // BsnrRecognizer.class); die ersten acht bleiben in unveraenderter Reihenfolge
+        // Umgestellt durch geheimnisse-erkennung T-6: Liste um TokenRecognizer ergaenzt (alt: endete mit
+        // PasswortRecognizer.class); die ersten neun bleiben in unveraenderter Reihenfolge
         assertTrue(List.of(EmailRecognizer.class, Ipv4Recognizer.class, UrlRecognizer.class, PathRecognizer.class,
                 LanrRecognizer.class, IkRecognizer.class, KvnrRecognizer.class, BsnrRecognizer.class,
-                PasswortRecognizer.class).equals(klassen), "Reihenfolge der Standard-Erkenner");
+                PasswortRecognizer.class, TokenRecognizer.class).equals(klassen),
+                "Reihenfolge der Standard-Erkenner");
         assertEquals(KvnrRecognizer.class, klassen.get(6), "Index 6");
         // Nachtrag zu T-14: neuer Eintrag, BsnrRecognizer an Index 7
         assertEquals(BsnrRecognizer.class, klassen.get(7), "Index 7");

@@ -126,6 +126,12 @@ public final class SynthetischeGeheimnisse {
     /** Erfundener Token der Anforderung (Kurzname T): 29 Zeichen, Buchstaben, eine einzelne Ziffer, mit Marke. */
     public static final String T = "AbcdTestwertEfghIjklMnop7Qrst";
 
+    /** Ergaenzung T-6: Token mit Marke und genau 15 Zeichen (eines unter der Schema-Laenge 16). */
+    public static final String T_15 = MARKE + "7abcdef";
+
+    /** Ergaenzung T-6: Token mit Marke und genau 16 Zeichen (die kleinste Laenge hinter Bearer und Authorization). */
+    public static final String T_16 = MARKE + "7abcdefg";
+
     /** Rest eines Praefix-Tokens: Buchstaben, eine einzelne Ziffer und die Marke (25 Zeichen). */
     public static final String PRAEFIX_REST = "Abcd" + MARKE + "EfghIjkl7Mnop";
 

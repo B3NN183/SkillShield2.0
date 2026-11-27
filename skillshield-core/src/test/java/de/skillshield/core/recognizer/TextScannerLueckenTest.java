@@ -13,6 +13,7 @@ import de.skillshield.core.model.Finding;
 import de.skillshield.core.model.FindingType;
 import de.skillshield.core.recognizer.geheimnis.GeheimnisTypen;
 import de.skillshield.core.recognizer.geheimnis.PasswortRecognizer;
+import de.skillshield.core.recognizer.geheimnis.TokenRecognizer;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collections;
@@ -471,9 +472,10 @@ class TextScannerLueckenTest {
     /**
      * Umgestellt durch geheimnisse-erkennung T-4 (Plan Kapitel 6.4, Fall "zusaetzlicher PASSWORT-Fund nach
      * Lueckenregel"). Alte Erwartung: {@code standard()} liefert in jedem der 60 000 Texte genau die Funde von ALT
-     * (es gab keinen Geheimnis-Erkenner). Neue Erwartung: Liefert der {@code PasswortRecognizer} fuer den Text
-     * keinen Kandidaten, bleibt die Gleichheit mit ALT unveraendert; liefert er einen, stehen alle Funde von ALT
-     * feldgleich in der neuen Liste, jeder weitere Fund hat den Typ PASSWORT und ueberlappt keinen Fund von ALT.
+     * (es gab keinen Geheimnis-Erkenner). Neue Erwartung: Liefert weder der {@code PasswortRecognizer} noch (seit
+     * T-6) der {@code TokenRecognizer} fuer den Text einen Kandidaten, bleibt die Gleichheit mit ALT unveraendert;
+     * liefert einer einen, stehen alle Funde von ALT feldgleich in der neuen Liste, jeder weitere Fund hat den Typ
+     * PASSWORT oder TOKEN und ueberlappt keinen Fund von ALT.
      * Gezaehlt und festgehalten (gemessen; in T-4 34 Texte und 35 Funde, seit T-5 41 Texte und 42 Funde, siehe
      * Kommentar unten): 41 Texte mit zusaetzlichen Funden, zusammen 42 zusaetzliche Funde. In T-4 waren das
      * ausschliesslich die Reststuecke von Kandidaten ("Passwort : .max@..." oder "Passwort = =gestartet"), die
@@ -485,8 +487,10 @@ class TextScannerLueckenTest {
         Random r = new Random(SEED + 1);
         TextScanner neu = TextScanner.standard();
         PasswortRecognizer passwort = new PasswortRecognizer();
+        TokenRecognizer token = new TokenRecognizer();
         int texteMitZusatz = 0;
         int zusatzFunde = 0;
+        int zusatzToken = 0;
         int gesamt = 0;
         for (int i = 0; i < 60_000; i++) {
             StringBuilder sb = new StringBuilder();
@@ -501,7 +505,7 @@ class TextScannerLueckenTest {
             List<Finding> alt = TextScannerStandGeheimnis.ALT.scan(text);
             gesamt += alt.size();
             List<Finding> ist = neu.scan(text);
-            if (passwort.detect(text).isEmpty()) {
+            if (passwort.detect(text).isEmpty() && token.detect(text).isEmpty()) {
                 assertEquals(alt, ist, "standard() ungleich ALT, Iteration " + i);
                 continue;
             }
@@ -514,7 +518,10 @@ class TextScannerLueckenTest {
                     continue;
                 }
                 zusatz++;
-                assertEquals(GeheimnisTypen.PASSWORT, f.type(), "weiterer Fund ist kein PASSWORT, Iteration " + i);
+                assertTrue(GeheimnisTypen.istGeheimnistyp(f.type()), "weiterer Fund ohne Geheimnistyp, Iteration " + i);
+                if (GeheimnisTypen.TOKEN.equals(f.type())) {
+                    zusatzToken++;
+                }
                 for (Finding a : alt) {
                     assertFalse(ueberlappt(a, f), "weiterer Fund ueberlappt ALT, Iteration " + i);
                 }
@@ -528,8 +535,17 @@ class TextScannerLueckenTest {
         // zusaetzliche Funde. Die sieben neuen Texte enthalten alle "Passwort", einen Tabulator und danach ein Wort
         // aus den Bausteinen ohne Leerzeichen (Passwort, Tabulator, Server, IK, Adresse, Nummer): K3, je ein
         // zusaetzlicher PASSWORT-Fund, der keinen Fund von ALT ueberlappt.
-        assertEquals(41, texteMitZusatz, "Texte mit zusaetzlichen Funden");
-        assertEquals(42, zusatzFunde, "zusaetzliche Funde");
+        // Umgestellt durch geheimnisse-erkennung T-6 (Plan Kapitel 8.1, Entscheidung nach T-4 Punkt 4): alt 41 Texte
+        // und 42 zusaetzliche PASSWORT-Funde, neu 82 Texte und 88 zusaetzliche Funde, davon 42 PASSWORT (unveraendert)
+        // und 46 TOKEN. Die TOKEN-Funde entstehen wie die PASSWORT-Funde aus dem Baustein "Token" mit Verbinder und
+        // einem der Bausteine dahinter (Reststuecke oder Funde in den Luecken); der Lauf findet sonst keinen
+        // anderen Unterschied.
+        // Nach der Entscheidung des Nutzers nach T-6, Durchlauf 2 (W6 hinter K2 bis K4 auch fuer TOKEN) gelten wieder
+        // die Zahlen von T-6, Durchlauf 1.
+        assertEquals(82, texteMitZusatz, "Texte mit zusaetzlichen Funden");
+        assertEquals(88, zusatzFunde, "zusaetzliche Funde");
+        assertEquals(46, zusatzToken, "davon TOKEN");
+        assertEquals(42, zusatzFunde - zusatzToken, "davon PASSWORT");
         assertTrue(gesamt > 50_000, "zu wenige Funde im Lauf: " + gesamt);
     }
 }

@@ -24,6 +24,9 @@ import java.util.List;
  * <li><b>W6</b> zusaetzlich fuer die schwaecheren Verbinder ({@link Verbinder#SCHWACH}): Laenge mindestens 8 und
  * mindestens drei der vier Klassen Grossbuchstabe, Kleinbuchstabe, Ziffer, Sonderzeichen; als Sonderzeichen zaehlt
  * dieselbe Liste wie in W2 (Plan Kapitel 11 Punkt 3), das letzte Zeichen des Werts wie dort nicht.</li>
+ * <li><b>Schema</b> ({@link Verbinder#SCHEMA}, T-6) fuer {@code Bearer}, {@code Authorization} und die Schema-Formen
+ * {@code Bearer}, {@code Basic}, {@code Token} hinter {@code Authorization}: W1 bis W5 und Laenge mindestens 16, ohne
+ * die Klassenregel von W6 (D-8 W6, D-11).</li>
  * </ul>
  * Die Klasse liest den Wert in einem Durchlauf (Zaehler je Klasse); sie hat keinen Zustand und gibt keinen Wert
  * aus. Sie wirft keine Ausnahme mit Inhalt.
@@ -35,7 +38,12 @@ final class Werttest {
         /** K1 ({@code :} oder {@code =}) in derselben Zeile: W1 bis W5. */
         STARK,
         /** Schwaecherer Verbinder, auch der Zeilenumbruch nach K1: zusaetzlich W6. */
-        SCHWACH
+        SCHWACH,
+        /**
+         * Schema-Formen und Kontextwoerter {@code Bearer} und {@code Authorization} (D-8 W6 letzter Satz, D-11, T-6):
+         * W1 bis W5 und Laenge mindestens {@value Werttest#MIN_LAENGE_SCHEMA}, ohne die Klassenregel von W6.
+         */
+        SCHEMA
     }
 
     /** Kleinste Laenge eines Werts (W1). */
@@ -46,6 +54,8 @@ final class Werttest {
     static final int MAX_LAENGE_ANFUEHRUNG = 256;
     /** Kleinste Laenge fuer die schwaecheren Verbinder (W6). */
     static final int MIN_LAENGE_SCHWACH = 8;
+    /** Kleinste Laenge fuer die Schema-Formen und die Kontextwoerter Bearer und Authorization (D-8 W6, D-11). */
+    static final int MIN_LAENGE_SCHEMA = 16;
     /** Kleinste Laenge fuer die Konfidenz 0,95 (D-9). */
     static final int MIN_LAENGE_SICHER = 8;
 
@@ -130,6 +140,9 @@ final class Werttest {
         }
         String wert = text.substring(start, end);
         if (!istPfadOderAdresse(wert) && !istMaske(wert, einZeichen) && !istFachform(wert)) {
+            if (v == Verbinder.SCHEMA) {
+                return laenge >= MIN_LAENGE_SCHEMA;
+            }
             return v != Verbinder.SCHWACH || schwachBesteht(laenge, gross, klein, ziffern, sonder);
         }
         return false;

@@ -26,6 +26,7 @@ import de.skillshield.core.recognizer.Recognizer;
 import de.skillshield.core.recognizer.TextScanner;
 import de.skillshield.core.recognizer.geheimnis.GeheimnisTypen;
 import de.skillshield.core.recognizer.geheimnis.PasswortRecognizer;
+import de.skillshield.core.recognizer.geheimnis.TokenRecognizer;
 import de.skillshield.core.recognizer.kv.IkRecognizer;
 import de.skillshield.core.recognizer.kv.LanrRecognizer;
 import de.skillshield.core.reidentify.ReidentificationResult;
@@ -887,6 +888,60 @@ class KlartextFreiheitTest {
             assertKlartextfrei("TextScanner.scan(null) mit Passwort-Erkenner", scan);
         });
         assertAusgabeKlartextfrei("Passwort-Erkenner-Test", ausgabe);
+    }
+
+    /**
+     * geheimnisse-erkennung T-6 (AK-42): Der {@code TokenRecognizer} und {@code TokenKontext} in allen Zweigen
+     * (Kontextwort mit K1 bis K4, {@code API Key}, {@code Authorization} mit Schema, {@code Bearer} mit und ohne
+     * Verbinder). Wie beim Passwort steht kein Marker in Funden, Fundlisten, pseudonymisiertem Text, Mapping,
+     * Rueckuebersetzung, Ausnahmen und Ausgaben ausser im Eingabetext und in der Rueckuebersetzung des Originals.
+     */
+    @Test
+    void tokenErkenner_keinMarkerInFundenAusnahmenUndAusgabe() {
+        // Pfad und E-Mail gehoeren dem Bestandserkenner; der Token-Kandidat ist dort hoechstens ein Reststueck. Die
+        // Marker-Pruefung des pseudonymisierten Texts gilt nur fuer Texte, deren Wert der Token-Erkenner besitzt
+        // (wie beim Passwort-Test).
+        String tokenPfad = "Token: " + MARKER_PFAD;
+        String tokenMail = "Token: " + MARKER_MAIL;
+        List<String> texte = List.of("Token: " + MARKER_GEHEIMNIS, "access_token=" + MARKER_GEHEIMNIS + ".",
+                "Secret:\n" + MARKER_GEHEIMNIS, "API Key f" + (char) 0xFC + "r svc_x: \"" + MARKER_GEHEIMNIS + "\"",
+                "Authorization: Bearer " + MARKER_GEHEIMNIS, "Bearer " + MARKER_GEHEIMNIS,
+                "Token ist " + MARKER_GEHEIMNIS, "| Secret | " + MARKER_GEHEIMNIS + " |",
+                "<token>" + MARKER_GEHEIMNIS + "</token>", "Token: " + MARKER_GEHEIMNIS.repeat(400),
+                tokenPfad, tokenMail,
+                "x Token: " + MARKER_GEHEIMNIS + " Secret: " + MARKER_GEHEIMNIS);
+        Ausgabe ausgabe = erfasse(() -> {
+            TokenRecognizer erkenner = new TokenRecognizer();
+            int gefunden = 0;
+            for (int i = 0; i < texte.size(); i++) {
+                String text = texte.get(i);
+                assertTrue(findeMarker(text).isPresent(), "Suchfunktion findet den Marker im Eingabetext " + i);
+                List<Finding> kandidaten = erkenner.detect(text);
+                gefunden += kandidaten.size();
+                assertToStringKlartextfrei("Token-Kandidaten " + i, kandidaten);
+                for (Finding f : kandidaten) {
+                    assertToStringKlartextfrei("Finding.toString Token-Kandidat " + i, f);
+                    assertToStringKlartextfrei("Finding.source Token-Kandidat " + i, f.source());
+                    assertToStringKlartextfrei("FindingType Token-Kandidat " + i, f.type());
+                }
+                List<Finding> funde = TextScanner.standard().scan(text);
+                assertToStringKlartextfrei("Liste der Funde Token-Text " + i, funde);
+                PseudonymizationResult pseudo = PSEUDONYMIZER.pseudonymize(text, funde);
+                assertToStringKlartextfrei("PseudonymizationResult Token-Text " + i, pseudo);
+                assertToStringKlartextfrei("PlaceholderMapping Token-Text " + i, pseudo.mapping());
+                ReidentificationResult zurueck = REIDENTIFIER.restore(pseudo.text(), pseudo.mapping());
+                assertTrue(text.equals(zurueck.text()), "Roundtrip Token-Text " + i);
+                assertToStringKlartextfrei("ReidentificationResult Token-Text " + i, zurueck);
+                if (!kandidaten.isEmpty() && !text.equals(tokenPfad) && !text.equals(tokenMail)) {
+                    assertTrue(findeMarker(pseudo.text()).isEmpty(), "Marker im pseudonymisierten Text " + i);
+                }
+            }
+            assertTrue(gefunden >= 12, "der Test trifft die Regel zu selten: " + gefunden);
+            NullPointerException npe = assertThrows(NullPointerException.class, () -> erkenner.detect(null));
+            assertKlartextfrei("TokenRecognizer.detect(null)", npe);
+            assertEquals("text", npe.getMessage());
+        });
+        assertAusgabeKlartextfrei("Token-Erkenner-Test", ausgabe);
     }
 
     @Test

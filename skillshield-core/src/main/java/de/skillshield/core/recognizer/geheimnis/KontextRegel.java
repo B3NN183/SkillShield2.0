@@ -6,11 +6,13 @@ import java.util.List;
 
 /**
  * Kontextregel der Geheimnis-Erkenner (Anforderung D-4, D-6 bis D-9; Plan Kapitel 1.3): findet ein Kontextwort, den
- * Verbinder, den Wert und prueft ihn mit {@link Werttest}. Stand T-4: Art {@link Art#PASSWORT}, Verbinder K1
- * ({@code :} oder {@code =}) in derselben Zeile und K1 mit einem Zeilenumbruch. Das ist der erste Durchgang des
- * {@code PasswortRecognizer}; er ist seit T-4 unveraendert. Die schwaecheren Verbinder K2 bis K4 wertet der zweite
- * Durchgang {@link SchwacheVerbinder} aus (T-5, nutzt Kontextwort, Zwischenteil und Wertgrenzen dieser Klasse), Tokens
- * folgen in T-6, die Verbindungsregeln in T-8.
+ * Verbinder, den Wert und prueft ihn mit {@link Werttest}. Stand T-6: Verbinder K1 ({@code :} oder {@code =}) in
+ * derselben Zeile und K1 mit einem Zeilenumbruch. Das ist der erste Durchgang des {@code PasswortRecognizer}; fuer
+ * die Art {@link Art#PASSWORT} ist er seit T-4 unveraendert. Die schwaecheren Verbinder K2 bis K4 wertet der zweite
+ * Durchgang {@link SchwacheVerbinder} aus (T-5, nutzt Kontextwort, Zwischenteil und Wertgrenzen dieser Klasse). Die
+ * Art {@link Art#TOKEN} (T-6) nutzt dieselbe Regel mit den Kontextwoertern aus {@link TokenKontext}; die
+ * Schema-Formen ({@code Bearer}, {@code Authorization}) lesen den Wert mit den Klassen {@link Klasse#SCHEMA} und
+ * {@link Klasse#SCHEMA_OHNE}. Die Verbindungsregeln folgen in T-8.
  *
  * <p><b>Ablauf.</b> Ein Durchlauf liest jeden Wortkoerper (maximale Folge aus Buchstaben, Ziffern, kombinierenden
  * Zeichen, {@code _} und {@code -}) einmal vorwaerts. Erst an seinem Ende wird rueckwaerts verglichen (hoechstens
@@ -93,6 +95,13 @@ final class KontextRegel {
     /** Konfidenz bei 6 oder 7 Zeichen und bei einem Wert nach einem Zeilenumbruch (D-9). */
     private static final double KONFIDENZ_WAHRSCHEINLICH = 0.80;
 
+    /**
+     * Zugabe zur Laengengrenze eines Worts hinter einem Schema-Wort: Steht der Wert in Anfuehrungszeichen
+     * ({@code "Authorization": "Bearer Wert",}), gehoeren ein schliessendes Anfuehrungszeichen und ein Komma noch zum
+     * gelesenen Wort und werden erst bei der Kuerzung am Ende abgetrennt (Entscheidung 3 nach der Pruefung von T-6).
+     */
+    private static final int SCHLUSS_ZUGABE = 2;
+
     /** Zeichen, deren Zahl im Wert die Kuerzung am Ende braucht: Klammern und Anfuehrungszeichen. */
     private static final String SPEZIAL = "()[]{}" + GeheimnisZeichen.ANFUEHRUNG;
 
@@ -102,10 +111,13 @@ final class KontextRegel {
      * K3/K4 (Tabulator, Element, {@code |} mit Leerraum dahinter: W6). {@code K3_STRICH} ist K3 mit senkrechtem
      * Strich, der Wert beginnt unmittelbar dahinter: wie K3_K4, aber der Wert-Test gilt nur fuer den Teil bis zum
      * naechsten {@code |}, fuehrende {@code |} uebersprungen (Tabellen ohne Leerraum). K2 bis K4 wertet
-     * {@link SchwacheVerbinder} aus (T-5).
+     * {@link SchwacheVerbinder} aus (T-5). {@code SCHEMA} (T-6) ist K1 hinter {@code Bearer} oder {@code Authorization}
+     * und hinter dem Schema-Wort der Schema-Form ({@code Authorization: Bearer Wert}): Laenge mindestens 16 statt W6,
+     * kein Aufruf und keine Form {@code name="..."}, Konfidenz 0,95. {@code SCHEMA_OHNE} ist {@code Bearer Wert} ohne
+     * Verbinder: wie {@code SCHEMA}, Konfidenz 0,80, kein Zeilenumbruch.
      */
     enum Klasse {
-        K1, K2, K3_K4, K3_STRICH
+        K1, K2, K3_K4, K3_STRICH, SCHEMA, SCHEMA_OHNE
     }
 
     private KontextRegel() {
@@ -136,7 +148,9 @@ final class KontextRegel {
                 ende += Character.charCount(c);
             }
             int weiter = ende;
-            if (istKontextwort(text, i, ende, true)) {
+            if (art == Art.TOKEN) {
+                weiter = Math.max(ende, TokenKontext.auswerten(text, i, ende, ziel));
+            } else if (istKontextwort(text, i, ende, true)) {
                 weiter = Math.max(ende, auswerten(text, ende, art, ziel));
             }
             i = weiter;
@@ -179,6 +193,18 @@ final class KontextRegel {
         return false;
     }
 
+    /**
+     * Wie {@link #istKontextwort(String, int, int, boolean)} fuer die Art: bei {@link Art#TOKEN} gelten die Woerter
+     * aus {@link TokenKontext} ({@code mitKurzformen} schaltet dort {@code Bearer} und {@code Authorization} ein), bei
+     * {@link Art#PASSWORT} unveraendert die Woerter aus D-4.
+     */
+    static boolean istKontextwort(String text, int von, int ende, boolean mitKurzformen, Art art) {
+        if (art == Art.TOKEN) {
+            return TokenKontext.art(text, von, ende, mitKurzformen) != TokenKontext.KEIN;
+        }
+        return istKontextwort(text, von, ende, mitKurzformen);
+    }
+
     // ------------------------------------------------------------------ Verbinder und Wert
 
     /** Wertet hinter dem Kontextwort aus; liefert die Position, ab der weitergesucht wird (mindestens {@code kw}). */
@@ -211,7 +237,7 @@ final class KontextRegel {
     }
 
     /** Position hinter dem Verbinder K1 ({@code :} oder {@code =}) nach optionalem Leerraum, sonst -1. */
-    private static int verbinderAb(String text, int p) {
+    static int verbinderAb(String text, int p) {
         int q = ueberspringeLeerraum(text, p);
         if (q < text.length() && (text.charAt(q) == ':' || text.charAt(q) == '=')) {
             return q + 1;
@@ -340,7 +366,7 @@ final class KontextRegel {
         if (GeheimnisZeichen.istAnfuehrungOeffnend(text.charAt(start))) {
             int schluss = schliessendesZeichen(text, start);
             if (schluss >= 0) {
-                pruefeUndMelde(text, start + 1, schluss, schwach, true, art, ziel);
+                meldeWert(text, start + 1, schluss, schwach, true, klasse, art, ziel);
                 return schluss + 1;
             }
             start++;
@@ -362,19 +388,39 @@ final class KontextRegel {
                 && !GeheimnisZeichen.istZeilenumbruch(text.charAt(we))) {
             we++;
         }
-        if (we - start > Werttest.MAX_LAENGE) {
+        boolean schema = klasse == Klasse.SCHEMA || klasse == Klasse.SCHEMA_OHNE;
+        if (we - start > Werttest.MAX_LAENGE + (schema ? SCHLUSS_ZUGABE : 0)) {
             return we;
         }
         int e = kuerzeEnde(text, start, we);
+        if (schema) {
+            e = kuerzeSchluss(text, start, e, we);
+        }
         if (ausz > 0 && e - ausz > start && endetMitFolge(text, start, e, ausz)) {
             e = kuerzeEnde(text, start, e - ausz);
         }
         if (e > start && klasse == Klasse.K3_STRICH) {
             strichWert(text, start, e, art, ziel);
         } else if (e > start && !(klasse == Klasse.K2 && endetMitBindestrichKleinwort(text, start, e))) {
-            pruefeUndMelde(text, start, e, schwach, false, art, ziel);
+            meldeWert(text, start, e, schwach, false, klasse, art, ziel);
         }
         return we;
+    }
+
+    /**
+     * Schema-Wert (T-6): Ein schliessendes Anfuehrungszeichen, das in CSV verdoppelt ({@code ""}) oder in JSON im Text
+     * maskiert ({@code \"}) ist, gehoert nicht zum Wert; die Kuerzung am Ende laeuft danach noch einmal. Von einem
+     * maskierten Zeichen, das {@link #kuerzeEnde} schon entfernt hat, bleibt der Rueckstrich am Ende stehen und wird
+     * hier abgetrennt. {@code we} ist das Wortende, {@code e} das Ende nach der ersten Kuerzung.
+     */
+    private static int kuerzeSchluss(String text, int start, int e, int we) {
+        if (e - start > 2 && text.charAt(e - 1) == '"' && (text.charAt(e - 2) == '"' || text.charAt(e - 2) == '\\')) {
+            return kuerzeEnde(text, start, e - 2);
+        }
+        if (e - start > 1 && e < we && text.charAt(e - 1) == '\\' && text.charAt(e) == '"') {
+            return e - 1;
+        }
+        return e;
     }
 
     /**
@@ -510,15 +556,83 @@ final class KontextRegel {
         return -1;
     }
 
+    /** Prueft den Wert nach der Klasse des Verbinders: Schema-Klassen (T-6) mit Schema-Strenge, sonst wie bisher. */
+    private static void meldeWert(String text, int start, int ende, boolean schwach, boolean inAnfuehrung,
+                                  Klasse klasse, Art art, List<Finding> ziel) {
+        if (klasse == Klasse.SCHEMA || klasse == Klasse.SCHEMA_OHNE) {
+            pruefeSchema(text, start, ende, klasse == Klasse.SCHEMA ? KONFIDENZ_SICHER : KONFIDENZ_WAHRSCHEINLICH,
+                    inAnfuehrung, art, ziel);
+        } else {
+            pruefeUndMelde(text, start, ende, schwach, inAnfuehrung, art, ziel);
+        }
+    }
+
+    /**
+     * Schema-Strenge (D-8 W6 letzter Satz): W1 bis W5 und Laenge mindestens 16, ohne Klassenregel; die Konfidenz
+     * ist fest ({@code Authorization} und {@code Bearer} mit K1 0,95, {@code Bearer} ohne Verbinder 0,80).
+     */
+    private static void pruefeSchema(String text, int start, int ende, double konfidenz, boolean inAnfuehrung,
+                                     Art art, List<Finding> ziel) {
+        if (!istAufrufOderZuweisung(text, start, ende)
+                && Werttest.besteht(text, pruefAb(text, start, ende, inAnfuehrung), ende, Verbinder.SCHEMA,
+                        inAnfuehrung)) {
+            ziel.add(new Finding(art.typ(), text.substring(start, ende), start, ende, konfidenz, art.quelle()));
+        }
+    }
+
+    /**
+     * Ob der Wert {@code text[start, ende)} die Form {@code name="..."} hat oder eine runde Klammer enthaelt:
+     * Parameter von HTTP-Kopfzeilen ({@code Bearer error="invalid_token"}) und Aufrufe
+     * ({@code Basic base64(user:password)}) sind keine Tokens (Entscheidung 2 nach der Pruefung von T-6). Die Form
+     * {@code name="..."} ist ein Buchstabe, eine Ziffer oder {@code _}, dann {@code =}, ein Anfuehrungszeichen im
+     * Innern des Werts und dahinter nicht das Wertende; bei verdoppeltem Anfuehrungszeichen ({@code error=""x""}, CSV)
+     * muss danach ein Buchstabe, eine Ziffer oder {@code _} folgen. Base64-Padding vor einem schliessenden,
+     * verdoppelten ({@code ==""}) oder am Ende stehenden Anfuehrungszeichen ist kein Parameter. Ein Durchlauf ueber
+     * den Wert.
+     */
+    private static boolean istAufrufOderZuweisung(String text, int start, int ende) {
+        for (int i = start; i < ende; i++) {
+            char c = text.charAt(i);
+            if (c == '(' || c == ')' || (c == '=' && istParameterAnfuehrung(text, start, i, ende))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Ob an {@code text[i]} ({@code =}) die Form {@code name="x} beginnt (siehe {@link #istAufrufOderZuweisung}). */
+    private static boolean istParameterAnfuehrung(String text, int start, int i, int ende) {
+        if (i <= start || i + 2 >= ende || text.charAt(i + 1) != '"' || !istNamenszeichen(text.charAt(i - 1))) {
+            return false;
+        }
+        int k = i + 2;
+        if (text.charAt(k) != '"') {
+            return true;
+        }
+        return k + 1 < ende && istNamenszeichen(text.charAt(k + 1));
+    }
+
+    private static boolean istNamenszeichen(char c) {
+        return Character.isLetterOrDigit(c) || c == '_';
+    }
+
+    /**
+     * Beginn der Pruefung des Werts {@code text[start, ende)}: Ein maskiertes Anfuehrungszeichen am Anfang
+     * (Rueckstrich und Zeichen) ist keine Pfadform (W4); der Rueckstrich zaehlt beim Wert-Test nicht, der Fund deckt
+     * ihn trotzdem.
+     */
+    private static int pruefAb(String text, int start, int ende, boolean inAnfuehrung) {
+        return inAnfuehrung && ende - start > 1 && text.charAt(start) == '\\'
+                && (text.charAt(start + 1) == '"' || text.charAt(start + 1) == '\'') ? start + 1 : start;
+    }
+
     /** Prueft den Wert und haengt bei Erfolg den Kandidaten an. */
     static void pruefeUndMelde(String text, int start, int ende, boolean schwach, boolean inAnfuehrung,
                                Art art, List<Finding> ziel) {
-        Verbinder v = schwach ? Verbinder.SCHWACH : Verbinder.STARK;
-        // Ein maskiertes Anfuehrungszeichen am Anfang (Rueckstrich und Zeichen) ist keine Pfadform (W4): der
-        // Rueckstrich zaehlt beim Wert-Test nicht, der Fund deckt ihn trotzdem.
-        int pruefAb = inAnfuehrung && ende - start > 1 && text.charAt(start) == '\\'
-                && (text.charAt(start + 1) == '"' || text.charAt(start + 1) == '\'') ? start + 1 : start;
-        if (!Werttest.besteht(text, pruefAb, ende, v, inAnfuehrung)) {
+        int ab = pruefAb(text, start, ende, inAnfuehrung);
+        boolean ok = schwach ? Werttest.besteht(text, ab, ende, Verbinder.SCHWACH, inAnfuehrung)
+                : Werttest.besteht(text, ab, ende, Verbinder.STARK, inAnfuehrung);
+        if (!ok) {
             return;
         }
         int laenge = text.codePointCount(start, ende);

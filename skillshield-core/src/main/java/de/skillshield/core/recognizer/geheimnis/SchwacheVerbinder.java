@@ -103,7 +103,7 @@ final class SchwacheVerbinder {
                 ende += Character.charCount(c);
             }
             int weiter = ende;
-            if (KontextRegel.istKontextwort(text, i, ende, false)) {
+            if (KontextRegel.istKontextwort(text, i, ende, false, art)) {
                 weiter = Math.max(ende, auswerten(i, ende));
             }
             i = weiter;
@@ -276,7 +276,8 @@ final class SchwacheVerbinder {
                 }
                 ende += Character.charCount(c);
             }
-            if (KontextRegel.istKontextwort(text, i, ende, true) && KontextRegel.verbinderK1(text, ende) >= 0) {
+            if (KontextRegel.istKontextwort(text, i, ende, true, art)
+                    && KontextRegel.verbinderK1(text, ende) >= 0) {
                 return true;
             }
             i = ende;

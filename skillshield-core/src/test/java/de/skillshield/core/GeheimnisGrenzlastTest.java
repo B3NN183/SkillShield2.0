@@ -3,6 +3,7 @@ package de.skillshield.core;
 import static de.skillshield.core.SynthetischeGeheimnisse.P1;
 import static de.skillshield.core.SynthetischeGeheimnisse.P2;
 import static de.skillshield.core.SynthetischeGeheimnisse.P3;
+import static de.skillshield.core.SynthetischeGeheimnisse.T;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -10,13 +11,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.pseudonymize.PseudonymizationResult;
 import de.skillshield.core.pseudonymize.Pseudonymizer;
+import de.skillshield.core.recognizer.Recognizer;
 import de.skillshield.core.recognizer.TextScanner;
 import de.skillshield.core.recognizer.geheimnis.GeheimnisTypen;
 import de.skillshield.core.recognizer.geheimnis.PasswortRecognizer;
+import de.skillshield.core.recognizer.geheimnis.TokenRecognizer;
 import de.skillshield.core.reidentify.ReidentificationResult;
 import de.skillshield.core.reidentify.Reidentifier;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -31,9 +35,9 @@ import org.junit.jupiter.params.provider.MethodSource;
  * {@code assertTimeoutPreemptively}), die Zahl der PASSWORT-Funde stimmt exakt mit der Formel im Fall ueberein, und
  * der Roundtrip ist zeichengleich. Die Grenze ist die des bestehenden {@code GrenzlastTest}.
  *
- * <p>Stand T-5: die Kontextregel mit K1, Umbruch und K2 bis K4 (zwei Durchgaenge). Die Faelle fuer Tokens, JWT, PEM,
- * ODBC, Oracle und Kommandozeile folgen mit den jeweiligen Tasks. Die Texte entstehen zur Laufzeit; keine Meldung
- * nennt Text oder Wert.
+ * <p>Stand T-6: die Kontextregel mit K1, Umbruch und K2 bis K4 (zwei Durchgaenge) fuer Passwort und Token, dazu
+ * {@code Bearer}, {@code Authorization} und {@code API Key}. Die Faelle fuer JWT, PEM, ODBC, Oracle und Kommandozeile
+ * folgen mit den jeweiligen Tasks. Die Texte entstehen zur Laufzeit; keine Meldung nennt Text oder Wert.
  */
 class GeheimnisGrenzlastTest {
 
@@ -58,6 +62,11 @@ class GeheimnisGrenzlastTest {
     }
 
     private static void pruefe(String name, String text, int erwarteteFunde) {
+        pruefe(name, text, erwarteteFunde, 0);
+    }
+
+    /** Wie {@link #pruefe(String, String, int)}, mit der erwarteten Zahl der TOKEN-Funde (seit T-6). */
+    private static void pruefe(String name, String text, int erwarteteFunde, int erwarteteTokens) {
         assertTrue(text.length() >= MIN_ZEICHEN, name + ": Text zu kurz, " + text.length());
         TextScanner scanner = TextScanner.standard();
         List<Finding> funde = zeitbegrenzt(() -> scanner.scan(text));
@@ -65,8 +74,8 @@ class GeheimnisGrenzlastTest {
         ReidentificationResult zurueck = zeitbegrenzt(() -> REIDENTIFIER.restore(pseudo.text(), pseudo.mapping()));
         long passwoerter = funde.stream().filter(f -> f.type().equals(GeheimnisTypen.PASSWORT)).count();
         assertEquals(erwarteteFunde, passwoerter, name + ": Zahl der PASSWORT-Funde");
-        assertEquals(0, funde.stream().filter(f -> f.type().equals(GeheimnisTypen.TOKEN)).count(),
-                name + ": TOKEN-Funde");
+        assertEquals(erwarteteTokens, funde.stream().filter(f -> f.type().equals(GeheimnisTypen.TOKEN)).count(),
+                name + ": Zahl der TOKEN-Funde");
         assertTrue(text.equals(zurueck.text()), name + ": Roundtrip nicht zeichengleich");
         assertTrue(zurueck.unresolved().isEmpty(), name + ": unaufgeloeste Platzhalter");
         for (int i = 1; i < funde.size(); i++) {
@@ -136,7 +145,7 @@ class GeheimnisGrenzlastTest {
         };
     }
 
-    private static long minNanos(PasswortRecognizer erkenner, String text, int runden, int wiederholungen) {
+    private static long minNanos(Recognizer erkenner, String text, int runden, int wiederholungen) {
         long beste = Long.MAX_VALUE;
         for (int runde = 0; runde < runden; runde++) {
             long start = System.nanoTime();
@@ -172,11 +181,130 @@ class GeheimnisGrenzlastTest {
         }
     }
 
+    /** Wie oben fuer den {@code TokenRecognizer} (T-6) mit Bausteinen fuer jeden Zweig seiner Regel. */
+    @Test
+    void ak46_tokenErkenner_vervierfachterText_zeitWaechstDeutlichSchwaecherAlsQuadratisch() {
+        TokenRecognizer erkenner = new TokenRecognizer();
+        List<String> bausteine = List.of("Token ist ", "| Token | ", "<token>", "Token|a|", "x|Secret|ab", "Bearer ",
+                "Authorization: Bearer ", "Authorization: ", "API Key ", "a-b-token: ", "Token\ta\t", "<token>a",
+                "Bearer Bearer ", "__Token__ ", K_PASSWORT_TOKEN, "Authorization: Basic " + T + " ",
+                "Token ist " + SynthetischeGeheimnisse.hex64() + " ",
+                "Token:\n" + SynthetischeGeheimnisse.hex40() + "\n",
+                "\"Authorization\": \"Bearer " + SynthetischeGeheimnisse.base64Zeile(300) + "\", ",
+                "\"Authorization\": \"Bearer ", "Bearer error=\"a1\" ", "Authorization: Basic base64(");
+        for (String baustein : bausteine) {
+            String klein = baustein.repeat(250_000 / baustein.length() + 1);
+            String gross = baustein.repeat(1_000_000 / baustein.length() + 1);
+            minNanos(erkenner, klein, 2, 2);
+            minNanos(erkenner, gross, 2, 1);
+            long tKlein = minNanos(erkenner, klein, 5, 6);
+            long tGross = minNanos(erkenner, gross, 5, 6);
+            assertTrue(tGross < 10L * Math.max(tKlein, 1_000_000L),
+                    "Zeit waechst zu stark bei Baustein der Laenge " + baustein.length() + ": " + tKlein + " ns gegen "
+                            + tGross + " ns");
+        }
+    }
+
     @ParameterizedTest(name = "[{index}] {0}")
     @MethodSource("faelle")
     void ak46_eineMillionZeichen_dreiSchritteJeUnterZweiSekundenMitExakterFundzahl(String name, String text,
                                                                                     int erwartet) {
         pruefe(name, text, erwartet);
+    }
+
+    // ------------------------------------------------------------------ Tokens (T-6)
+
+    /**
+     * Faelle fuer den Token-Erkenner (T-6): Kontextwort mit K1 bis K4, {@code Bearer} und {@code Authorization} mit und
+     * ohne Wert, {@code API Key}, ein Wort von einer Million Zeichen hinter dem Kontextwort, Kontextwoerter mit
+     * langen Trennerfolgen. Je Fall die Zahl der TOKEN-Funde nach der Formel (Zahl der Wiederholungen oder 0).
+     */
+    static Stream<Arguments> tokenFaelle() {
+        String t1 = "Token: " + T + " ";
+        String t2 = "Token ist " + T + " ";
+        String t3 = "| Secret | " + T + " | ";
+        String t4 = "<token>" + T + "</token> ";
+        String b1 = "Bearer " + T + " ";
+        String b2 = "Authorization: Bearer " + T + " ";
+        String b3 = "API Key: " + T + " ";
+        String b4 = "**Token:** **" + T + "** ";
+        // Durchlauf 3: Hex und UUID hinter K2 bis K4 und Zeilenumbruch sind wegen W6 (zwei Klassen) kein Fund
+        // (Entscheidung des Nutzers nach Durchlauf 2, erwartet 0); Schema-Wert in Anfuehrungszeichen mit 300 und
+        // 4 096 Zeichen (Entscheidung 3 nach Durchlauf 1) bleibt Fund
+        String s1 = "Token ist " + SynthetischeGeheimnisse.hex64() + " ";
+        String s2 = "| Token | " + SynthetischeGeheimnisse.uuid() + " | ";
+        String s3 = "<token>" + SynthetischeGeheimnisse.hex40() + "</token> ";
+        String s4 = "Token:\n" + SynthetischeGeheimnisse.hex32() + "\n";
+        String s5 = "Token\t" + SynthetischeGeheimnisse.hex64().toUpperCase(Locale.ROOT) + "\n";
+        String s6 = "\"Authorization\": \"Bearer " + SynthetischeGeheimnisse.base64Zeile(300) + "\", ";
+        String s7 = "\"Authorization\": \"Bearer " + SynthetischeGeheimnisse.base64Zeile(4096) + "\", ";
+        return Stream.of(
+                Arguments.of("Hex hinter Token ist wiederholt", wiederholt(s1), 0),
+                Arguments.of("UUID in Tabelle wiederholt", wiederholt(s2), 0),
+                Arguments.of("Hex im Element wiederholt", wiederholt(s3), 0),
+                Arguments.of("Hex nach Zeilenumbruch wiederholt", wiederholt(s4), 0),
+                Arguments.of("Hex gross nach Tabulator wiederholt", wiederholt(s5), 0),
+                Arguments.of("Schema in Anfuehrungszeichen mit 300 Zeichen wiederholt", wiederholt(s6), anzahl(s6)),
+                Arguments.of("Schema in Anfuehrungszeichen mit 4 096 Zeichen wiederholt", wiederholt(s7),
+                        anzahl(s7)),
+                Arguments.of("Schema in Anfuehrungszeichen, Wort von einer Million Zeichen",
+                        "\"Authorization\": \"Bearer " + "a1".repeat(500_000), 0),
+                Arguments.of("Authorization: Bearer error= wiederholt", wiederholt("Bearer error=\"a1\" "), 0),
+                Arguments.of("Token: wiederholt", wiederholt("Token: "), 0),
+                Arguments.of("Token: Wert wiederholt", wiederholt(t1), anzahl(t1)),
+                Arguments.of("Token ist wiederholt", wiederholt("Token ist "), 0),
+                Arguments.of("Token ist Wert wiederholt", wiederholt(t2), anzahl(t2)),
+                Arguments.of("| Secret | wiederholt", wiederholt("| Secret | "), 0),
+                Arguments.of("| Secret | Wert | wiederholt", wiederholt(t3), anzahl(t3)),
+                Arguments.of("<token> wiederholt", wiederholt("<token>"), 0),
+                Arguments.of("<token>Wert</token> wiederholt", wiederholt(t4), anzahl(t4)),
+                Arguments.of("Bearer wiederholt", wiederholt("Bearer "), 0),
+                Arguments.of("Bearer Wert wiederholt", wiederholt(b1), anzahl(b1)),
+                Arguments.of("Authorization: wiederholt", wiederholt("Authorization: "), 0),
+                Arguments.of("Authorization: Bearer wiederholt", wiederholt("Authorization: Bearer "), 0),
+                Arguments.of("Authorization: Bearer Wert wiederholt", wiederholt(b2), anzahl(b2)),
+                Arguments.of("API Key: wiederholt", wiederholt("API Key: "), 0),
+                Arguments.of("API Key: Wert wiederholt", wiederholt(b3), anzahl(b3)),
+                Arguments.of("Token Zeilenumbruch wiederholt", wiederholt("Token:\n"), 0),
+                Arguments.of("Token: Wert und Zeilenumbruch wiederholt", wiederholt("Token:\n" + T + "\n"),
+                        anzahl("Token:\n" + T + "\n")),
+                Arguments.of("Auszeichnung wiederholt", wiederholt(b4), anzahl(b4)),
+                Arguments.of("eine Zeile aus einer Million Buchstaben und Ziffern hinter Token: ",
+                        "Token: " + "a1".repeat(500_000), 0),
+                Arguments.of("ein Wort von einer Million Zeichen hinter Bearer", "Bearer " + "a1".repeat(500_000), 0),
+                Arguments.of("ein Wort von einer Million Zeichen hinter Authorization: Bearer",
+                        "Authorization: Bearer " + "a1".repeat(500_000), 0),
+                Arguments.of("ein Wort auf token endend, dann Doppelpunkt", "a".repeat(999_993) + "token" + ": ", 0),
+                Arguments.of("ein Wort mit Trennern auf token endend", "a-".repeat(500_000) + "token: ", 0),
+                Arguments.of("token: ohne Leerraum wiederholt", wiederholt("token:"), 0),
+                Arguments.of("Bearer Bearer wiederholt", wiederholt("Bearer Bearer "), 0),
+                Arguments.of("Authorization Authorization wiederholt", wiederholt("Authorization "), 0),
+                Arguments.of("Kette Token|a| ohne Leerraum", wiederholt("Token|a|"), 0),
+                Arguments.of("Kette x|Secret|ab ohne Leerraum", wiederholt("x|Secret|ab"), 0),
+                Arguments.of("Kette Token Tabulator a Tabulator", wiederholt("Token\ta\t"), 0),
+                Arguments.of("Kette <token>a ohne Leerraum", wiederholt("<token>a"), 0),
+                Arguments.of("geschachtelte Unterstriche wiederholt", wiederholt("__Token__ "), 0));
+    }
+
+    private static final String K_PASSWORT_TOKEN = "Passwort: " + P1 + " Token: " + T + " Bearer " + T
+            + " Secret ist " + T + " Kennwort ist " + P2 + " <token>" + T + "</token>\n";
+
+    @ParameterizedTest(name = "[{index}] {0}")
+    @MethodSource("tokenFaelle")
+    void ak46_tokenFaelle_eineMillionZeichen_dreiSchritteJeUnterZweiSekundenMitExakterFundzahl(String name,
+            String text, int erwarteteTokens) {
+        pruefe(name, text, 0, erwarteteTokens);
+    }
+
+    @ParameterizedTest(name = "[{index}] {0}")
+    @MethodSource("gemischteFaelle")
+    void ak46_passwortUndTokenGemischt_exakteFundzahlen(String name, String text, int passwoerter, int tokens) {
+        pruefe(name, text, passwoerter, tokens);
+    }
+
+    static Stream<Arguments> gemischteFaelle() {
+        return Stream.of(Arguments.of("Passwort und Token gemischt", wiederholt(K_PASSWORT_TOKEN),
+                anzahl(K_PASSWORT_TOKEN) * 2, anzahl(K_PASSWORT_TOKEN) * 4));
     }
 
     @Test

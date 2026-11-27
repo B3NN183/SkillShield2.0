@@ -235,7 +235,10 @@ class GeheimnisDifferenzTest {
         // Umgestellt durch geheimnisse-erkennung T-5: alt texte=97 (K1, ZWISCHENTEIL, UMBRUCH, ANFUEHRUNG, MEHRFACH),
         // neu texte=112 (dazu die 15 Faelle der Kategorien K2, K3, K4); funde=21 und die Gleichheit der
         // zusaetzlichen Funde mit den erwarteten bleiben.
-        assertEquals("Positivkorpus aktiv|texte=112|funde=21|zusaetzlich=" + erwartetAktiv, a.kurz());
+        // Umgestellt durch geheimnisse-erkennung T-6: alt texte=112, funde=21; neu texte=134 (dazu die 22 Faelle von
+        // TOKEN_KONTEXT und SCHEMA), funde=22 (der LANR-Fund des Falls mit Token); die Gleichheit der zusaetzlichen
+        // Funde mit den erwarteten bleibt.
+        assertEquals("Positivkorpus aktiv|texte=134|funde=22|zusaetzlich=" + erwartetAktiv, a.kurz());
         Messung i = vergleiche("Positivkorpus inaktiv", inaktiv, TextScannerStandGeheimnis.ALT,
                 TextScanner.standard());
         assertEquals(List.of(), i.verstoesse());
@@ -245,10 +248,20 @@ class GeheimnisDifferenzTest {
         // aendern sich mit T-6 und T-8.
         // Umgestellt durch geheimnisse-erkennung T-5: alt texte=102, neu texte=87 (die 15 Faelle von K2, K3, K4 sind
         // jetzt aktiv und stehen oben); funde=8 und zusaetzlich=7 bleiben.
-        assertEquals("Positivkorpus inaktiv|texte=87|funde=8|zusaetzlich=7", i.kurz());
+        // Umgestellt durch geheimnisse-erkennung T-6: alt texte=87, funde=8, zusaetzlich=7; neu texte=65 (die 22
+        // Faelle von TOKEN_KONTEXT und SCHEMA sind jetzt aktiv und stehen oben), funde=7 (der LANR-Fund steht im
+        // aktiven Fall mit Token), zusaetzlich=10: ohne TOKEN_KONTEXT-17 sind es sechs vorgezogene PASSWORT-Funde
+        // (ODBC-01, -02, -07, KOMMANDOZEILE-01, -03, -06), dazu vier vorgezogene TOKEN-Funde der Kontextregel bei
+        // Kommandozeile mit Gleichheitszeichen (KOMMANDOZEILE-07, -09, -10, -12: --client-secret=, --api-key=,
+        // --secret=, --apikey=; gemessen, nicht erschlossen). Sie sind
+        // erwuenscht (mehr Schutz) und aendern sich mit T-8.
+        assertEquals("Positivkorpus inaktiv|texte=65|funde=7|zusaetzlich=10", i.kurz());
     }
 
-    /** Positiv-Generator (erste 20 000 Texte): ALT liefert nichts, standard() genau einen Fund je Text. */
+    /**
+     * Positiv-Generator (erste 20 000 Texte): ALT liefert nichts, standard() genau einen Fund je Text (PASSWORT oder
+     * TOKEN, seit T-6 beide).
+     */
     @Test
     void positivGenerator_standardGleichAlt_einZusatzfundJePasswortText() {
         List<String> texte = new ArrayList<>();
@@ -258,7 +271,9 @@ class GeheimnisDifferenzTest {
         }
         Messung m = vergleiche("Positiv-Generator", texte, TextScannerStandGeheimnis.ALT, TextScanner.standard());
         assertEquals(List.of(), m.verstoesse());
-        assertEquals("Positiv-Generator|texte=20000|funde=0|zusaetzlich=13344", m.kurz());
+        // Umgestellt durch geheimnisse-erkennung T-6: alt zusaetzlich=13344 (nur PASSWORT-Texte), neu 20000 (jetzt
+        // auch die TOKEN-Texte, je ein Fund).
+        assertEquals("Positiv-Generator|texte=20000|funde=0|zusaetzlich=20000", m.kurz());
     }
 
     /** Negativ- und Verletzend-Generator (je erste 20 000 Texte): keine zusaetzlichen Funde. */

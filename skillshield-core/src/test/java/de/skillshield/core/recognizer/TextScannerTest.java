@@ -10,6 +10,7 @@ import de.skillshield.core.model.ConfidenceLevel;
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.model.FindingType;
 import de.skillshield.core.recognizer.geheimnis.PasswortRecognizer;
+import de.skillshield.core.recognizer.geheimnis.TokenRecognizer;
 import de.skillshield.core.recognizer.general.EmailRecognizer;
 import de.skillshield.core.recognizer.general.Ipv4Recognizer;
 import de.skillshield.core.recognizer.general.PathRecognizer;
@@ -360,9 +361,11 @@ class TextScannerTest {
         // Umgestellt durch geheimnisse-erkennung T-4: alte Erwartung: die acht Erkenner bis BsnrRecognizer;
         // neue Erwartung: dahinter PasswortRecognizer (Index 8). Grund: Der Standard-Scanner bekommt den
         // Passwort-Erkenner hinter den bisherigen acht (Plan Kapitel 8.1); deren Reihenfolge bleibt unveraendert.
+        // Umgestellt durch geheimnisse-erkennung T-6: alte Erwartung: die Liste endete mit PasswortRecognizer
+        // (Index 8); neue Erwartung: dahinter TokenRecognizer (Index 9, Plan Kapitel 8.1).
         assertEquals(List.of(EmailRecognizer.class, Ipv4Recognizer.class, UrlRecognizer.class, PathRecognizer.class,
                 LanrRecognizer.class, IkRecognizer.class, KvnrRecognizer.class, BsnrRecognizer.class,
-                PasswortRecognizer.class), klassen);
+                PasswortRecognizer.class, TokenRecognizer.class), klassen);
     }
 
     @Test

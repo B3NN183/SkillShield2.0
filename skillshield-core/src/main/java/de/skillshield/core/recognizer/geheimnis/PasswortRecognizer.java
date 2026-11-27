@@ -2,7 +2,6 @@ package de.skillshield.core.recognizer.geheimnis;
 
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.recognizer.Recognizer;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -64,10 +63,12 @@ import java.util.Objects;
  * {@code )} {@code ]} am Ende ab), steht der Rest als PASSWORT-Reststueck daneben (Nachtrag des Plans zu AK-28).
  *
  * <p><b>Kontextfreie Formen und Grenze zu Feature 3 (D-10 bis D-12).</b> Dieser Erkenner liefert nur Werte nach einem
- * Kontextwort. Hashes, Pruefsummen, UUIDs und lange Zufallsfolgen ohne Kontextwort sind kein Fund (D-10); JWT, PEM
- * und Praefix-Token (D-11) gehoeren dem spaeteren Token-Erkenner. Bei Verbindungszeichenfolgen und URLs (D-12) wird
- * nur das Geheimnis geschuetzt: Host, Port und Dienstname gehoeren zu Feature 3, der Benutzername zu Feature 4. Eine
- * URL mit Zugangsdaten ersetzt der bestehende URL-Fund als Ganzes (Fall 4, G-4); die ODBC-Regel, die Oracle-Form und
+ * Kontextwort. Hashes, Pruefsummen, UUIDs und lange Zufallsfolgen ohne Kontextwort sind kein Fund (D-10); Tokens
+ * (D-5, D-11) liefert der {@link TokenRecognizer} (seit T-6, mit denselben zwei Durchgaengen; die Kandidaten dieses
+ * Erkenners aendern sich dadurch nicht), JWT, PEM und Praefix-Token gehoeren dessen spaeterem Ausbau. Bei
+ * Verbindungszeichenfolgen und URLs (D-12) wird nur das Geheimnis geschuetzt: Host, Port und Dienstname gehoeren
+ * zu Feature 3, der Benutzername zu Feature 4. Eine URL mit Zugangsdaten ersetzt der bestehende URL-Fund als
+ * Ganzes (Fall 4, G-4); die ODBC-Regel, die Oracle-Form und
  * die Kommandozeile (Faelle 1 bis 3, Quelle {@code passwort-verbindung}) folgen in T-8, bis dahin wertet die
  * Kontextregel solche Schluessel mit ({@code Pwd=...} liest das erste Wort bis zum Leerraum).
  *
@@ -154,21 +155,6 @@ public final class PasswortRecognizer implements Recognizer {
     @Override
     public List<Finding> detect(String text) {
         Objects.requireNonNull(text, "text");
-        List<Finding> erster = new ArrayList<>();
-        KontextRegel.finde(text, Art.PASSWORT, erster);
-        List<Finding> zweiter = new ArrayList<>();
-        SchwacheVerbinder.finde(text, Art.PASSWORT, erster, zweiter);
-        if (zweiter.isEmpty()) {
-            return List.copyOf(erster);
-        }
-        List<Finding> kandidaten = new ArrayList<>(erster.size() + zweiter.size());
-        int a = 0;
-        int b = 0;
-        while (a < erster.size() || b < zweiter.size()) {
-            boolean ersterZuerst = b >= zweiter.size()
-                    || (a < erster.size() && erster.get(a).start() < zweiter.get(b).start());
-            kandidaten.add(ersterZuerst ? erster.get(a++) : zweiter.get(b++));
-        }
-        return List.copyOf(kandidaten);
+        return ZweiDurchgaenge.finde(text, Art.PASSWORT);
     }
 }

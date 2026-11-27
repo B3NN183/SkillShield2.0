@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import de.skillshield.core.model.Finding;
 import de.skillshield.core.recognizer.Recognizer;
 import de.skillshield.core.recognizer.geheimnis.PasswortRecognizer;
+import de.skillshield.core.recognizer.geheimnis.TokenRecognizer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +39,12 @@ class GeheimnisKandidatenTest {
 
     /** Prueft die Kandidaten eines Texts; liefert die Zahl der Kandidaten. */
     private static int pruefe(String menge, int index, String text) {
-        List<Finding> k = PASSWORT.detect(text);
+        return pruefe(PASSWORT, menge, index, text);
+    }
+
+    /** Wie oben fuer einen beliebigen Geheimnis-Erkenner (seit T-6 auch den {@code TokenRecognizer}). */
+    private static int pruefe(Recognizer erkenner, String menge, int index, String text) {
+        List<Finding> k = erkenner.detect(text);
         for (int i = 0; i < k.size(); i++) {
             Finding f = k.get(i);
             assertTrue(text.substring(f.start(), f.end()).equals(f.originalValue()),
@@ -157,6 +163,74 @@ class GeheimnisKandidatenTest {
             assertTrue(pruefe("K2 bis K4", i, texte.get(i)) >= 1, "Kandidat " + i);
         }
         assertEquals(0, pruefe("K2 bis K4 Kontextwort als Wert", 0, "Passwort ist Passwort ist " + P1), "Zahl");
+    }
+
+    // ------------------------------------------------------------------ TokenRecognizer (T-6)
+
+    private static final Recognizer TOKEN = new TokenRecognizer();
+    private static final long SEED_ZUFALL_TOKEN = 20261207L;
+
+    @Test
+    void token_pruefstand_kandidatenUeberlappungsfrei() {
+        int summe = 0;
+        for (Map.Entry<String, List<String>> e : GeheimnisFehlalarmTest.korpus().entrySet()) {
+            for (int i = 0; i < e.getValue().size(); i++) {
+                summe += pruefe(TOKEN, e.getKey(), i, e.getValue().get(i));
+            }
+        }
+        assertEquals(0, summe, "Token-Kandidaten im Negativkorpus");
+        List<GeheimnisPositivKorpus.Fall> faelle = GeheimnisPositivKorpus.faelle();
+        int positiv = 0;
+        for (int i = 0; i < faelle.size(); i++) {
+            positiv += pruefe(TOKEN, faelle.get(i).id(), i, faelle.get(i).text());
+        }
+        assertTrue(positiv >= 22, "zu wenige Token-Kandidaten im Positivkorpus: " + positiv);
+        assertEquals(0, pruefe(TOKEN, "Ticket", 0, SynthetischeGeheimnisse.korpusText("referenz-ticket.txt")));
+    }
+
+    @Test
+    void token_generatoren_ersteTexte_kandidatenUeberlappungsfrei() {
+        List<GeheimnisPositivGenerator.Text> positiv = GeheimnisPositivGenerator.lauf(GeheimnisPositivGenerator.SEED,
+                GENERATORTEXTE).texte();
+        int summe = 0;
+        for (int i = 0; i < positiv.size(); i++) {
+            summe += pruefe(TOKEN, "Positiv-Generator", i, positiv.get(i).text());
+        }
+        assertTrue(summe >= GENERATORTEXTE / 4, "zu wenige Token-Kandidaten: " + summe);
+        for (String t : GeheimnisNegativGenerator.lauf(GeheimnisNegativGenerator.SEED, GENERATORTEXTE).texte()) {
+            assertEquals(0, TOKEN.detect(t).size(), "Token-Kandidat im Negativ-Generator");
+        }
+    }
+
+    @Test
+    void token_zufallslauf_festerSeed_kandidatenUeberlappungsfrei() {
+        List<String> teile = List.of("Token", "Secret", "API Key", "api_key", "access_token", "Bearer", "Bearer ",
+                "Authorization", "Authorization: ", "Basic ", " ist ", " lautet ", "|", " | ", "\t", "<token>",
+                "</token>", "<secret>", ": ", "=", ":", "\n", "\r\n", " ", "  ", "\"", "'", "`", "**", "__", "-",
+                "f" + (char) 0xFC + "r ", "svc_x ", "x-", "-Token", "_token", SynthetischeGeheimnisse.T,
+                SynthetischeGeheimnisse.T_16, SynthetischeGeheimnisse.T_15, P1, P2, P_MIT_LEERZEICHEN, "$", "<",
+                "/", "Passwort: ", new String(Character.toChars(0x1F600)), (char) 0xA0 + "");
+        Random r = new Random(SEED_ZUFALL_TOKEN);
+        int kandidaten = 0;
+        int mitSchwach = 0;
+        for (int i = 0; i < ZUFALLSTEXTE; i++) {
+            StringBuilder sb = new StringBuilder();
+            int n = 1 + r.nextInt(30);
+            for (int k = 0; k < n; k++) {
+                sb.append(teile.get(r.nextInt(teile.size())));
+            }
+            String text = sb.toString();
+            int anzahl = pruefe(TOKEN, "Zufall Token", i, text);
+            kandidaten += anzahl;
+            for (Finding f : TOKEN.detect(text)) {
+                if (f.confidence() < 0.90) {
+                    mitSchwach++;
+                    break;
+                }
+            }
+        }
+        assertTrue(kandidaten >= ZUFALLSTEXTE / 8, "der Zufallslauf trifft zu selten: " + kandidaten);
+        assertTrue(mitSchwach >= ZUFALLSTEXTE / 20, "zu wenige Texte mit Kandidat 0,80: " + mitSchwach);
     }
 
     @Test

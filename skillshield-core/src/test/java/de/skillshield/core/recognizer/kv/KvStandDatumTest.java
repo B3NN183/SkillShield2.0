@@ -14,6 +14,7 @@ import de.skillshield.core.model.FindingType;
 import de.skillshield.core.recognizer.Recognizer;
 import de.skillshield.core.recognizer.TextScanner;
 import de.skillshield.core.recognizer.geheimnis.PasswortRecognizer;
+import de.skillshield.core.recognizer.geheimnis.TokenRecognizer;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -206,8 +207,12 @@ class KvStandDatumTest {
         // Umgestellt durch geheimnisse-erkennung T-4: alte Erwartung: gleiche Zahl der Erkenner (8 und 8); neue
         // Erwartung: standard() hat einen Erkenner mehr (9), den PasswortRecognizer am Ende; die ersten acht
         // entsprechen unveraendert denen von ALT_DATUM. Grund: standard() bekommt den Passwort-Erkenner (Plan T-4).
-        assertEquals(alt.size() + 1, neu.size(), "Zahl der Erkenner");
-        assertTrue(neu.get(neu.size() - 1) instanceof PasswortRecognizer, "letzter Erkenner von standard()");
+        // Umgestellt durch geheimnisse-erkennung T-6: alte Erwartung: ein Erkenner mehr (9), der letzte der
+        // PasswortRecognizer; neue Erwartung: zwei Erkenner mehr (10), die letzten PasswortRecognizer und
+        // TokenRecognizer; die ersten acht bleiben unveraendert (Siegel unberuehrt).
+        assertEquals(alt.size() + 2, neu.size(), "Zahl der Erkenner");
+        assertTrue(neu.get(neu.size() - 2) instanceof PasswortRecognizer, "vorletzter Erkenner von standard()");
+        assertTrue(neu.get(neu.size() - 1) instanceof TokenRecognizer, "letzter Erkenner von standard()");
         for (int i = 0; i < 4; i++) {
             assertEquals(neu.get(i).getClass(), alt.get(i).getClass(), "allgemeiner Erkenner " + i);
         }

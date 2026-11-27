@@ -70,7 +70,8 @@ class GeheimnisFehlalarmTest {
      * {@code de.skillshield.core.recognizer.geheimnis} liegt (Istwert; in T-2 gibt es keinen, ab T-4 den
      * {@code PasswortRecognizer}, ab T-6 auch den {@code TokenRecognizer}).
      */
-    static final int GEHEIMNIS_ERKENNER_IST = 1;
+    // Umgestellt durch geheimnisse-erkennung T-6: alt 1 (nur PasswortRecognizer), neu 2 (dazu TokenRecognizer).
+    static final int GEHEIMNIS_ERKENNER_IST = 2;
 
     /** Saetze mit K1, K2, K3, K4 im Korpus, Istwerte (Gegenprobe). */
     static final int KORPUS_K1_IST = 153;

@@ -54,11 +54,13 @@ class GeheimnisPositivKorpusTest {
      * Kategorien, die {@code standard()} schon erfuellen muss; in T-2 leer, T-4 und folgende schalten frei.
      * Umgestellt durch geheimnisse-erkennung T-5: alt K1, ZWISCHENTEIL, UMBRUCH, ANFUEHRUNG, MEHRFACH; neu dazu K2,
      * K3, K4 (nur die Freischaltung, die Pruefung bleibt unveraendert).
+     * Umgestellt durch geheimnisse-erkennung T-6: neu dazu TOKEN_KONTEXT und SCHEMA (MEHRFACH war schon aktiv).
      */
     static final Set<String> AKTIVE_KATEGORIEN = Set.of(GeheimnisPositivKorpus.K1,
             GeheimnisPositivKorpus.ZWISCHENTEIL, GeheimnisPositivKorpus.UMBRUCH,
             GeheimnisPositivKorpus.ANFUEHRUNG, GeheimnisPositivKorpus.MEHRFACH, GeheimnisPositivKorpus.K2,
-            GeheimnisPositivKorpus.K3, GeheimnisPositivKorpus.K4);
+            GeheimnisPositivKorpus.K3, GeheimnisPositivKorpus.K4, GeheimnisPositivKorpus.TOKEN_KONTEXT,
+            GeheimnisPositivKorpus.SCHEMA);
 
     /**
      * Treffer von {@code standard()} im Positiv-Generator je Typ. Erlaubt sind nur 0 (noch nicht freigeschaltet) und
@@ -67,7 +69,7 @@ class GeheimnisPositivKorpusTest {
      */
     static final int GENERATOR_PASSWORT_TREFFER_IST = 66_663;
     /** Sollwert TOKEN: 33 337 ab T-6 (sonst 0, siehe {@link #GENERATOR_PASSWORT_TREFFER_IST}). */
-    static final int GENERATOR_TOKEN_TREFFER_IST = 0;
+    static final int GENERATOR_TOKEN_TREFFER_IST = 33_337;
 
     /** Zahl der Faelle, der Konfliktfaelle und der Faelle je Kategorie (Istwerte). */
     static final int FAELLE_IST = 199;
