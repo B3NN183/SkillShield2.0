@@ -944,5 +944,69 @@ Festzuhalten (nur Tests und Javadoc, kein Produktcode):
    Benennung der 10 nicht gedeckten Fälle; Grenzliste in `TokenRecognizer` vollständig und Verweis auf die richtige
    Testklasse.
 
+### Entscheidung der Hauptsitzung zu T-7 (27.11.2026)
+
+1. **PEM in einer Zeile mit maskierten Zeilenumbrüchen** (Service-Account-JSON: `"private_key": "<BEGIN-Zeile>\n
+   <Base64>\n<END-Zeile>\n"`, `\n` als zwei Zeichen) ist ein echtes Leck und wird **in T-7 behoben**: Der Körper
+   zwischen BEGIN- und END-Markierung privater Arten ist auch dann ein Fund, wenn die Zeilen durch die
+   Zeichenfolge `\n` (bzw. `\r\n`) getrennt sind; BEGIN/END-Markierung bleiben Klartext. Linear, begrenzt; Fehlalarme
+   sind wegen der eindeutigen Markierung nicht zu erwarten, werden aber an Doku-Zeilen gemessen.
+2. Präzisierungen des engineers angenommen: Satzende-Punkt hinter JWT; PEM-Körper ohne 16 aufeinanderfolgende
+   Base64-Zeichen ist kein Fund; bei `ghp_`/`gho_`/`ghu_`/`ghs_`/`ghr_` besteht der Rest nur aus Buchstaben und Ziffern.
+   Die T-6-Grenze „lange JWT in `<token>`“ entfällt für JWT (die Form schützt sie).
+
+3. **Nach T-7, Durchlauf 1 (reviewer PASS; security FAIL mittel), verbindlich für Durchlauf 2:**
+   (a) **PEM zwischen Markierungen.** Zusätzlich zur Zeilenform gilt: Kommen eine BEGIN-Markierung privater Art
+   (fünf Bindestriche, `BEGIN`, Art, `PRIVATE KEY` bzw. `PRIVATE KEY BLOCK`, fünf Bindestriche) und danach die
+   passende END-Markierung vor,
+   ist der Bereich dazwischen ein Fund – gleich, ob die Markierungen am Zeilenanfang stehen, was davor steht (`> `,
+   `# `, `KEY="`, Tabellenzelle, Code-String) und ob die Körperzeilen durch echte Zeilenumbrüche, die Zeichenfolgen
+   `\n`/`\r\n` oder Leerzeichen getrennt sind. Der Fund beginnt hinter der BEGIN-Markierung (führender Leerraum bzw.
+   `\n` gehört nicht dazu) und endet vor der END-Markierung; Zeichen dazwischen, die zu einem Zeilenpräfix gehören,
+   werden mitersetzt (Überschutz, angenommen). Bedingungen: zwischen den Markierungen keine weitere BEGIN-Markierung,
+   Abstand höchstens 16 KiB, mindestens 16 aufeinanderfolgende Base64-Zeichen; sonst kein Fund. Linear. Punkt 1
+   (maskierte `\n`) ist damit erledigt. Ohne END-Markierung gilt weiter nur die Zeilenform (BEGIN am Zeilenanfang);
+   der Rest ist Grenze mit Test.
+   (b) **JWT:** alle Punkte am Ende abschneiden (nicht nur einen); die übrigen Bedingungen bleiben.
+   (c) **Grenzen mit Test, keine Regeländerung:** Präfix-Token ohne Ziffer (u. a. etwa 3 % der `glpat-`-Tokens);
+   Bezeichner mit `glpat-`, `xoxb-`, `xoxp-` oder `github_pat_` am Anfang und einer Ziffer sind Fund (Fehlalarm;
+   ein engeres Format verträgt sich nicht mit dem eingefrorenen Prüfstand); JWE mit fünf Teilen, umgebrochene JWT,
+   PuTTY-Schlüssel; END-Markierung an die letzte Körperzeile geklebt.
+   (d) Ersatz eines PASSWORT-Funds 0,80 durch TOKEN 0,95 gleichen Bereichs (`Passwort ist <JWT>`) im Javadoc nennen
+   und im Vergleichstest zählen.
+
+4. **Nach T-7, Durchlauf 2 (reviewer FAIL; security PASS niedrig), verbindlich für Durchlauf 3:**
+   (a) `TokenFormen.pem()`: Zusammenführung linear machen (Start/Ende als int führen, `Finding` einmal je Gruppe
+   bauen); Grenzlast-Baustein mit Kopfzeilen, die eigene BEGIN/END-Paare enthalten.
+   (b) **Fehlalarm über mehrere Absätze (Nutzerlinie „möglichst wenig Fehlalarme“):** Die Form zwischen Markierungen
+   meldet nur, wenn der Bereich überwiegend Schlüsselinhalt ist: Nach Abzug von Leerraum, Zeilenumbrüchen und den
+   Zeichenfolgen `\n`/`\r` müssen mindestens 80 % der übrigen Zeichen in Base64-Läufen von mindestens 16 Zeichen
+   liegen. Zeilenpräfixe (`> `, `# `, `//`), Anführungszeichen und `+` fallen damit nicht ins Gewicht; Erklärtexte
+   mit kurzen Wörtern schon. Bedingung: alle Fälle aus Durchlauf 2 (Zitat, Kommentar, `.env`, Tabelle, Java, eine
+   Zeile, JSON mit `\n`/`\r\n`, YAML, XML mit `&#10;`) bleiben voll gedeckt, Prüfstand grün; sonst Schwelle anpassen
+   und berichten, notfalls Grenze mit Test.
+   **Umgesetzt mit 70 % statt 80 %** (Messung des engineers, 500 Zufallsschlüssel je Form: bei 80 % verfehlten
+   kurze XML-Schlüssel und JSON mit `\/` einzelne Fälle; Erklärtexte erreichen höchstens 21 %); `\/` zählt als
+   Schrägstrich. Von der Hauptsitzung angenommen. Nachmessung security: echte Schlüssel 50,7–100 %, siehe „Abnahme
+   von T-7 mit Grenzen“.
+   (c) Typwechsel dokumentieren und zählen: PASSWORT-Fund gleichen Bereichs durch Präfix-Token ersetzt; PASSWORT-Fund
+   ganz in einem PEM-Fund zwischen Markierungen geht in diesem auf.
+   (d) Kleinigkeiten: „END an die letzte Körperzeile geklebt“ ist keine Grenze mehr (Javadoc, Testname); Grenze mit
+   Test „BEGIN-Markierung öffentlicher Art zwischen den Markierungen“.
+
+### Abnahme von T-7 mit Grenzen (Entscheidung des Nutzers, 28.11.2026)
+
+Nach Durchlauf 3: reviewer PASS, security FAIL (mittel). Der Nutzer hat auf Rückfrage entschieden, T-7 **ohne
+weiteren Engineer-Durchlauf an der Produktlogik** abzunehmen und den Fall als Grenze festzuhalten. Das FAIL von
+security bleibt bestehen und ist vom Nutzer angenommen. Festzuhalten (nur Tests und Javadoc):
+1. **Grenze (security, mittel):** Die 70 %-Schwelle der PEM-Form zwischen Markierungen lässt private Schlüssel
+   ungeschützt, wenn Kopfzeilen (`Proc-Type`, `DEK-Info`, `Comment` …) und Markup-Trenner (`&#13;&#10;`, `<br />`,
+   `" + Environment.NewLine`) den Anteil unter 70 % drücken – gemessen u. a. verschlüsselte EC-Schlüssel in XML/HTML
+   und Schlüssel in C#-Verkettung (82–99 % der Fälle ungeschützt). Am Zeilenanfang (Zeilenform) sind sie geschützt.
+   Behebung (nicht umgesetzt): Markup-Trenner wie Zeilenumbrüche werten, Standard-Kopfzeilen nicht mitzählen.
+2. **Javadoc berichtigen:** Der gemessene Anteil bei echten Schlüsseln liegt bei 50,7–100 %, nicht 79–100 %.
+3. **Grenze (niedrig):** Ein einzelner Satz zwischen Markierungen gleicher Art mit langem Wort oder Pfad ist ein Fund
+   (Überschutz); den Pfadfall in den bestehenden Grenztest aufnehmen.
+
 `SynthetischeGeheimnisse`: Die Anforderung definiert nur `P1`, `P2`, `P3`, `P6` und `P7`; „P1 bis P7“ in Kap. 6.2
 ist ungenau.

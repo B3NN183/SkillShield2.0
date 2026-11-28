@@ -60,7 +60,8 @@ class GeheimnisPositivKorpusTest {
             GeheimnisPositivKorpus.ZWISCHENTEIL, GeheimnisPositivKorpus.UMBRUCH,
             GeheimnisPositivKorpus.ANFUEHRUNG, GeheimnisPositivKorpus.MEHRFACH, GeheimnisPositivKorpus.K2,
             GeheimnisPositivKorpus.K3, GeheimnisPositivKorpus.K4, GeheimnisPositivKorpus.TOKEN_KONTEXT,
-            GeheimnisPositivKorpus.SCHEMA);
+            GeheimnisPositivKorpus.SCHEMA, GeheimnisPositivKorpus.JWT, GeheimnisPositivKorpus.PEM,
+            GeheimnisPositivKorpus.PRAEFIX);
 
     /**
      * Treffer von {@code standard()} im Positiv-Generator je Typ. Erlaubt sind nur 0 (noch nicht freigeschaltet) und

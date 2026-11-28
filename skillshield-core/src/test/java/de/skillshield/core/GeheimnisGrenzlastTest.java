@@ -35,9 +35,10 @@ import org.junit.jupiter.params.provider.MethodSource;
  * {@code assertTimeoutPreemptively}), die Zahl der PASSWORT-Funde stimmt exakt mit der Formel im Fall ueberein, und
  * der Roundtrip ist zeichengleich. Die Grenze ist die des bestehenden {@code GrenzlastTest}.
  *
- * <p>Stand T-6: die Kontextregel mit K1, Umbruch und K2 bis K4 (zwei Durchgaenge) fuer Passwort und Token, dazu
- * {@code Bearer}, {@code Authorization} und {@code API Key}. Die Faelle fuer JWT, PEM, ODBC, Oracle und Kommandozeile
- * folgen mit den jeweiligen Tasks. Die Texte entstehen zur Laufzeit; keine Meldung nennt Text oder Wert.
+ * <p>Stand T-7: die Kontextregel mit K1, Umbruch und K2 bis K4 (zwei Durchgaenge) fuer Passwort und Token, dazu
+ * {@code Bearer}, {@code Authorization} und {@code API Key}, und die kontextfreien Formen JWT, PEM-Koerper und
+ * Praefix-Token. Die Faelle fuer ODBC, Oracle und Kommandozeile folgen mit T-8. Die Texte entstehen zur Laufzeit;
+ * keine Meldung nennt Text oder Wert.
  */
 class GeheimnisGrenzlastTest {
 
@@ -305,6 +306,153 @@ class GeheimnisGrenzlastTest {
     static Stream<Arguments> gemischteFaelle() {
         return Stream.of(Arguments.of("Passwort und Token gemischt", wiederholt(K_PASSWORT_TOKEN),
                 anzahl(K_PASSWORT_TOKEN) * 2, anzahl(K_PASSWORT_TOKEN) * 4));
+    }
+
+    // ------------------------------------------------------------------ Formen (T-7)
+
+    private static String pemZeilen(String ze, int mindestZeichen) {
+        StringBuilder sb = new StringBuilder();
+        String zeile = SynthetischeGeheimnisse.base64Zeile(64);
+        while (sb.length() < mindestZeichen) {
+            if (sb.length() > 0) {
+                sb.append(ze);
+            }
+            sb.append(zeile);
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Faelle fuer die kontextfreien Formen (T-7; AK-46): BEGIN-Zeile ohne END wiederholt, ein PEM-Koerper von einer
+     * Million Zeichen (mit und ohne END, mit LF und CR LF, in einer Zeile), PEM-Bloecke wiederholt, lange
+     * Kopfzeilenfolge ohne Schluessel, BEGIN mitten in der Zeile, JWT-Anfang mit Punkt wiederholt, JWT wiederholt,
+     * Praefix-Token wiederholt und als Lauf von einer Million Zeichen. Je Fall die Zahl der TOKEN-Funde nach der
+     * Formel.
+     */
+    static Stream<Arguments> formenFaelle() {
+        String kopf = SynthetischeGeheimnisse.pemKopfzeile("PRIVATE KEY");
+        String fuss = SynthetischeGeheimnisse.pemFusszeile("PRIVATE KEY");
+        String jwt = SynthetischeGeheimnisse.jwt();
+        String praefixToken = SynthetischeGeheimnisse.praefixToken(SynthetischeGeheimnisse.praefixe().get(0));
+        String praefix = SynthetischeGeheimnisse.praefixe().get(0);
+        String blockMitEnde = SynthetischeGeheimnisse.pemBlock("PRIVATE KEY", "\n", true) + "\n";
+        String blockOhneEnde = SynthetischeGeheimnisse.pemBlock("PRIVATE KEY", "\n", false) + "\n";
+        String jwtBearer = "Authorization: Bearer " + jwt + "\n";
+        String teil = "a".repeat(333_333);
+        String kopfJwt = "ey" + "J" + teil;
+        String zeile64 = SynthetischeGeheimnisse.base64Zeile(64);
+        String paarLf = "x " + kopf + "\\n" + zeile64 + "\\n" + fuss + "\\n";
+        String paarCrLf = "x " + kopf + "\\r\\n" + zeile64 + "\\r\\n" + fuss + "\\r\\n";
+        String paarImFenster = "x " + kopf + " " + SynthetischeGeheimnisse.base64Zeile(16_000) + " " + fuss + " ";
+        String paarZuWeit = "x " + kopf + " " + SynthetischeGeheimnisse.base64Zeile(16_500) + " " + fuss + " ";
+        String kopfzeileMitPaar = "Comment: x " + kopf + " " + zeile64 + " " + fuss + "\n";
+        return Stream.of(
+                // Zeilenform ohne END: Kopfzeilen mit je einem eigenen BEGIN/END-Paar liegen alle im Fund der
+                // Zeilenform; jedes Paar ist ein Fund der Form zwischen Markierungen, alle werden zu einem vereinigt
+                Arguments.of("Kopfzeilen mit eingebetteten BEGIN/END-Paaren, dann eine Base64-Zeile",
+                        kopf + "\n" + wiederholt(kopfzeileMitPaar) + zeile64, 1),
+                Arguments.of("BEGIN mitten in der Zeile mit Leerzeichen wiederholt, ohne END",
+                        wiederholt("x " + kopf + " "), 0),
+                Arguments.of("BEGIN mit Koerper in einer Zeile wiederholt, ohne END",
+                        wiederholt("x " + kopf + " " + zeile64 + " "), 0),
+                Arguments.of("END ohne BEGIN wiederholt", wiederholt(fuss + " "), 0),
+                // nur die letzte BEGIN-Markierung hat keine weitere BEGIN-Markierung vor der END-Markierung: ein Fund
+                Arguments.of("viele BEGIN mit Koerper, am Ende eine END",
+                        wiederholt("x " + kopf + " " + zeile64 + " ") + fuss, 1),
+                Arguments.of("BEGIN/END-Paare mit maskiertem LF wiederholt", wiederholt(paarLf), anzahl(paarLf)),
+                Arguments.of("BEGIN/END-Paare mit maskiertem CR LF wiederholt", wiederholt(paarCrLf),
+                        anzahl(paarCrLf)),
+                Arguments.of("BEGIN/END-Paare im 16-KiB-Fenster wiederholt", wiederholt(paarImFenster),
+                        anzahl(paarImFenster)),
+                Arguments.of("BEGIN/END-Paare ueber dem 16-KiB-Fenster wiederholt", wiederholt(paarZuWeit), 0),
+                Arguments.of("BEGIN und END mit einer Million Zeichen dazwischen",
+                        "x " + kopf + " " + SynthetischeGeheimnisse.base64Zeile(MIN_ZEICHEN) + " " + fuss, 0),
+                Arguments.of("BEGIN-Zeile LF wiederholt, ohne END", wiederholt(kopf + "\n"), 0),
+                Arguments.of("BEGIN-Zeile CR LF wiederholt, ohne END", wiederholt(kopf + "\r\n"), 0),
+                Arguments.of("BEGIN-Zeile ohne Zeilenumbruch wiederholt", wiederholt(kopf), 0),
+                Arguments.of("PEM-Koerper von einer Million Zeichen, LF, mit END",
+                        kopf + "\n" + pemZeilen("\n", MIN_ZEICHEN) + "\n" + fuss, 1),
+                Arguments.of("PEM-Koerper von einer Million Zeichen, CR LF, mit END",
+                        kopf + "\r\n" + pemZeilen("\r\n", MIN_ZEICHEN) + "\r\n" + fuss, 1),
+                Arguments.of("PEM-Koerper von einer Million Zeichen, ohne END",
+                        kopf + "\n" + pemZeilen("\n", MIN_ZEICHEN), 1),
+                Arguments.of("PEM-Koerper in einer Zeile von einer Million Zeichen, mit END",
+                        kopf + "\n" + SynthetischeGeheimnisse.base64Zeile(MIN_ZEICHEN) + "\n" + fuss, 1),
+                Arguments.of("PEM-Bloecke mit END wiederholt", wiederholt(blockMitEnde), anzahl(blockMitEnde)),
+                Arguments.of("PEM-Bloecke ohne END wiederholt", wiederholt(blockOhneEnde), anzahl(blockOhneEnde)),
+                Arguments.of("Kopfzeilen ohne Schluessel hinter BEGIN",
+                        kopf + "\n" + wiederholt("Proc-Type: 4,ENCRYPTED\n"), 0),
+                Arguments.of("BEGIN mitten in der Zeile wiederholt, mit Zeilen",
+                        wiederholt("x " + kopf + "\n" + SynthetischeGeheimnisse.base64Zeile(64) + "\n"), 0),
+                Arguments.of("BEGIN, Leerzeilen ohne Ende", kopf + "\n" + "\n".repeat(MIN_ZEICHEN), 0),
+                Arguments.of("BEGIN, eine Zeile ohne Zeilenende von einer Million Zeichen",
+                        kopf + "\n" + "a b ".repeat(250_000), 0),
+                Arguments.of("JWT-Anfang mit Punkt wiederholt", wiederholt("ey" + "J" + "."), 0),
+                Arguments.of("Lauf aus JWT-Anfang und Punkten ohne Leerraum",
+                        wiederholt("ey" + "J" + "abcdefgh."), 0),
+                Arguments.of("JWT wiederholt", wiederholt(jwt + " "), anzahl(jwt + " ")),
+                Arguments.of("JWT hinter Authorization: Bearer wiederholt", wiederholt(jwtBearer),
+                        anzahl(jwtBearer)),
+                Arguments.of("ein JWT mit drei Teilen von je 333 333 Zeichen",
+                        kopfJwt + "." + kopfJwt + "." + teil, 1),
+                Arguments.of("Praefix-Token wiederholt", wiederholt(praefixToken + " "), anzahl(praefixToken + " ")),
+                Arguments.of("Praefix-Token ohne Leerraum davor wiederholt", wiederholt("x" + praefixToken + " "), 0),
+                Arguments.of("ein Praefix-Lauf von einer Million Zeichen", praefix + "a1".repeat(500_000), 1),
+                Arguments.of("ein Praefix-Lauf ohne Ziffer von einer Million Zeichen",
+                        praefix + "a".repeat(MIN_ZEICHEN), 0));
+    }
+
+    @ParameterizedTest(name = "[{index}] {0}")
+    @MethodSource("formenFaelle")
+    void ak46_formenFaelle_eineMillionZeichen_dreiSchritteJeUnterZweiSekundenMitExakterFundzahl(String name,
+            String text, int erwarteteTokens) {
+        pruefe(name, text, 0, erwarteteTokens);
+    }
+
+    /** Wie oben fuer die Formen (T-7): Bausteine fuer jeden Zweig von {@code TokenFormen}. */
+    @Test
+    void ak46_tokenFormen_vervierfachterText_zeitWaechstDeutlichSchwaecherAlsQuadratisch() {
+        TokenRecognizer erkenner = new TokenRecognizer();
+        String kopf = SynthetischeGeheimnisse.pemKopfzeile("PRIVATE KEY");
+        String praefixToken = SynthetischeGeheimnisse.praefixToken(SynthetischeGeheimnisse.praefixe().get(0));
+        List<String> bausteine = List.of("ey" + "J" + ".", "ey" + "J" + "abcdefgh.",
+                SynthetischeGeheimnisse.jwt() + " ", "Authorization: Bearer " + SynthetischeGeheimnisse.jwt() + "\n",
+                kopf + "\n",
+                "x " + kopf + "\n" + SynthetischeGeheimnisse.base64Zeile(64) + "\n",
+                SynthetischeGeheimnisse.pemBlock("PRIVATE KEY", "\n", true) + "\n",
+                SynthetischeGeheimnisse.pemBlock("PRIVATE KEY", "\r\n", false) + "\r\n",
+                kopf + "\nProc-Type: 4,ENCRYPTED\n", kopf + "\n" + "Token: " + T + "\n", praefixToken + " ",
+                "x" + praefixToken + " ", SynthetischeGeheimnisse.praefixe().get(0) + "a1a1a1 ",
+                kopf + "\n" + SynthetischeGeheimnisse.base64Zeile(64) + "\nToken: " + T + "\n"
+                        + SynthetischeGeheimnisse.pemFusszeile("PRIVATE KEY") + "\n",
+                "x " + kopf + " ", SynthetischeGeheimnisse.pemFusszeile("PRIVATE KEY") + " ",
+                "x " + kopf + " " + SynthetischeGeheimnisse.base64Zeile(64) + " ",
+                "x " + kopf + "\\n" + SynthetischeGeheimnisse.base64Zeile(64) + "\\n"
+                        + SynthetischeGeheimnisse.pemFusszeile("PRIVATE KEY") + "\\n",
+                "x " + kopf + " " + SynthetischeGeheimnisse.base64Zeile(16_000) + " "
+                        + SynthetischeGeheimnisse.pemFusszeile("PRIVATE KEY") + " ",
+                "x " + kopf + " " + SynthetischeGeheimnisse.base64Zeile(16_000) + " ");
+        for (String baustein : bausteine) {
+            pruefeFaktor(erkenner, baustein.repeat(250_000 / baustein.length() + 1),
+                    baustein.repeat(1_000_000 / baustein.length() + 1), "Baustein der Laenge " + baustein.length());
+        }
+        // Kopfzeilen mit eigenen BEGIN/END-Paaren hinter einer BEGIN-Zeile, am Ende eine Base64-Zeile (T-7,
+        // Durchlauf 3): ein einziger Fund der Zeilenform, in dem alle Paare liegen
+        String kopfzeile = "Comment: x " + kopf + " " + SynthetischeGeheimnisse.base64Zeile(64) + " "
+                + SynthetischeGeheimnisse.pemFusszeile("PRIVATE KEY") + "\n";
+        String zeile = SynthetischeGeheimnisse.base64Zeile(64);
+        pruefeFaktor(erkenner, kopf + "\n" + kopfzeile.repeat(250_000 / kopfzeile.length() + 1) + zeile,
+                kopf + "\n" + kopfzeile.repeat(1_000_000 / kopfzeile.length() + 1) + zeile,
+                "Kopfzeilen mit eingebetteten Paaren");
+    }
+
+    private static void pruefeFaktor(Recognizer erkenner, String klein, String gross, String name) {
+        minNanos(erkenner, klein, 2, 2);
+        minNanos(erkenner, gross, 2, 1);
+        long tKlein = minNanos(erkenner, klein, 5, 6);
+        long tGross = minNanos(erkenner, gross, 5, 6);
+        assertTrue(tGross < 10L * Math.max(tKlein, 1_000_000L),
+                "Zeit waechst zu stark bei " + name + ": " + tKlein + " ns gegen " + tGross + " ns");
     }
 
     @Test

@@ -233,6 +233,72 @@ class GeheimnisKandidatenTest {
         assertTrue(mitSchwach >= ZUFALLSTEXTE / 20, "zu wenige Texte mit Kandidat 0,80: " + mitSchwach);
     }
 
+    // ------------------------------------------------------------------ Formen (T-7)
+
+    private static final long SEED_ZUFALL_FORMEN = 20261209L;
+
+    private static List<String> bausteineFormen() {
+        String kopf = SynthetischeGeheimnisse.pemKopfzeile("PRIVATE KEY");
+        String fuss = SynthetischeGeheimnisse.pemFusszeile("PRIVATE KEY");
+        List<String> teile = new ArrayList<>(List.of(SynthetischeGeheimnisse.jwt(), SynthetischeGeheimnisse.jwt() + ".",
+                "Token: ", "Bearer ", "Authorization: Bearer ", "Token ist ", "<token>", "</token>",
+                "https://x.invalid/", kopf, fuss, SynthetischeGeheimnisse.pemFusszeile("CERTIFICATE"),
+                SynthetischeGeheimnisse.pemKopfzeile("CERTIFICATE"), "\n", "\r\n", "\r", " ", "  ", ".", ",", "-", "_",
+                "\"", "ey" + "J", "ey" + "J" + SynthetischeGeheimnisse.MARKE, "Proc-Type: 4,ENCRYPTED", "x", "7",
+                SynthetischeGeheimnisse.base64Zeile(64), SynthetischeGeheimnisse.base64Zeile(22) + "==",
+                SynthetischeGeheimnisse.T, P1, new String(Character.toChars(0x1F600)), (char) 0xE4 + ""));
+        teile.addAll(SynthetischeGeheimnisse.praefixe());
+        teile.add("\n" + SynthetischeGeheimnisse.pemBlock("PRIVATE KEY", "\n", true) + "\n");
+        teile.add("\n" + SynthetischeGeheimnisse.pemBlock("RSA PRIVATE KEY", "\r\n", false) + "\r\n");
+        teile.add("\n" + SynthetischeGeheimnisse.pemKopfzeile("EC PRIVATE KEY") + "\n");
+        for (String praefix : SynthetischeGeheimnisse.praefixe()) {
+            teile.add(SynthetischeGeheimnisse.praefixToken(praefix));
+        }
+        return teile;
+    }
+
+    @Test
+    void formen_zufallslauf_festerSeed_kandidatenUeberlappungsfrei_jedeQuelleKommtVor() {
+        List<String> teile = bausteineFormen();
+        Random r = new Random(SEED_ZUFALL_FORMEN);
+        Map<String, Integer> quellen = new java.util.TreeMap<>();
+        for (int i = 0; i < ZUFALLSTEXTE; i++) {
+            StringBuilder sb = new StringBuilder();
+            int n = 1 + r.nextInt(25);
+            for (int k = 0; k < n; k++) {
+                sb.append(teile.get(r.nextInt(teile.size())));
+            }
+            String text = sb.toString();
+            pruefe(TOKEN, "Zufall Formen", i, text);
+            for (Finding f : TOKEN.detect(text)) {
+                quellen.merge(f.source(), 1, Integer::sum);
+            }
+        }
+        assertTrue(quellen.getOrDefault(TokenRecognizer.QUELLE_JWT, 0) >= ZUFALLSTEXTE / 20, "JWT " + quellen);
+        assertTrue(quellen.getOrDefault(TokenRecognizer.QUELLE_PEM, 0) >= ZUFALLSTEXTE / 50, "PEM " + quellen);
+        assertTrue(quellen.getOrDefault(TokenRecognizer.QUELLE_PRAEFIX, 0) >= ZUFALLSTEXTE / 20, "Praefix " + quellen);
+        assertTrue(quellen.getOrDefault(TokenRecognizer.QUELLE_KONTEXT, 0) >= ZUFALLSTEXTE / 50, "Kontext " + quellen);
+    }
+
+    @Test
+    void formen_ausgewaehlteTexte_kandidatenUeberlappungsfrei_undUnveraendertBeiWiederholung() {
+        String kopf = SynthetischeGeheimnisse.pemKopfzeile("PRIVATE KEY");
+        String jwt = SynthetischeGeheimnisse.jwt();
+        String token = SynthetischeGeheimnisse.praefixToken(SynthetischeGeheimnisse.praefixe().get(0));
+        List<String> texte = List.of(
+                SynthetischeGeheimnisse.pemBlock("PRIVATE KEY", List.of(jwt, token,
+                        SynthetischeGeheimnisse.base64Zeile(64)), "\n", true),
+                SynthetischeGeheimnisse.pemBlock("PRIVATE KEY", List.of("Token: " + SynthetischeGeheimnisse.T,
+                        SynthetischeGeheimnisse.base64Zeile(64)), "\n", false),
+                "Token: " + jwt + " Bearer " + token + " Authorization: Bearer " + jwt,
+                kopf + "\n" + kopf + "\n" + SynthetischeGeheimnisse.base64Zeile(64) + "\n" + kopf,
+                "a." + jwt + "." + token, jwt + "." + token, token + "." + jwt);
+        for (int i = 0; i < texte.size(); i++) {
+            assertTrue(pruefe(TOKEN, "Formen", i, texte.get(i)) >= 1, "Kandidat " + i);
+            assertEquals(TOKEN.detect(texte.get(i)), TOKEN.detect(texte.get(i)), "Determinismus " + i);
+        }
+    }
+
     @Test
     void zufallslauf_festerSeed_kandidatenUeberlappungsfrei_undGleichBeiWiederholung() {
         List<String> teile = bausteine();

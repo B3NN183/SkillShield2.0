@@ -944,6 +944,62 @@ class KlartextFreiheitTest {
         assertAusgabeKlartextfrei("Token-Erkenner-Test", ausgabe);
     }
 
+    /**
+     * geheimnisse-erkennung T-7 (AK-42): Die kontextfreien Formen JWT, PEM-Koerper und Praefix-Token in
+     * {@code TokenFormen} und die Vereinigung im {@code TokenRecognizer}. Ihre Werte tragen den Marker; er steht in
+     * keinem Fund, keiner Fundliste, keinem pseudonymisierten Text, keinem Mapping und keiner Ausnahme ausser im
+     * Eingabetext und in der Rueckuebersetzung des Originals.
+     */
+    @Test
+    void tokenFormen_keinMarkerInFundenAusnahmenUndAusgabe() {
+        String jwt = "ey" + "J" + "MarkerKopfAbcd" + "." + "ey" + "J" + "MarkerNutzlastEfgh" + "."
+                + "MarkerSignaturIjkl";
+        String praefixToken = "gh" + "p_" + "AbcdMarkerEfghIjkl7Mnop";
+        String kopf = SynthetischeGeheimnisse.pemKopfzeile("RSA PRIVATE KEY");
+        String fuss = SynthetischeGeheimnisse.pemFusszeile("RSA PRIVATE KEY");
+        List<String> zeilen = List.of("AbcdMarker" + SynthetischeGeheimnisse.base64Zeile(52),
+                SynthetischeGeheimnisse.base64Zeile(64), SynthetischeGeheimnisse.base64Zeile(22) + "==");
+        String lf = "\n";
+        String crlf = "\r\n";
+        String pemLf = kopf + lf + String.join(lf, zeilen) + lf + fuss;
+        String pemCrlf = kopf + crlf + String.join(crlf, zeilen) + crlf + fuss;
+        List<String> texte = List.of(jwt, "Das Token " + jwt + " ist abgelaufen.", "Authorization: Bearer " + jwt,
+                "Token: " + jwt, praefixToken, "Der Wert " + praefixToken + " wurde widerrufen.",
+                "Token: " + praefixToken, pemLf, pemCrlf, kopf + lf + String.join(lf, zeilen),
+                "Schluessel:" + lf + pemLf + lf + "Danach neu starten.", "x " + jwt + " y " + praefixToken + " z",
+                "https://example.invalid/x?t=" + jwt);
+        Ausgabe ausgabe = erfasse(() -> {
+            TokenRecognizer erkenner = new TokenRecognizer();
+            int gefunden = 0;
+            for (int i = 0; i < texte.size(); i++) {
+                String text = texte.get(i);
+                assertTrue(findeMarker(text).isPresent(), "Suchfunktion findet den Marker im Eingabetext " + i);
+                List<Finding> kandidaten = erkenner.detect(text);
+                gefunden += kandidaten.size();
+                assertToStringKlartextfrei("Form-Kandidaten " + i, kandidaten);
+                for (Finding f : kandidaten) {
+                    assertToStringKlartextfrei("Finding.toString Form-Kandidat " + i, f);
+                    assertToStringKlartextfrei("Finding.source Form-Kandidat " + i, f.source());
+                    assertToStringKlartextfrei("FindingType Form-Kandidat " + i, f.type());
+                }
+                List<Finding> funde = TextScanner.standard().scan(text);
+                assertToStringKlartextfrei("Liste der Funde Form-Text " + i, funde);
+                PseudonymizationResult pseudo = PSEUDONYMIZER.pseudonymize(text, funde);
+                assertToStringKlartextfrei("PseudonymizationResult Form-Text " + i, pseudo);
+                assertToStringKlartextfrei("PlaceholderMapping Form-Text " + i, pseudo.mapping());
+                ReidentificationResult zurueck = REIDENTIFIER.restore(pseudo.text(), pseudo.mapping());
+                assertTrue(text.equals(zurueck.text()), "Roundtrip Form-Text " + i);
+                assertToStringKlartextfrei("ReidentificationResult Form-Text " + i, zurueck);
+                assertTrue(findeMarker(pseudo.text()).isEmpty(), "Marker im pseudonymisierten Text " + i);
+            }
+            assertTrue(gefunden >= 13, "der Test trifft die Regel zu selten: " + gefunden);
+            NullPointerException npe = assertThrows(NullPointerException.class, () -> erkenner.detect(null));
+            assertKlartextfrei("TokenRecognizer.detect(null) mit Formen", npe);
+            assertEquals("text", npe.getMessage());
+        });
+        assertAusgabeKlartextfrei("Token-Formen-Test", ausgabe);
+    }
+
     @Test
     void selbsttest_kvMarkerUndIhreErstenSechsZiffernWerdenGefunden() {
         assertTrue(findeMarker("x " + LANR_MARKER + " y").isPresent(), "LANR voll");

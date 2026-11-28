@@ -238,7 +238,10 @@ class GeheimnisDifferenzTest {
         // Umgestellt durch geheimnisse-erkennung T-6: alt texte=112, funde=21; neu texte=134 (dazu die 22 Faelle von
         // TOKEN_KONTEXT und SCHEMA), funde=22 (der LANR-Fund des Falls mit Token); die Gleichheit der zusaetzlichen
         // Funde mit den erwarteten bleibt.
-        assertEquals("Positivkorpus aktiv|texte=134|funde=22|zusaetzlich=" + erwartetAktiv, a.kurz());
+        // Umgestellt durch geheimnisse-erkennung T-7: alt texte=134, funde=22; neu texte=172 (dazu die 38 Faelle von
+        // JWT, PEM und PRAEFIX), funde=25 (die Bestandsfunde der Faelle mit URL und mit Pfad-Zeile im PEM-Koerper);
+        // die Gleichheit der zusaetzlichen Funde mit den erwarteten bleibt.
+        assertEquals("Positivkorpus aktiv|texte=172|funde=25|zusaetzlich=" + erwartetAktiv, a.kurz());
         Messung i = vergleiche("Positivkorpus inaktiv", inaktiv, TextScannerStandGeheimnis.ALT,
                 TextScanner.standard());
         assertEquals(List.of(), i.verstoesse());
@@ -255,7 +258,10 @@ class GeheimnisDifferenzTest {
         // Kommandozeile mit Gleichheitszeichen (KOMMANDOZEILE-07, -09, -10, -12: --client-secret=, --api-key=,
         // --secret=, --apikey=; gemessen, nicht erschlossen). Sie sind
         // erwuenscht (mehr Schutz) und aendern sich mit T-8.
-        assertEquals("Positivkorpus inaktiv|texte=65|funde=7|zusaetzlich=10", i.kurz());
+        // Umgestellt durch geheimnisse-erkennung T-7: alt texte=65, funde=7, zusaetzlich=10; neu texte=27 (die 38
+        // Faelle von JWT, PEM und PRAEFIX sind jetzt aktiv und stehen oben), funde=4 (die drei Bestandsfunde dieser
+        // Faelle stehen jetzt im aktiven Teil), zusaetzlich=10 bleibt (ODBC und Kommandozeile, aendert sich mit T-8).
+        assertEquals("Positivkorpus inaktiv|texte=27|funde=4|zusaetzlich=10", i.kurz());
     }
 
     /**
